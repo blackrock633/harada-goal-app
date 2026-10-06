@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ascend // Skill Tree & Goal Progression System</title>
+  <!-- SEO Meta Tags -->
+  <meta name="description" content="Break ambitious long-term goals into skill categories and daily actions with an interactive, RPG-style visual skill tree system.">
+  <meta name="keywords" content="goal tracker, skill tree, habit tracker, rpg life, productivity, personal growth">
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="index.css">
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div id="app-container">
+    <!-- Sidebar Navigation -->
+    <aside id="sidebar">
+      <div class="logo-area">
+        <div class="logo-icon">▲</div>
+        <span class="logo-text">ASCEND</span>
+      </div>
+
+      <!-- User XP Profile Card -->
+      <div id="user-profile-card">
+        <div class="profile-header">
+          <div class="avatar-glow">
+            <span id="user-avatar">🏆</span>
+          </div>
+          <div class="profile-details">
+            <div class="rank-name" id="user-rank">Initiate</div>
+            <div class="level-badge">LVL <span id="user-level">1</span></div>
+          </div>
+        </div>
+        <div class="xp-bar-container">
+          <div class="xp-bar-fill" id="user-xp-fill" style="width: 0%"></div>
+        </div>
+        <div class="xp-label"><span id="user-current-xp">0</span> / <span id="user-next-level-xp">100</span> XP</div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav id="nav-tabs">
+        <button class="nav-btn active" data-screen="dashboard" id="btn-nav-dashboard">
+          <i data-lucide="layout-dashboard"></i>
+          <span>Dashboard</span>
+        </button>
+        <button class="nav-btn" data-screen="tree" id="btn-nav-tree">
+          <i data-lucide="git-branch"></i>
+          <span>Goal Tree</span>
+        </button>
+        <button class="nav-btn" data-screen="tracker" id="btn-nav-tracker">
+          <i data-lucide="check-square"></i>
+          <span>Daily Tracker</span>
+          <span class="badge" id="due-habits-badge" style="display: none;">0</span>
+        </button>
+        <button class="nav-btn" data-screen="assistant" id="btn-nav-assistant">
+          <i data-lucide="sparkles"></i>
+          <span>AI Assistant</span>
+        </button>
+        <button class="nav-btn" data-screen="analytics" id="btn-nav-analytics">
+          <i data-lucide="bar-chart-2"></i>
+          <span>Analytics</span>
+        </button>
+      </nav>
+
+      <!-- Bottom System Controls -->
+      <div class="sidebar-footer">
+        <!-- Goal Selector -->
+        <div class="goal-selector-container">
+          <label for="active-goal-select">Active Path</label>
+          <select id="active-goal-select">
+            <!-- Dynamically populated -->
+          </select>
+        </div>
+        <div class="system-controls">
+          <button id="btn-sound-toggle" title="Toggle Sound FX">
+            <i data-lucide="volume-2"></i>
+          </button>
+          <button id="btn-backup-data" title="Backup & Export Data">
+            <i data-lucide="download"></i>
+          </button>
+          <button id="btn-restore-data" title="Restore Data">
+            <i data-lucide="upload"></i>
+          </button>
+          <input type="file" id="restore-file-input" style="display: none;" accept=".json">
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main id="main-content">
+      <!-- Screen Mount Point -->
+      <div id="screen-viewport" class="fade-in"></div>
+    </main>
+  </div>
+
+  <!-- Toast Notification Overlay -->
+  <div id="toast-container"></div>
+
+  <!-- Main App Script -->
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
