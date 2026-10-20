@@ -9,7 +9,7 @@ import {
   Badge, useToast, Skeleton, EmptyState, ErrorState
 } from '@/ui/primitives';
 import { AppShell } from '@/ui/shell/AppShell';
-import { Settings, Plus, MoreHorizontal } from 'lucide-react';
+import { Check, Settings, Plus, MoreHorizontal } from 'lucide-react';
 
 export default function StyleguidePage() {
   if (process.env.NODE_ENV === 'production') {
@@ -184,10 +184,10 @@ export default function StyleguidePage() {
                   </div>
                   <Badge variant="overdue">Overdue</Badge>
                 </div>
-                <div className="flex items-center p-3 gap-3 bg-surface-sunken opacity-60">
+                <div className="flex items-center p-3 gap-3 bg-surface-sunken">
                   <CheckCircle label="Stretching" kind="routine" checked />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-ink line-through truncate">Evening stretching</p>
+                    <p className="text-sm font-medium text-ink-muted line-through truncate">Evening stretching</p>
                     <p className="text-xs text-ink-muted truncate">Fitness · Recovery</p>
                   </div>
                 </div>
@@ -207,7 +207,7 @@ export default function StyleguidePage() {
                 </div>
                 <div className="aspect-square bg-surface rounded-[var(--radius-sm)] p-2 flex flex-col justify-between">
                   <p className="text-xs font-medium text-ink-muted line-clamp-2 line-through">Buy cleats</p>
-                  <div className="self-end"><CheckCircle label="done" checked className="scale-50 origin-bottom-right" /></div>
+                  <div className="self-end text-success"><Check className="h-4 w-4" aria-label="Done" /></div>
                 </div>
               </div>
             </div>
