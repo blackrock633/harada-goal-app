@@ -92,7 +92,7 @@ function ToastItem({ toast, onRemove }: { toast: ToastData; onRemove: () => void
       <button
         aria-label="Close"
         onClick={onRemove}
-        className="absolute right-2 top-2 rounded-sm p-1 opacity-70 ring-offset-paper transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-accent cursor-pointer group-[.bg-danger]:text-accent-ink"
+        className="absolute right-0 top-0 inline-flex h-11 w-11 items-center justify-center rounded-sm opacity-70 ring-offset-paper transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-accent cursor-pointer group-[.bg-danger]:text-accent-ink"
       >
         <X className="h-4 w-4" aria-hidden="true" />
       </button>

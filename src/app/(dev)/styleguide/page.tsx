@@ -1,10 +1,12 @@
+'use client';
+
 import React from 'react';
 import { notFound } from 'next/navigation';
 import { 
-  Button, ButtonLink, IconButton, Field, Input, Textarea, Select, DateInput,
+  Button, IconButton, Field, Input, Textarea, Select, DateInput,
   CheckCircle, ProgressBar, ProgressRing, DialogRoot, DialogTrigger, DialogContent,
   ConfirmDialog, MenuRoot, MenuTrigger, MenuContent, MenuItem, MenuSeparator,
-  Tabs, Badge, ToastProvider, useToast, Skeleton, EmptyState, ErrorState, Spinner
+  Badge, useToast, Skeleton, EmptyState, ErrorState
 } from '@/ui/primitives';
 import { AppShell } from '@/ui/shell/AppShell';
 import { Settings, Plus, MoreHorizontal } from 'lucide-react';
@@ -16,8 +18,8 @@ export default function StyleguidePage() {
 
   return (
     <AppShell 
-      user={{ displayName: 'Noah Dockery' }} 
-      signOutAction={async () => { console.log('sign out'); }}
+      user={{ displayName: 'Sample User' }} 
+      signOutAction={async () => {}}
     >
       <div className="p-6 md:p-12 space-y-16 max-w-[720px] mx-auto">
         <header className="space-y-2">
@@ -112,7 +114,7 @@ export default function StyleguidePage() {
               description="This action cannot be undone. This will permanently delete the goal."
               destructive
               requireText="Delete"
-              onConfirm={() => console.log('deleted')}
+              onConfirm={() => {}}
             >
               <Button variant="danger">Delete Goal</Button>
             </ConfirmDialog>

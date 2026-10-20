@@ -38,7 +38,7 @@ export function ProgressBar({ progress, className, label }: ProgressBarProps) {
   );
 }
 
-export function ProgressRing({ progress, size = 40, strokeWidth = 4, className }: ProgressBarProps & { size?: number, strokeWidth?: number }) {
+export function ProgressRing({ progress, size = 40, strokeWidth = 4, className, label }: ProgressBarProps & { size?: number, strokeWidth?: number }) {
   const isNull = progress === null;
   const val = isNull ? 0 : Math.max(0, Math.min(1, progress));
   
@@ -50,6 +50,7 @@ export function ProgressRing({ progress, size = 40, strokeWidth = 4, className }
     <div 
       className={clsx('relative inline-flex items-center justify-center', className)}
       role="progressbar"
+      aria-label={label || 'Progress'}
       aria-valuenow={isNull ? undefined : Math.round(val * 100)}
       aria-valuemin={0}
       aria-valuemax={100}
