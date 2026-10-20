@@ -86,13 +86,21 @@ export function GoalOverview({ goal, today, activateGoal, onActivated }: GoalOve
             <dt className="text-sm text-ink-muted">Actions</dt>
             <dd className="text-ink tabular-nums">
               {metrics.completedTasks} of {metrics.totalTasks} tasks done
-              {metrics.routineCount > 0 && (
-                <span className="block text-sm text-ink-muted">
-                  and {metrics.routineCount} {metrics.routineCount === 1 ? 'routine' : 'routines'} (routines are not counted as tasks)
-                </span>
-              )}
             </dd>
           </div>
+          {metrics.routineCount > 0 && (
+            <div className="py-3">
+              <dt className="text-sm text-ink-muted">Routines</dt>
+              <dd className="text-ink tabular-nums">
+                {metrics.routineCount} {metrics.routineCount === 1 ? 'routine' : 'routines'}
+                <span className="block text-sm text-ink-muted">
+                  {metrics.routineAdherence === null
+                    ? 'No routine data yet'
+                    : `Routines: ${Math.round(metrics.routineAdherence * 100)}% adherence over 28 days`}
+                </span>
+              </dd>
+            </div>
+          )}
           <div className="py-3">
             <dt className="text-sm text-ink-muted">Goal attainment</dt>
             <dd className="text-ink">

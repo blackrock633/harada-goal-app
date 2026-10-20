@@ -2,11 +2,11 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, Pencil, Plus } from 'lucide-react';
+import { CalendarCheck, CalendarPlus, ChevronLeft, ChevronRight, Pencil, Plus } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { ActionDTO, GoalDetailDTO, OutcomeFieldsDTO } from '@/application/dto';
 import { errorMessage } from '@/ui/errors';
-import type { ExecutionMutations, MatrixMutations } from '@/ui/actions';
+import type { ExecutionMutations, FocusMutations, MatrixMutations } from '@/ui/actions';
 import { describeSchedule, formatLocalDate, relativeDay } from '@/ui/format';
 import { routes } from '@/ui/routes';
 import { Button, CheckCircle } from '@/ui/primitives';
@@ -22,6 +22,7 @@ export interface KeyAreaViewProps {
   today: string;
   matrix: MatrixMutations;
   execution: ExecutionMutations;
+  focus: FocusMutations;
   /** Called with a user-facing message when an optimistic change was rolled back. */
   onError: (message: string) => void;
   /** Called after any successful mutation so the page can refresh. */
@@ -32,7 +33,7 @@ export interface KeyAreaViewProps {
 
 const wrap = (n: number) => ((Math.trunc(n) % AREA_COUNT) + AREA_COUNT) % AREA_COUNT;
 
-export function KeyAreaView({ goal, position, today, matrix, execution, onError, onChanged, onReloadLatest }: KeyAreaViewProps) {
+export function KeyAreaView({ goal, position, today, matrix, execution, focus, onError, onChanged, onReloadLatest }: KeyAreaViewProps) {
   const pos = wrap(Number.isFinite(position) ? position : 0);
   const model = React.useMemo(() => buildMatrix(goal), [goal]);
   const area = model.areas[pos]!;
@@ -109,6 +110,42 @@ export function KeyAreaView({ goal, position, today, matrix, execution, onError,
       setBusy(new Set(inFlight.current));
     }
   }
+
+  async function toggleFocus(original: ActionDTO) {
+    const a = effective(original);
+    if (inFlight.current.has(a.id)) return;
+    const on = a.focusedToday;
+    const optimistic: ActionDTO = { ...a, focusedToday: !on };
+    const prev = overrides[a.id];
+    const restore = () =>
+      setOverrides((o) => {
+        const n = { ...o };
+        if (prev) n[a.id] = prev;
+        else delete n[a.id];
+        return n;
+      });
+    inFlight.current.add(a.id);
+    setBusy(new Set(inFlight.current));
+    setOverrides((o) => ({ ...o, [a.id]: optimistic }));
+    try {
+      const res = await (on ? focus.removeFromToday({ actionId: a.id }) : focus.addToToday({ actionId: a.id }));
+      if (res.ok) {
+        setOverrides((o) => ({ ...o, [a.id]: res.data }));
+        onChanged?.();
+      } else {
+        restore();
+        onError(errorMessage(res.error));
+      }
+    } catch {
+      restore();
+      onError('Could not update today\'s list. Check your connection and try again.');
+    } finally {
+      inFlight.current.delete(a.id);
+      setBusy(new Set(inFlight.current));
+    }
+  }
+
+  const canFocus = goal.status !== 'achieved' && goal.status !== 'archived';
 
   const prevPos = wrap(pos - 1);
   const nextPos = wrap(pos + 1);
@@ -277,6 +314,22 @@ export function KeyAreaView({ goal, position, today, matrix, execution, onError,
                     </span>
                     <span className="text-xs text-ink-muted [overflow-wrap:anywhere]">{statusText(act, today)}</span>
                   </button>
+                  {canFocus && !act.archivedAt && (
+                    <button
+                      type="button"
+                      onClick={() => void toggleFocus(slot.action!)}
+                      disabled={busy.has(act.id)}
+                      aria-pressed={act.focusedToday}
+                      aria-label={`${act.focusedToday ? 'Remove from today' : 'Add to today'}: ${act.title}`}
+                      className={clsx(
+                        'mr-1 inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center gap-1 rounded-[var(--radius-sm)] px-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60',
+                        act.focusedToday ? 'bg-accent-soft text-ink' : 'text-ink-muted hover:bg-surface-sunken',
+                      )}
+                    >
+                      {act.focusedToday ? <CalendarCheck className="h-4 w-4" aria-hidden="true" /> : <CalendarPlus className="h-4 w-4" aria-hidden="true" />}
+                      <span aria-hidden="true">{act.focusedToday ? 'On today' : 'Add to today'}</span>
+                    </button>
+                  )}
                 </li>
               );
             })}

@@ -10,7 +10,9 @@ import {
 } from '@/app/actions/matrix';
 import {
   checkRoutineAction,
+  addToTodayAction,
   completeActionAction,
+  removeFromTodayAction,
   reopenActionAction,
   uncheckRoutineAction,
 } from '@/app/actions/execution';
@@ -40,6 +42,7 @@ export function KeyAreaScreen({ goal, position, today }: { goal: GoalDetailDTO; 
       today={today}
       matrix={matrix}
       execution={execution}
+      focus={{ addToToday: addToTodayAction, removeFromToday: removeFromTodayAction }}
       onError={(message) => toast({ type: 'error', title: "Couldn't save", description: message })}
       onReloadLatest={() => router.refresh()}
     />

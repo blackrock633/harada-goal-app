@@ -116,12 +116,12 @@ describe('GoalForm edit', () => {
 
 const outcome = (position: number, extra: Partial<OutcomeDTO> = {}): OutcomeDTO => ({
   id: `o${position}`, goalId: 'g1', title: `Area ${position}`, description: '', measure: null, position,
-  archivedAt: null, createdAt: '', updatedAt: '', execution: 0.5, attainment: null, actions: [], slots: Array(8).fill(null), ...extra,
+  archivedAt: null, createdAt: '', updatedAt: '', taskCompletion: 0.5, completedTasks: 0, totalTasks: 0, routineAdherence: null, routineCount: 0, attainment: null, actions: [], slots: Array(8).fill(null), ...extra,
 });
 
 const metrics = (m: Partial<GoalMetricsDTO> = {}): GoalMetricsDTO => ({
-  planning: { filled: 2, total: 72, ratio: 2 / 72 }, execution: null, completedTasks: 0, totalTasks: 0,
-  routineCount: 0, attainment: null, ...m,
+  planning: { filled: 2, total: 72, ratio: 2 / 72 }, taskCompletion: null, completedTasks: 0, totalTasks: 0,
+  routineAdherence: null, routineCount: 0, attainment: null, ...m,
 });
 const unavailable = { ok: false as const, error: { code: 'UNAVAILABLE' as const, message: 'x' } };
 
@@ -200,13 +200,23 @@ describe('GoalOverview', () => {
     expect(screen.queryByRole('progressbar')).toBeNull();
   });
 
+  it('shows no routine data yet when adherence is null, and hides the line with no routines', () => {
+    const { unmount } = render(<GoalOverview goal={detail({ outcomes: [], metrics: metrics({ routineCount: 1, routineAdherence: null }) })} today={today} activateGoal={act} />);
+    expect(screen.getByText('No routine data yet')).toBeTruthy();
+    unmount();
+    render(<GoalOverview goal={detail({ outcomes: [], metrics: metrics() })} today={today} activateGoal={act} />);
+    expect(screen.queryByText(/adherence/)).toBeNull();
+    expect(screen.queryByText('No routine data yet')).toBeNull();
+  });
+
   it('uses metrics, not the outcomes list', () => {
     render(<GoalOverview goal={detail({
-      outcomes: [], metrics: metrics({ planning: { filled: 40, total: 72, ratio: 0.55 }, completedTasks: 3, totalTasks: 9, routineCount: 2, attainment: 0.42 }),
+      outcomes: [], metrics: metrics({ planning: { filled: 40, total: 72, ratio: 0.55 }, completedTasks: 3, totalTasks: 9, routineCount: 2, routineAdherence: 0.75, attainment: 0.42 }),
     })} today={today} activateGoal={act} />);
     expect(screen.getByText(/40 of 72 positions filled/)).toBeTruthy();
     expect(screen.getByText(/3 of 9 tasks done/)).toBeTruthy();
-    expect(screen.getByText(/and 2 routines/)).toBeTruthy();
+    expect(screen.getByText(/2 routines/)).toBeTruthy();
+    expect(screen.getByText('Routines: 75% adherence over 28 days')).toBeTruthy();
     expect(screen.getByText(/Measured attainment: 42%/)).toBeTruthy();
     expect(screen.getByText(/Averaged from the measures/)).toBeTruthy();
   });
