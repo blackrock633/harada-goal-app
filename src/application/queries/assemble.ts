@@ -2,10 +2,15 @@
  * Shared read-side assembly: domain entities -> DTOs, with batched loading (no N+1).
  * Used by queries and by commands that return a refreshed GoalDetailDTO / OutcomeDTO / ActionDTO.
  */
-import type { Action, Goal, Id, LocalDate, Outcome, Reflection, GoalEvent } from '@/domain/types';
-import { addDays, isoWeekEnd, isoWeekStart, localDateInZone } from '@/domain/dates';
-import { computeGoalMetrics, routineStreak, actionProgress, type GoalMetrics } from '@/domain/progress';
-import { isDueToday } from '@/domain/next';
+import type { Action, DailyFocus, Goal, Id, LocalDate, Outcome, Reflection, GoalEvent } from '@/domain/types';
+import { addDays, isoWeekEnd, isoWeekStart, localDateInZone } from '@/domain';
+import {
+  computeGoalMetrics,
+  routineStreak,
+  actionProgress,
+  isDueToday,
+  type GoalMetrics,
+} from '@/domain';
 import { MAX_ACTIONS_PER_OUTCOME, MAX_OUTCOMES_PER_GOAL } from '@/domain/limits';
 import type { Repos } from '../ports';
 import type {
@@ -75,7 +80,7 @@ export function actionFieldsDTO(a: Action): ActionFieldsDTO {
   };
 }
 
-export function actionDTO(a: Action, checks: LocalDate[], today: LocalDate): ActionDTO {
+export function actionDTO(a: Action, checks: LocalDate[], today: LocalDate, focusedToday = false): ActionDTO {
   const windowStart = addDays(today, -(RECENT_CHECK_DAYS - 1));
   const recent = checks.filter((d) => d >= windowStart && d <= today).sort();
   return {
@@ -84,6 +89,7 @@ export function actionDTO(a: Action, checks: LocalDate[], today: LocalDate): Act
     dueToday: isDueToday(a, checks, today),
     checkedToday: a.kind === 'routine' && checks.includes(today),
     streak: routineStreak(a, checks, today),
+    focusedToday,
     recentChecks: recent,
   };
 }
@@ -118,11 +124,17 @@ export interface Graph {
   outcomes: Outcome[];
   actions: Action[];
   checks: Map<Id, LocalDate[]>;
+  /** Action ids in the owner's focus list for today. */
+  focused: Set<Id>;
+  /** Today's focus rows in slot order. */
+  focusRows: DailyFocus[];
 }
 
 /** 2 batched queries for structure + 1 for recent checks of active actions. */
-export async function loadGraph(repos: Repos, goalIds: Id[], today: LocalDate): Promise<Graph> {
-  if (goalIds.length === 0) return { outcomes: [], actions: [], checks: new Map() };
+export async function loadGraph(repos: Repos, ownerId: Id, goalIds: Id[], today: LocalDate): Promise<Graph> {
+  const focusRows = await repos.focus.listForDate(ownerId, today);
+  const focused = new Set(focusRows.map((f) => f.actionId));
+  if (goalIds.length === 0) return { outcomes: [], actions: [], checks: new Map(), focused, focusRows };
   const [outcomes, actions] = await Promise.all([
     repos.outcomes.listByGoals(goalIds),
     repos.actions.listByGoals(goalIds),
@@ -137,7 +149,7 @@ export async function loadGraph(repos: Repos, goalIds: Id[], today: LocalDate): 
     if (list) list.push(c.date);
     else checks.set(c.actionId, [c.date]);
   }
-  return { outcomes, actions, checks };
+  return { outcomes, actions, checks, focused, focusRows };
 }
 
 export function forGoal(graph: Graph, goalId: Id): Graph {
@@ -145,23 +157,22 @@ export function forGoal(graph: Graph, goalId: Id): Graph {
     outcomes: graph.outcomes.filter((o) => o.goalId === goalId),
     actions: graph.actions.filter((a) => a.goalId === goalId),
     checks: graph.checks,
+    focused: graph.focused,
+    focusRows: graph.focusRows,
   };
 }
 
 const byPosition = <T extends { position: number | null }>(a: T, b: T) =>
   (a.position ?? 99) - (b.position ?? 99);
 
-export function metricsDTO(m: GoalMetrics, actions: Action[]): GoalMetricsDTO {
-  const activeOutcomeIds = new Set(m.outcomes.map((o) => o.outcomeId));
-  const routineCount = actions.filter(
-    (a) => a.archivedAt === null && a.kind === 'routine' && activeOutcomeIds.has(a.outcomeId),
-  ).length;
+export function metricsDTO(m: GoalMetrics): GoalMetricsDTO {
   return {
     planning: { ...m.planning },
-    execution: m.execution.value,
-    completedTasks: m.execution.completedTasks,
-    totalTasks: m.execution.totalTasks,
-    routineCount,
+    taskCompletion: m.tasks.ratio,
+    completedTasks: m.tasks.completed,
+    totalTasks: m.tasks.total,
+    routineAdherence: m.routines.adherence,
+    routineCount: m.routines.count,
     attainment: m.attainment,
   };
 }
@@ -172,17 +183,22 @@ function outcomeDTO(
   checks: Map<Id, LocalDate[]>,
   today: LocalDate,
   m: GoalMetrics,
+  focused: Set<Id>,
 ): OutcomeDTO {
   const mine = actions
     .filter((a) => a.outcomeId === o.id && a.archivedAt === null)
     .sort(byPosition)
-    .map((a) => actionDTO(a, checks.get(a.id) ?? [], today));
+    .map((a) => actionDTO(a, checks.get(a.id) ?? [], today, focused.has(a.id)));
   const slots: (ActionDTO | null)[] = Array.from({ length: MAX_ACTIONS_PER_OUTCOME }, () => null);
   for (const a of mine) if (a.position !== null && a.position >= 0 && a.position < slots.length) slots[a.position] = a;
   const om = m.outcomes.find((x) => x.outcomeId === o.id);
   return {
     ...outcomeFieldsDTO(o),
-    execution: om?.execution.value ?? null,
+    taskCompletion: om?.tasks.ratio ?? null,
+    completedTasks: om?.tasks.completed ?? 0,
+    totalTasks: om?.tasks.total ?? 0,
+    routineAdherence: om?.routines.adherence ?? null,
+    routineCount: om?.routines.count ?? 0,
     attainment: om?.attainment ?? null,
     actions: mine,
     slots,
@@ -192,13 +208,13 @@ function outcomeDTO(
 export function buildGoalDetail(goal: Goal, g: Graph, today: LocalDate): GoalDetailDTO {
   const m = computeGoalMetrics(goal, g.outcomes, g.actions, g.checks, today);
   const active = g.outcomes.filter((o) => o.archivedAt === null).sort(byPosition);
-  const outcomes = active.map((o) => outcomeDTO(o, g.actions, g.checks, today, m));
+  const outcomes = active.map((o) => outcomeDTO(o, g.actions, g.checks, today, m, g.focused));
   const matrix: (OutcomeDTO | null)[] = Array.from({ length: MAX_OUTCOMES_PER_GOAL }, () => null);
   for (const o of outcomes) if (o.position !== null && o.position >= 0 && o.position < matrix.length) matrix[o.position] = o;
   const titleById = new Map(g.outcomes.map((o) => [o.id, o.title]));
   return {
     ...goalFieldsDTO(goal),
-    metrics: metricsDTO(m, g.actions),
+    metrics: metricsDTO(m),
     pace: m.pace,
     outcomes,
     matrix: { outcomes: matrix },
@@ -209,28 +225,50 @@ export function buildGoalDetail(goal: Goal, g: Graph, today: LocalDate): GoalDet
   };
 }
 
-export async function loadGoalDetail(repos: Repos, goal: Goal, today: LocalDate): Promise<GoalDetailDTO> {
-  return buildGoalDetail(goal, await loadGraph(repos, [goal.id], today), today);
+export async function loadGoalDetail(repos: Repos, ownerId: Id, goal: Goal, today: LocalDate): Promise<GoalDetailDTO> {
+  return buildGoalDetail(goal, await loadGraph(repos, ownerId, [goal.id], today), today);
 }
 
-export async function loadOutcomeDTO(repos: Repos, goal: Goal, outcomeId: Id, today: LocalDate): Promise<OutcomeDTO> {
-  const detail = await loadGoalDetail(repos, goal, today);
+/** An archived outcome (e.g. an idempotent replay) maps to a DTO with no actions. */
+export async function loadOutcomeDTO(
+  repos: Repos,
+  ownerId: Id,
+  goal: Goal,
+  outcomeId: Id,
+  today: LocalDate,
+): Promise<OutcomeDTO> {
+  const detail = await loadGoalDetail(repos, ownerId, goal, today);
   const found = detail.outcomes.find((o) => o.id === outcomeId);
-  if (!found) throw new Error('Outcome missing after write');
-  return found;
+  if (found) return found;
+  const outcome = await repos.outcomes.findById(ownerId, outcomeId);
+  if (!outcome) throw new Error('Outcome missing after write');
+  return {
+    ...outcomeFieldsDTO(outcome),
+    taskCompletion: null,
+    completedTasks: 0,
+    totalTasks: 0,
+    routineAdherence: null,
+    routineCount: 0,
+    attainment: null,
+    actions: [],
+    slots: Array.from({ length: MAX_ACTIONS_PER_OUTCOME }, () => null),
+  };
 }
 
-export async function loadActionDTO(repos: Repos, action: Action, today: LocalDate): Promise<ActionDTO> {
-  const rows =
+export async function loadActionDTO(repos: Repos, ownerId: Id, action: Action, today: LocalDate): Promise<ActionDTO> {
+  const [rows, focus] = await Promise.all([
     action.kind === 'routine'
-      ? await repos.checks.listForActions([action.id], addDays(today, -(RECENT_CHECK_DAYS - 1)), today)
-      : [];
-  return actionDTO(action, rows.map((c) => c.date), today);
+      ? repos.checks.listForActions([action.id], addDays(today, -(RECENT_CHECK_DAYS - 1)), today)
+      : Promise.resolve([]),
+    repos.focus.listForDate(ownerId, today),
+  ]);
+  return actionDTO(action, rows.map((c) => c.date), today, focus.some((f) => f.actionId === action.id));
 }
 
 /** Summaries for many goals using batched queries only. */
 export async function buildSummaries(
   repos: Repos,
+  ownerId: Id,
   goals: Goal[],
   today: LocalDate,
   timeZone: string,
@@ -239,7 +277,7 @@ export async function buildSummaries(
   if (goals.length === 0) return [];
   const ids = goals.map((g) => g.id);
   const [g, lastReflected] = await Promise.all([
-    graph ?? loadGraph(repos, ids, today),
+    graph ?? loadGraph(repos, ownerId, ids, today),
     repos.reflections.latestDateByGoals(ids),
   ]);
   const weekStart = isoWeekStart(today);
@@ -266,7 +304,7 @@ export async function buildSummaries(
       targetDate: goal.targetDate,
       activatedOn: goal.activatedOn,
       updatedAt: iso(goal.updatedAt),
-      metrics: metricsDTO(m, sub.actions),
+      metrics: metricsDTO(m),
       pace: m.pace,
       outcomeCount: activeOutcomeIds.size,
       actionCount: live.length,

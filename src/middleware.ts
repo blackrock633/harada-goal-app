@@ -10,7 +10,7 @@ import { readSupabasePublicEnv } from '@/infrastructure/supabase/env';
  * direct server-action posts). Real enforcement is: server code derives the user from
  * AuthGateway.getUser() (server-verified) and every query runs under Postgres RLS.
  */
-const PROTECTED = ['/today', '/goals', '/settings', '/matrix', '/review'];
+const PROTECTED = ['/today', '/goal', '/settings', '/matrix', '/review'];
 
 function isProtected(pathname: string): boolean {
   return PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`));

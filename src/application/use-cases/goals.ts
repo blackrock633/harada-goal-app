@@ -34,7 +34,7 @@ export async function createGoal(deps: Deps, ctx: Ctx, input: unknown): Promise<
     deps.uow.run(ctx.userId, async (repos) => {
       const data = createGoalSchema.parse(input);
       const existing = await existingGoal(repos, ctx, data.id);
-      if (existing) return loadGoalDetail(repos, existing, ctx.today);
+      if (existing) return loadGoalDetail(repos, ctx.userId, existing, ctx.today);
       const goal = domainCreateGoal(
         {
           id: data.id ?? deps.ids(),
@@ -49,7 +49,7 @@ export async function createGoal(deps: Deps, ctx: Ctx, input: unknown): Promise<
       );
       await repos.goals.insert(goal);
       await appendEvent(repos, deps, ctx, goal.id, 'goal_created', goal.id, `Created goal "${goal.title}"`);
-      return loadGoalDetail(repos, goal, ctx.today);
+      return loadGoalDetail(repos, ctx.userId, goal, ctx.today);
     }),
   );
 }
@@ -60,7 +60,7 @@ export async function createGoalFromTemplate(deps: Deps, ctx: Ctx, input: unknow
       const data = createGoalFromTemplateSchema.parse(input);
       if (!TEMPLATES.some((t) => t.id === data.templateId)) throw notFound('Template not found');
       const existing = await existingGoal(repos, ctx, data.id);
-      if (existing) return loadGoalDetail(repos, existing, ctx.today);
+      if (existing) return loadGoalDetail(repos, ctx.userId, existing, ctx.today);
       let firstId = data.id;
       const ids = () => {
         if (firstId) {
@@ -77,7 +77,7 @@ export async function createGoalFromTemplate(deps: Deps, ctx: Ctx, input: unknow
       await appendEvent(repos, deps, ctx, plan.goal.id, 'goal_created', plan.goal.id, `Created goal "${plan.goal.title}" from a template`, {
         templateId: data.templateId,
       });
-      return loadGoalDetail(repos, plan.goal, ctx.today);
+      return loadGoalDetail(repos, ctx.userId, plan.goal, ctx.today);
     }),
   );
 }
@@ -93,7 +93,7 @@ export async function updateGoal(deps: Deps, ctx: Ctx, input: unknown): Promise<
         await repos.goals.update(next);
         await appendEvent(repos, deps, ctx, goalId, 'goal_updated', goalId, `Updated ${changedList(changed)}`, { changed });
       }
-      return loadGoalDetail(repos, next, ctx.today);
+      return loadGoalDetail(repos, ctx.userId, next, ctx.today);
     }),
   );
 }
@@ -142,7 +142,7 @@ function transitionUseCase(name: keyof typeof transitions) {
           await repos.goals.update(next);
           await appendEvent(repos, deps, ctx, goalId, t.event, goalId, t.summary);
         }
-        return loadGoalDetail(repos, next, ctx.today);
+        return loadGoalDetail(repos, ctx.userId, next, ctx.today);
       }),
     );
 }

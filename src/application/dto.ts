@@ -3,13 +3,17 @@
  * Plain serialisable objects: Instants are ISO strings, LocalDates are 'YYYY-MM-DD'.
  * CONTRACT FILE — the UI builds against these types.
  *
- * Progress semantics (three separate numbers, never blended; domain owns the math):
- *  - metrics.planning    filled/72 plan completeness (never null).
- *  - metrics.execution   mean action-level progress (task 0|1, routine 28-day adherence); null if none measurable.
- *  - metrics.attainment  mean clamp(current/target) over outcomes WITH a measure; null if none. Pace derives
- *                        from attainment only. Action completion never feeds attainment.
- *  - OutcomeDTO.execution / .attainment are the same two numbers at outcome level.
- *  - ActionDTO.progress  is the action-level value feeding execution.
+ * Progress semantics (separate numbers, never blended; the domain owns the math):
+ *  - metrics.planning         filled/72 plan completeness (never null).
+ *  - metrics.taskCompletion   completedTasks/totalTasks over active tasks in active outcomes; null if no tasks.
+ *  - metrics.routineAdherence mean 28-day adherence over active routines; null if none measurable.
+ *    routineCount is the number of active routines. Tasks and routines are never averaged together.
+ *  - metrics.attainment       mean clamp(current/target) over outcomes WITH a measure; null if none. Pace
+ *                             derives from attainment only. Action completion never feeds attainment.
+ *  - OutcomeDTO carries the same five fields at outcome level (taskCompletion, completedTasks, totalTasks,
+ *    routineAdherence, routineCount) plus attainment.
+ *  - ActionDTO.progress       action-level value (task 0|1, routine adherence).
+ *  - ActionDTO.focusedToday   the action is in today's focus list (daily_focus).
  *
  * Matrix shape: GoalDetailDTO.matrix.outcomes is always length 8, indexed by outcome position (0..7);
  * an empty cell is `null` (no row exists in the database). Each OutcomeDTO.slots is length 8, indexed by
@@ -62,9 +66,10 @@ export interface PlanningDTO {
 
 export interface GoalMetricsDTO {
   planning: PlanningDTO;
-  execution: number | null;
+  taskCompletion: number | null;
   completedTasks: number;
   totalTasks: number;
+  routineAdherence: number | null;
   routineCount: number;
   attainment: number | null;
 }
@@ -127,12 +132,18 @@ export interface ActionDTO extends ActionFieldsDTO {
   checkedToday: boolean;
   /** Routines: informational streak (0 for tasks). */
   streak: number;
+  /** In today's focus list (daily_focus). */
+  focusedToday: boolean;
   /** Routines: checked dates within the last 35 days, ascending. */
   recentChecks: LocalDate[];
 }
 
 export interface OutcomeDTO extends OutcomeFieldsDTO {
-  execution: Progress;
+  taskCompletion: Progress;
+  completedTasks: number;
+  totalTasks: number;
+  routineAdherence: Progress;
+  routineCount: number;
   attainment: Progress;
   actions: ActionDTO[];
   /** Length 8, indexed by action position; null = empty cell. */
@@ -166,6 +177,8 @@ export interface NextItemDTO {
 
 export interface TodayDTO {
   today: LocalDate;
+  /** Today's picked focus actions in slot order (done state included). Excluded from `next`. */
+  focus: NextItemDTO[];
   next: NextItemDTO[];
   doneToday: NextItemDTO[];
   goals: GoalSummaryDTO[];

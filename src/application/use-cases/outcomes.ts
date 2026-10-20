@@ -1,4 +1,5 @@
 import { computeReorder } from '@/domain/action';
+import { assertGoalEditable } from '@/domain/goal';
 import { MAX_OUTCOMES_PER_GOAL } from '@/domain/limits';
 import {
   archiveOutcome as domainArchive,
@@ -34,14 +35,15 @@ export async function addOutcome(deps: Deps, ctx: Ctx, input: unknown): Promise<
   return guard(deps.logger, () =>
     deps.uow.run(ctx.userId, async (repos) => {
       const data = addOutcomeSchema.parse(input);
-      const goal = await lockGoal(repos, ctx, data.goalId);
+      const goal = await lockGoal(repos, ctx, data.goalId, { editable: false });
       if (data.id) {
         const existing = await repos.outcomes.findById(ctx.userId, data.id);
         if (existing) {
           if (existing.goalId !== goal.id) throw new AppFail('CONFLICT', STALE_MESSAGE);
-          return loadOutcomeDTO(repos, goal, existing.id, ctx.today);
+          return loadOutcomeDTO(repos, ctx.userId, goal, existing.id, ctx.today);
         }
       }
+      assertGoalEditable(goal);
       const active = (await repos.outcomes.listByGoals([goal.id])).filter((o) => o.archivedAt === null);
       if (active.length < MAX_OUTCOMES_PER_GOAL) assertSlotAvailable(active.map((o) => o.position), data.position);
       const outcome = createOutcome(
@@ -60,7 +62,7 @@ export async function addOutcome(deps: Deps, ctx: Ctx, input: unknown): Promise<
       await appendEvent(repos, deps, ctx, goal.id, 'outcome_added', outcome.id, `Added outcome "${outcome.title}"`, {
         position: outcome.position,
       });
-      return loadOutcomeDTO(repos, goal, outcome.id, ctx.today);
+      return loadOutcomeDTO(repos, ctx.userId, goal, outcome.id, ctx.today);
     }),
   );
 }
@@ -78,7 +80,7 @@ export async function updateOutcome(deps: Deps, ctx: Ctx, input: unknown): Promi
           changed,
         });
       }
-      return loadOutcomeDTO(repos, goal, outcomeId, ctx.today);
+      return loadOutcomeDTO(repos, ctx.userId, goal, outcomeId, ctx.today);
     }),
   );
 }
@@ -93,7 +95,7 @@ export async function updateMeasureCurrent(deps: Deps, ctx: Ctx, input: unknown)
         await repos.outcomes.update(next);
         await appendEvent(repos, deps, ctx, goal.id, 'measure_updated', outcomeId, `Progress ${from} → ${to}`, { from, to });
       }
-      return loadOutcomeDTO(repos, goal, outcomeId, ctx.today);
+      return loadOutcomeDTO(repos, ctx.userId, goal, outcomeId, ctx.today);
     }),
   );
 }
@@ -108,7 +110,7 @@ export async function archiveOutcome(deps: Deps, ctx: Ctx, input: unknown): Prom
         await repos.outcomes.update(next);
         await appendEvent(repos, deps, ctx, goal.id, 'outcome_archived', outcomeId, `Archived outcome "${outcome.title}"`);
       }
-      return loadGoalDetail(repos, goal, ctx.today);
+      return loadGoalDetail(repos, ctx.userId, goal, ctx.today);
     }),
   );
 }
@@ -126,7 +128,7 @@ export async function restoreOutcome(deps: Deps, ctx: Ctx, input: unknown): Prom
           position: next.position,
         });
       }
-      return loadGoalDetail(repos, goal, ctx.today);
+      return loadGoalDetail(repos, ctx.userId, goal, ctx.today);
     }),
   );
 }
@@ -141,7 +143,7 @@ export async function reorderOutcomes(deps: Deps, ctx: Ctx, input: unknown): Pro
       if (!updates) throw new AppFail('CONFLICT', STALE_MESSAGE);
       await repos.outcomes.setPositions(goalId, updates);
       await appendEvent(repos, deps, ctx, goalId, 'outcomes_reordered', null, 'Reordered outcomes', { orderedIds });
-      return loadGoalDetail(repos, goal, ctx.today);
+      return loadGoalDetail(repos, ctx.userId, goal, ctx.today);
     }),
   );
 }

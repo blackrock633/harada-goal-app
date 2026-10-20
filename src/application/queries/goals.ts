@@ -24,7 +24,7 @@ export async function listGoals(deps: Deps, ctx: Ctx, input: unknown = {}): Prom
       if (!profile) throw new AppFail('UNAUTHENTICATED', 'Please sign in');
       const goals = await repos.goals.listByOwner(ctx.userId, statuses);
       goals.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-      return buildSummaries(repos, goals, ctx.today, profile.timeZone);
+      return buildSummaries(repos, ctx.userId, goals, ctx.today, profile.timeZone);
     }),
   );
 }
@@ -35,7 +35,7 @@ export async function getGoalDetail(deps: Deps, ctx: Ctx, input: unknown): Promi
       const { goalId } = goalIdSchema.parse(input);
       const goal = await repos.goals.findById(ctx.userId, goalId);
       if (!goal) throw notFound();
-      return loadGoalDetail(repos, goal, ctx.today);
+      return loadGoalDetail(repos, ctx.userId, goal, ctx.today);
     }),
   );
 }

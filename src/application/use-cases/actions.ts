@@ -9,7 +9,9 @@ import {
   updateAction as domainUpdate,
   validateCheckDate,
 } from '@/domain/action';
+import { assertGoalEditable } from '@/domain/goal';
 import { MAX_ACTIONS_PER_OUTCOME } from '@/domain/limits';
+import { planFocusAdd } from '@/domain/focus';
 import type { Action, Outcome } from '@/domain/types';
 import type { ActionDTO, GoalDetailDTO, OutcomeDTO } from '../dto';
 import { AppFail, STALE_MESSAGE, guard, notFound } from '../errors';
@@ -18,6 +20,7 @@ import type { Ctx, Result } from '../result';
 import {
   actionIdSchema,
   addActionSchema,
+  focusSchema,
   moveActionSchema,
   reorderActionsSchema,
   routineCheckSchema,
@@ -48,14 +51,15 @@ export async function addAction(deps: Deps, ctx: Ctx, input: unknown): Promise<R
     deps.uow.run(ctx.userId, async (repos) => {
       const data = addActionSchema.parse(input);
       const outcome = await ownedOutcome(repos, ctx, data.outcomeId);
-      const goal = await lockGoal(repos, ctx, outcome.goalId);
+      const goal = await lockGoal(repos, ctx, outcome.goalId, { editable: false });
       if (data.id) {
         const existing = await repos.actions.findById(ctx.userId, data.id);
         if (existing) {
           if (existing.outcomeId !== outcome.id) throw new AppFail('CONFLICT', STALE_MESSAGE);
-          return loadActionDTO(repos, existing, ctx.today);
+          return loadActionDTO(repos, ctx.userId, existing, ctx.today);
         }
       }
+      assertGoalEditable(goal);
       if (outcome.archivedAt !== null) throw new AppFail('INVALID_STATE', 'Cannot add actions to an archived outcome');
       const siblings = activeIn(await repos.actions.listByGoals([goal.id]), outcome.id);
       if (siblings.length < MAX_ACTIONS_PER_OUTCOME) assertSlotAvailable(siblings.map((a) => a.position), data.position);
@@ -80,7 +84,7 @@ export async function addAction(deps: Deps, ctx: Ctx, input: unknown): Promise<R
         outcomeId: outcome.id,
         position: action.position,
       });
-      return loadActionDTO(repos, action, ctx.today);
+      return loadActionDTO(repos, ctx.userId, action, ctx.today);
     }),
   );
 }
@@ -98,7 +102,7 @@ export async function updateAction(deps: Deps, ctx: Ctx, input: unknown): Promis
           changed,
         });
       }
-      return loadActionDTO(repos, next, ctx.today);
+      return loadActionDTO(repos, ctx.userId, next, ctx.today);
     }),
   );
 }
@@ -128,7 +132,7 @@ function taskToggle(kind: 'complete' | 'reopen') {
             await appendEvent(repos, deps, ctx, goal.id, 'action_reopened', actionId, `Reopened "${found.title}"`);
           }
         }
-        return loadActionDTO(repos, next, ctx.today);
+        return loadActionDTO(repos, ctx.userId, next, ctx.today);
       }),
     );
 }
@@ -148,7 +152,7 @@ function routineToggle(add: boolean) {
         validateCheckDate(action, date, ctx.today);
         if (add) await repos.checks.add({ id: deps.ids(), actionId, date, createdAt: ctx.now });
         else await repos.checks.remove(actionId, date);
-        return loadActionDTO(repos, action, ctx.today);
+        return loadActionDTO(repos, ctx.userId, action, ctx.today);
       }),
     );
 }
@@ -165,7 +169,7 @@ export async function archiveAction(deps: Deps, ctx: Ctx, input: unknown): Promi
         await repos.actions.update(next);
         await appendEvent(repos, deps, ctx, goal.id, 'action_archived', actionId, `Archived "${action.title}"`);
       }
-      return loadGoalDetail(repos, goal, ctx.today);
+      return loadGoalDetail(repos, ctx.userId, goal, ctx.today);
     }),
   );
 }
@@ -187,7 +191,7 @@ export async function restoreAction(deps: Deps, ctx: Ctx, input: unknown): Promi
           position: next.position,
         });
       }
-      return loadGoalDetail(repos, goal, ctx.today);
+      return loadGoalDetail(repos, ctx.userId, goal, ctx.today);
     }),
   );
 }
@@ -214,7 +218,7 @@ export async function moveAction(deps: Deps, ctx: Ctx, input: unknown): Promise<
           toPosition,
         });
       }
-      return loadGoalDetail(repos, goal, ctx.today);
+      return loadGoalDetail(repos, ctx.userId, goal, ctx.today);
     }),
   );
 }
@@ -230,7 +234,40 @@ export async function reorderActions(deps: Deps, ctx: Ctx, input: unknown): Prom
       if (!updates) throw new AppFail('CONFLICT', STALE_MESSAGE);
       await repos.actions.setPositions(goal.id, updates.map((u) => ({ ...u, outcomeId })));
       await appendEvent(repos, deps, ctx, goal.id, 'actions_reordered', outcomeId, 'Reordered actions', { orderedIds });
-      return loadOutcomeDTO(repos, goal, outcomeId, ctx.today);
+      return loadOutcomeDTO(repos, ctx.userId, goal, outcomeId, ctx.today);
+    }),
+  );
+}
+
+/** Adds an action to the focus list for `date` (default today). Idempotent; 5 per day max. */
+export async function addToToday(deps: Deps, ctx: Ctx, input: unknown): Promise<Result<ActionDTO>> {
+  return guard(deps.logger, () =>
+    deps.uow.run(ctx.userId, async (repos) => {
+      const { actionId, date = ctx.today } = focusSchema.parse(input);
+      const action = await repos.actions.findById(ctx.userId, actionId);
+      if (!action) throw notFound();
+      const outcome = await ownedOutcome(repos, ctx, action.outcomeId);
+      const goal = await repos.goals.findById(ctx.userId, action.goalId);
+      if (!goal) throw notFound();
+      const existing = await repos.focus.listForDate(ctx.userId, date);
+      const plan = planFocusAdd({ action, outcome, goal, existing, date, today: ctx.today });
+      if (plan.kind === 'add') {
+        await repos.focus.add({ id: deps.ids(), ownerId: ctx.userId, actionId, date, slot: plan.slot, createdAt: ctx.now });
+      }
+      return loadActionDTO(repos, ctx.userId, action, ctx.today);
+    }),
+  );
+}
+
+/** Removes an action from the focus list for `date` (default today). Idempotent. */
+export async function removeFromToday(deps: Deps, ctx: Ctx, input: unknown): Promise<Result<ActionDTO>> {
+  return guard(deps.logger, () =>
+    deps.uow.run(ctx.userId, async (repos) => {
+      const { actionId, date = ctx.today } = focusSchema.parse(input);
+      const action = await repos.actions.findById(ctx.userId, actionId);
+      if (!action) throw notFound();
+      await repos.focus.remove(ctx.userId, actionId, date);
+      return loadActionDTO(repos, ctx.userId, action, ctx.today);
     }),
   );
 }
