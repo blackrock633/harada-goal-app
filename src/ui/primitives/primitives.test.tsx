@@ -85,3 +85,12 @@ describe('ProgressBar', () => {
     expect(screen.getByText('Not measurable yet')).toBeInTheDocument();
   });
 });
+
+describe('toastDuration', () => {
+  it('keeps errors until dismissed and gives actions time to be reached', async () => {
+    const { toastDuration } = await import('./Toast');
+    expect(toastDuration({ type: 'error' })).toBeNull();
+    expect(toastDuration({ type: 'success', action: { label: 'Undo', onClick: () => {} } })).toBe(10_000);
+    expect(toastDuration({ type: 'info' })).toBe(5_000);
+  });
+});
