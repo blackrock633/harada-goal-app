@@ -25,6 +25,9 @@ const password = z
   .max(128, 'Use at most 128 characters');
 const displayName = title(LIMITS.displayName);
 const timeZone = z.string().trim().min(1).max(64);
+/** Optimistic concurrency (M-08): the `updatedAt` ISO string the client last saw. */
+const expectedUpdatedAt = z.iso.datetime().optional();
+const position = z.number().int().min(0).max(7).optional();
 
 export const signUpSchema = z.object({ email, password, displayName, timeZone });
 export const signInSchema = z.object({ email, password: z.string().min(1, 'Required').max(128) });
@@ -50,16 +53,20 @@ const purpose = z.object({
 });
 
 export const createGoalSchema = z.object({
+  id: id.optional(),
   title: title(LIMITS.goalTitle),
   vision: text(LIMITS.vision).optional(),
+  successCriteria: text(LIMITS.successCriteria).optional(),
   targetDate: localDate.nullable().optional(),
   purpose: purpose.partial().optional(),
 });
-export const createGoalFromTemplateSchema = z.object({ templateId: z.string().min(1).max(64) });
+export const createGoalFromTemplateSchema = z.object({ id: id.optional(), templateId: z.string().min(1).max(64) });
 export const updateGoalSchema = z.object({
   goalId: id,
+  expectedUpdatedAt,
   title: title(LIMITS.goalTitle).optional(),
   vision: text(LIMITS.vision).optional(),
+  successCriteria: text(LIMITS.successCriteria).optional(),
   targetDate: localDate.nullable().optional(),
   purpose: purpose.partial().optional(),
 });
@@ -78,13 +85,16 @@ const measure = z.object({
 });
 
 export const addOutcomeSchema = z.object({
+  id: id.optional(),
   goalId: id,
+  position,
   title: title(LIMITS.outcomeTitle),
   description: text(LIMITS.outcomeDescription).optional(),
   measure: measure.nullable().optional(),
 });
 export const updateOutcomeSchema = z.object({
   outcomeId: id,
+  expectedUpdatedAt,
   title: title(LIMITS.outcomeTitle).optional(),
   description: text(LIMITS.outcomeDescription).optional(),
   measure: measure.nullable().optional(),
@@ -113,7 +123,9 @@ export const scheduleSchema = z.discriminatedUnion('type', [
 const actionKind = z.enum(['task', 'routine']);
 
 export const addActionSchema = z.object({
+  id: id.optional(),
   outcomeId: id,
+  position,
   title: title(LIMITS.actionTitle),
   notes: text(LIMITS.actionNotes).optional(),
   kind: actionKind,
@@ -122,6 +134,7 @@ export const addActionSchema = z.object({
 });
 export const updateActionSchema = z.object({
   actionId: id,
+  expectedUpdatedAt,
   title: title(LIMITS.actionTitle).optional(),
   notes: text(LIMITS.actionNotes).optional(),
   kind: actionKind.optional(),
@@ -148,6 +161,7 @@ const reflectionFields = {
   nextChange: text(LIMITS.reflectionField).optional(),
 };
 export const addReflectionSchema = z.object({
+  id: id.optional(),
   goalId: id,
   date: localDate,
   kind: z.enum(['daily', 'weekly']),
@@ -155,6 +169,7 @@ export const addReflectionSchema = z.object({
 });
 export const updateReflectionSchema = z.object({
   reflectionId: id,
+  expectedUpdatedAt,
   date: localDate.optional(),
   kind: z.enum(['daily', 'weekly']).optional(),
   ...reflectionFields,
