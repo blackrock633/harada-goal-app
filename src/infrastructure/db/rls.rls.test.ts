@@ -25,7 +25,7 @@ async function as<T>(client: PGlite, who: Who, fn: (tx: Transaction) => Promise<
   });
 }
 
-const TABLES = ['profiles', 'goals', 'outcomes', 'actions', 'routine_checks', 'reflections', 'goal_events'];
+const TABLES = ['profiles', 'goals', 'outcomes', 'actions', 'routine_checks', 'daily_focus', 'reflections', 'goal_events'];
 const uuid = (): string => crypto.randomUUID();
 
 describe('row level security', () => {
@@ -56,6 +56,29 @@ describe('row level security', () => {
     await c.query(`insert into routine_checks (id, action_id, date) values ($1,$2,'2026-01-02')`, [ids.checkA, routine]);
     await c.query(`insert into reflections (id, goal_id, date, kind) values ($1,$2,'2026-01-02','daily')`, [ids.refA, ids.goalA]);
     await c.query(`insert into goal_events (id, goal_id, type, summary) values ($1,$2,'x','s')`, [ids.evA, ids.goalA]);
+    await c.query(`insert into daily_focus (id, owner_id, action_id, date, slot) values ($1,$2,$3,'2026-01-02',0)`, [uuid(), A, ids.actA]);
+  });
+
+  describe('daily_focus', () => {
+    const bob = (): Who => ({ sub: B });
+    it('B cannot read or delete A focus rows', async () => {
+      expect(await count(bob(), 'daily_focus')).toBe(0);
+      const r = await as(t.client, bob(), (tx) => tx.query(`delete from daily_focus where action_id = $1`, [ids.actA]));
+      expect(r.affectedRows ?? 0).toBe(0);
+    });
+    it('B cannot focus A action under B ownership, nor write rows owned by A', async () => {
+      await expect(as(t.client, bob(), (tx) => tx.query(
+        `insert into daily_focus (id, owner_id, action_id, date, slot) values ($1,$2,$3,'2026-01-03',0)`, [uuid(), B, ids.actA],
+      ))).rejects.toThrow(/row-level security/);
+      await expect(as(t.client, bob(), (tx) => tx.query(
+        `insert into daily_focus (id, owner_id, action_id, date, slot) values ($1,$2,$3,'2026-01-03',1)`, [uuid(), A, ids.actA],
+      ))).rejects.toThrow(/row-level security/);
+    });
+    it('caps focus at 5 slots per day at the database level', async () => {
+      await expect(t.client.query(
+        `insert into daily_focus (id, owner_id, action_id, date, slot) values ($1,$2,$3,'2026-01-04',5)`, [uuid(), A, ids.actA],
+      )).rejects.toThrow(/daily_focus_slot_check/);
+    });
   });
   afterAll(() => t.close());
 

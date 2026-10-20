@@ -60,12 +60,6 @@ export function nextActions(
       }
     } else {
       if (a.completedAt !== null) {
-        // completedToday check
-        // Using localDateInZone equivalent logic conceptually, assuming completedAt is converted via timeZone
-        // Since we are pure domain, let's assume completedAt local date conversion matches today if it was done today.
-        // But we don't import localDateInZone here, or we can. Let's import it.
-        const { localDateInZone } = require('./dates.js') || {}; // Or import if possible
-        // Let's rely on standard Date and timeZone
         let completedToday = false;
         try {
           const parts = new Intl.DateTimeFormat('en-CA', {

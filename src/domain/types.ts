@@ -98,6 +98,19 @@ export interface RoutineCheck {
   createdAt: Instant;
 }
 
+// ---------- DailyFocus ----------
+
+/** An action the user picked to work on for a specific local date (independent of due dates). */
+export interface DailyFocus {
+  id: Id;
+  ownerId: Id;
+  actionId: Id;
+  date: LocalDate;
+  /** 0..MAX_DAILY_FOCUS-1; unique per owner and date (caps the selection). */
+  slot: number;
+  createdAt: Instant;
+}
+
 // ---------- Reflection ----------
 
 export type ReflectionKind = 'daily' | 'weekly';

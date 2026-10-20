@@ -6,4 +6,5 @@ export * from './action.js';
 export * from './reflection.js';
 export * from './progress.js';
 export * from './next.js';
+export * from './focus.js';
 export * from './templates.js';

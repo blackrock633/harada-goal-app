@@ -1,29 +1,26 @@
-import { Deps } from '@/application/ports';
+import crypto from 'crypto';
+import type { Deps } from '@/application/ports';
 import { getDb } from './db/client';
 import { createUnitOfWork } from './db/unit-of-work';
-import { Argon2PasswordHasher } from './auth/password-hasher';
-import { CryptoSessionTokens } from './auth/session-tokens';
+import { createAuthGateway } from './auth';
 import { InMemoryRateLimiter } from './auth/rate-limiter';
 import { ConsoleLogger } from './logger';
-import crypto from 'crypto';
 
-let depsInstance: Deps | null = null;
+let depsPromise: Promise<Deps> | null = null;
 
-export async function getDeps(): Promise<Deps> {
-  if (depsInstance) {
-    return depsInstance;
-  }
-
-  const db = await getDb();
-  
-  depsInstance = {
-    uow: createUnitOfWork(db),
-    ids: () => crypto.randomUUID(),
-    passwords: new Argon2PasswordHasher(),
-    tokens: new CryptoSessionTokens(),
-    rateLimiter: new InMemoryRateLimiter(),
-    logger: new ConsoleLogger(),
-  };
-
-  return depsInstance;
+export function getDeps(): Promise<Deps> {
+  depsPromise ??= (async () => {
+    const db = await getDb();
+    return {
+      uow: createUnitOfWork(db),
+      ids: () => crypto.randomUUID(),
+      auth: createAuthGateway(db),
+      rateLimiter: new InMemoryRateLimiter(),
+      logger: new ConsoleLogger(),
+    };
+  })().catch((e) => {
+    depsPromise = null;
+    throw e;
+  });
+  return depsPromise;
 }

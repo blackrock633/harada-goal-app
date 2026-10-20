@@ -14,7 +14,7 @@ describe('schema.ts matches the migrated database', () => {
 
   it('finds the expected tables', () => {
     const names = tables.map((x) => getTableConfig(x)).filter((c) => (c.schema ?? 'public') === 'public').map((c) => c.name);
-    expect(names.sort()).toEqual(['actions', 'goal_events', 'goals', 'outcomes', 'profiles', 'reflections', 'routine_checks']);
+    expect(names.sort()).toEqual(['actions', 'daily_focus', 'goal_events', 'goals', 'outcomes', 'profiles', 'reflections', 'routine_checks']);
   });
 
   for (const table of tables) {
