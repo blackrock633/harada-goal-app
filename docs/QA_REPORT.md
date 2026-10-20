@@ -36,7 +36,7 @@ reference implementation. Native verification follows `NATIVE_QA_PLAN.md`.
 | axe (6 real screens), offline save, 200% text, session end, forged cookie, lost response | VERIFIED on both engines |
 | Real Supabase (staging) | **BLOCKED (ready to run)**: `tests/staging/staging.test.ts` is written and skips until creds exist. Its grant/RLS queries and expected values were validated against the migrated schema (exact match) |
 | iOS Simulator / real device | **BLOCKED**: Xcode not installed (25 GB free is likely too little); Java/Maestro missing |
-| Native (Expo) app | **NOT STARTED**: UI rebuild owned by the frontend orchestrator |
+| Native (Expo) app, native/app `a12bcf6` (scaffold + `@shared` domain) | jest **VERIFIED 3/3** (shared limits, dates and Zod schemas identical to web) · `tsc` **FAILED 12 errors (NAT-01)** · simulator BLOCKED |
 
 ## 3. Open defects
 
@@ -44,6 +44,7 @@ Owner: **D** = data/backend orchestrator · **F** = frontend orchestrator · **Q
 
 | ID | P | Owner | Where | Repro → expected / actual | Fix | Test |
 |---|---|---|---|---|---|---|
+| NAT-01 | P2 | F (+D for shared imports) | `mobile/` @ a12bcf6 | `npm run typecheck` fails: 9× missing Jest global types; shared `src/application/schemas.ts:7` uses the web `@/` alias, which mobile's tsc can't resolve (Metro and Jest remap it, so type changes to contracts would go unchecked); 3× template CSS/web typing | `types: ["jest"]`; make the shared layer use relative imports; declare `*.css` or drop template web files | mobile typecheck |
 | EXEC-01 | **P2 → FIXED db71bdd (verified, both engines)** | F | Today / KeyArea toggles (optimistic `CheckCircle`) | WebKit: tap Complete → UI shows done → reload/unload immediately → the in-flight server action is cancelled, so the completion is silently lost (5/5). Same for reopen. Chrome sends the request first. Breaks "failed writes must not appear successful" on the target platform | Track pending writes: `beforeunload` while in flight and/or a "saving…" state until confirmed | e2e #13 (WebKit) |
 | HYD-02 | P3 → FIXED db71bdd | F | `useAdoptPrehydrationValue` | A `<select>` whose controlled value isn't among its options would adopt the first option on every mount. No live case | Guard selects | — |
 | A11Y-01 | P2 → FIXED (verified both engines) | F | `src/ui/features/review/ReflectionForm.tsx:111` | Reflection date field has no accessible name (axe `label`, critical): a raw `<input type="date">` in `<Field>` never receives Field's context id, so `<label htmlFor>` points at nothing | Use the `Input` primitive, or read `useField()` for id/aria | e2e #12 |
