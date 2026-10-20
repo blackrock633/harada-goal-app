@@ -9,9 +9,10 @@ Columns: **ID** | Given / When / Then | **Layer** (domain / repo / use-case / UI
 
 Testable-now legend (checked against `src/` on 2026-10-19):
 - **yes** = the code exists today (domain pure functions in `src/domain/*`, Zod in `src/application/schemas.ts`, repos in `src/infrastructure/db/repositories/*`, primitives in `src/ui/primitives/*`).
+- _The B-UC/B-PAGE/B-AUTH tags record the 2026-10-19 baseline. Use cases, pages and auth now exist; current results are in `QA_REPORT.md`._
 - **B-UC** = blocked: use case does not exist (`src/application/` has only `dto.ts`, `ports.ts`, `result.ts`, `schemas.ts`; no `use-cases/`).
 - **B-PAGE** = blocked: feature page/route does not exist (`src/app/` has only `page.tsx`, `api/health`, `(dev)/styleguide`).
-- **B-AUTH** = blocked: sign-up/sign-in/session-validation use cases and middleware do not exist (only `password-hasher.ts`, `rate-limiter.ts`, `session-tokens.ts`, `session-repo.ts`).
+- **B-AUTH** = blocked (historical, 2026-10-19 baseline): sign-up/sign-in/session use cases did not exist yet. **Superseded:** auth moved to Supabase; see §10 for current coverage.
 - **B-SPEC** = blocked: requirement is undefined or contradictory; see section 12 (`M-nn`).
 - Entries with two tags need both.
 
@@ -187,20 +188,28 @@ Viewports: V1 = 360x640, V2 = 390x844. Applies to Today, Plan (accordion), actio
 
 ## 10. Authentication and session (AC-AUTH)
 
-| ID | Given / When / Then | Layer | Testable now? |
+Auth is **Supabase Auth** in production (`supabase.auth.getUser()` server-side; cookies managed by `@supabase/ssr`)
+and an HMAC-signed **dev gateway** locally (`harada_dev_session` = `<userId>.<HMAC>`; enabled only for
+NODE_ENV development/test with an embedded DB). The authorization boundary is `requireCtx()` for pages and
+`runAuthed()` for server actions; middleware is only a convenience redirect for GET/HEAD.
+Status column = coverage as of 2026-10-20; live results are in `QA_REPORT.md`.
+
+| ID | Given / When / Then | Layer | Covered by |
 |---|---|---|---|
-| AC-AUTH-01 | Given valid sign-up input, then the user, a session and an httpOnly `hga_session` cookie (SameSite=Lax, Secure in prod, 30-day) are created; the password is stored only as an Argon2id hash. | use-case | B-AUTH (hasher exists) |
-| AC-AUTH-02 | Given a session with `expires_at <= now`, when any page/action/query is requested, then it behaves as signed out: pages redirect to `/signin`, actions return `UNAUTHENTICATED`, and the expired row is not renewed. | use-case / UI | repo contract defined (`ports.ts:46`); B-AUTH |
-| AC-AUTH-03 | Given a session that expires while a form is open, when saving, then the user is told the session expired, their typed input is preserved, and after re-sign-in they return to the same page. | UI | B-AUTH, B-PAGE, B-SPEC (M-13) |
-| AC-AUTH-04 | Given a session with < 15 days left, when used, then expiry is extended to 30 days; given >= 15 days, not extended. | use-case | B-AUTH |
-| AC-AUTH-05 | Given sign-out, then the session row is deleted, the cookie cleared, and the old token no longer authenticates (back button shows no private data, requests return `UNAUTHENTICATED`). | use-case / UI | B-AUTH |
-| AC-AUTH-06 | Given unknown email vs. wrong password, then identical message, status and (approximately) timing. | use-case | B-AUTH |
-| AC-AUTH-07 | Given `changePassword`, then all other sessions are invalidated and the current one remains. | use-case | B-AUTH |
-| AC-AUTH-08 | Given user U2's goal/outcome/action/reflection/routine-check id, when U1 calls any read or write with it, then `NOT_FOUND` (never `FORBIDDEN`, never leaking existence); the response is indistinguishable from a random uuid. | repo + use-case | repo scoping by `ownerId`: yes (add cross-user tests per repo); use case: B-UC |
-| AC-AUTH-09 | Given U1 moves an action to an outcome id owned by U2, or reorders with U2's ids, then `NOT_FOUND`, no change. | use-case | B-UC |
-| AC-AUTH-10 | Given `GET /api/export`, then only the session user's data is returned; unauthenticated is 401. | route | B-UC, B-AUTH |
-| AC-AUTH-11 | Given `userId` in a request body/query, then it is ignored; identity comes only from the session (API_CONTRACTS.md:11). | use-case | B-UC |
-| AC-AUTH-12 | Given deleteAccount with the wrong password or confirmation != `DELETE`, then no deletion; given correct, all rows cascade and the session ends. | use-case / repo | schema: yes; repo cascade: yes; use case: B-AUTH |
+| AC-AUTH-01 | Given valid sign-up input, then a Supabase user and a `profiles` row (via the `handle_new_user` trigger) exist and the user is signed in. Passwords are never stored by the app. | use-case / DB | `application.test.ts`; e2e #8 (dev gateway); **Supabase NOT TESTED** |
+| AC-AUTH-02 | Given no session or an invalid one, pages redirect to `/signin` and server actions return `UNAUTHENTICATED` in-band (no redirect, so input survives). | middleware / action | e2e #8, #9, #10 |
+| AC-AUTH-03 | Given the session ends while a form is open, saving shows "Your session has ended … nothing was saved", keeps the typed input, does not navigate, and writes nothing. | UI | e2e #9 (AUTH-01). Return-to after re-sign-in: AUTH-02, open |
+| AC-AUTH-04 | Given an expiring Supabase access token, middleware/getUser refreshes it transparently. | middleware | **NOT TESTED** (needs a real Supabase project) |
+| AC-AUTH-05 | Given sign-out, the session cookie is cleared; protected pages redirect to `/signin` and no private data is visible on back/reload. | UI | e2e #8 |
+| AC-AUTH-06 | Given unknown email vs. wrong password, identical generic message. | use-case | `application.test.ts` (dev gateway); Supabase NOT TESTED |
+| AC-AUTH-07 | Given a forged or tampered session cookie (real user id, bad signature), no access is granted. | auth gateway | e2e #10 |
+| AC-AUTH-08 | Given another user's goal/outcome/action/reflection/check id, any read or write behaves as `NOT_FOUND`/no rows; existence is not leaked. | RLS + use-case | `rls.rls.test.ts`, `rls-adversarial.test.ts`, e2e #5 |
+| AC-AUTH-09 | Given a move or reorder that references another user's ids, then no change. | RLS + use-case | `rls-adversarial.test.ts` (re-parent/steal/donate), `application.test.ts` |
+| AC-AUTH-10 | Given `GET /api/export`, only the session user's data is returned; unauthenticated → 401. | route | `application.test.ts` (query); route NOT TESTED in e2e |
+| AC-AUTH-11 | Given a `userId` in request input, it is ignored; identity comes only from the verified session. | use-case | `application.test.ts`; `uow.run(userId)` from `getUser()` only |
+| AC-AUTH-12 | Given account deletion with the wrong confirmation, nothing is deleted; with the right one, all owned rows cascade. | use-case / DB | `data-integrity.test.ts` #11 (cascade); use-case flow NOT TESTED in e2e |
+| AC-AUTH-13 | Dev auth can never be enabled outside development/test or against a non-embedded DB. | config | `mode.test.ts`, `rls-adversarial.test.ts` |
+| AC-AUTH-14 | App DB roles hold no TRUNCATE/TRIGGER/REFERENCES; anon has no table privileges. | DB grants | `rls-adversarial.test.ts`; **real project `\dp public.*` NOT TESTED** |
 
 ## 11. Summary of coverage (to be updated when use cases land)
 
