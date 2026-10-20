@@ -8,6 +8,7 @@ import { CalendarCheck, Target, Grid3x3, NotebookPen, Settings, LogOut, User } f
 import type { LucideIcon } from 'lucide-react';
 import { MenuRoot, MenuTrigger, MenuContent, MenuItem, MenuSeparator } from '../primitives/Menu';
 import { primaryTabs, routes } from '../routes';
+import { UnloadGuard } from '../pending-writes';
 
 export interface AppShellProps {
   user: { displayName: string };
@@ -141,6 +142,7 @@ export function AppShell({ user, focusedGoalId, signOutAction, children }: AppSh
         </div>
       </aside>
 
+      <UnloadGuard />
       <main
         id="main-content"
         tabIndex={-1}

@@ -91,6 +91,8 @@ Details: `ARCHITECTURE.md`, `DATABASE.md`, `API_CONTRACTS.md`, `DOMAIN_MODEL.md`
 
 - **Integrations:** Supabase only. No AI features (D-006). No email provider other than Supabase's (SMTP is configured in its dashboard).
 - **Deployment:** none yet. `next build` passes (1f5d2fb, 2026-10-20; 14 dynamic routes + middleware, built without Supabase env vars).
+  - **Deploys need the four Supabase env vars** (`SUPABASE_SETUP.md` §2), set before `next build`.
+  - Without them the app fails closed by design: `/signin` returns 500 "Supabase is not configured" under `next start` (observed by the frontend session).
 - **Testing:**
   - Vitest: domain, application, infrastructure and `tests/integration`.
   - Playwright: `tests/e2e`, Chrome plus WebKit with an iPhone user agent.
@@ -129,8 +131,7 @@ The data/backend items were each verified by QA re-runs recorded in QA_REPORT §
 | P1 | Create and link a Supabase project; `supabase db push` | Primary acceptance criterion requires real Supabase | **User** (account, project, secrets) | Migrations applied; `\dp public.*` shows exact grants | Blocked on user |
 | P1 | Run the journeys against hosted Supabase (real GoTrue, session expiry) | Auth flows only mocked; expiry NOT TESTED | previous row | Journeys #1–#10 pass with `AUTH_PROVIDER` unset | Blocked |
 | P1 | Real phone or iOS Safari check | Acceptance says "real mobile device" | **User** (device or deployed URL) | Journeys 1–4 manually on a phone | Blocked on user |
-| P2 | Deployment target + preview deploy | Build passes locally; no host chosen | user (host choice) | Deployed preview over HTTPS with Supabase env | Planned |
-| P3 | Decide whether `/styleguide` ships to production | It is in the production route list | — | Removed or gated in production | Proposed |
+| P2 | Deployment target + preview deploy | Build passes locally; no host chosen | user (host choice), Supabase env vars | Deployed preview over HTTPS with all four Supabase env vars | Planned |
 | P2 | AUTH-02: sign-in action + return-to after session ends | Dead end after expiry | — | Link with `?next=`; e2e | Open (frontend) |
 | P2 | M-08b: make `expectedUpdatedAt` required on updates | Clients that omit it get last-write-wins | UI editors already send it | Schema requires it; tests | Proposed |
 | P2 | Update `ACCEPTANCE_CRITERIA.md` B-AUTH / AC-AUTH-01 | Still describe argon2 + `hga_session` | — | Rows describe Supabase Auth | Open (QA's file) |
@@ -158,7 +159,8 @@ The data/backend items were each verified by QA re-runs recorded in QA_REPORT §
 | typecheck | VERIFIED, 0 errors | b2a34e2 (qa-regress 20261020-133527); 5fe2f97 (QA 133725); 33d951e (`npx tsc --noEmit`, merged as 5f02816) |
 | lint | FAILED on b2a34e2 (5 errors, all in one-off generator scripts); **PASS on QA's 5fe2f97** after b858b2f deleted them (0 errors, 5 `no-console` warnings) | same |
 | vitest | **VERIFIED 489 + 1 expected-fail of 490** (36 files) on b2a34e2; 492 + 1 of 493 on QA's 5fe2f97 (adds journey-helper tests) | count guard passed |
-| routes | VERIFIED `/` 307, `/styleguide` 200, `/api/health` 200 | both runs |
+| routes (`next dev`) | VERIFIED `/` 307, `/styleguide` 200, `/api/health` 200 | both runs |
+| routes (`next start`, prod) | `/styleguide` 404 (281a5ab: `(dev)` layout calls `notFound()` in production), `/today` 307, `/api/health` 200; `/signin` 500 without Supabase env (intended fail-closed) | reported by the frontend session on main; not re-run by me |
 | e2e Chrome, b2a34e2 | **#1–#10 + 6b VERIFIED (incl. #9 AUTH-01)**, mobile shell 15/15; #11 FAILED (expected: snapshot predates HYD-01) | 20261020-133527 |
 | e2e WebKit, b2a34e2 | #1, 2, 4–8, 6b, 10 VERIFIED; **#3, #9 FAILED** (§8); #11 FAILED (pre-HYD-01); run killed before completion | same |
 | e2e on current main | NOT TESTED to completion | QA rerunning |

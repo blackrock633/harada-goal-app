@@ -299,6 +299,7 @@ export function KeyAreaView({ goal, position, today, matrix, execution, focus, o
                     checked={checked}
                     label={act.kind === 'routine' && !act.dueToday ? `${act.title} (not due today)` : act.title}
                     disabled={disabled}
+                    aria-busy={busy.has(act.id) || undefined}
                     onClick={() => void toggle(slot.action!)}
                   />
                   <button
@@ -312,7 +313,13 @@ export function KeyAreaView({ goal, position, today, matrix, execution, focus, o
                       <span aria-hidden="true" className="mr-1 text-ink-muted">{act.kind === 'routine' ? '↻' : '○'}</span>
                       {act.title}
                     </span>
-                    <span className="text-xs text-ink-muted [overflow-wrap:anywhere]">{statusText(act, today)}</span>
+                    <span className="text-xs text-ink-muted [overflow-wrap:anywhere]">
+                      {busy.has(act.id) ? (
+                        <span role="status" className="font-medium text-ink">Saving…</span>
+                      ) : (
+                        statusText(act, today)
+                      )}
+                    </span>
                   </button>
                   {canFocus && !act.archivedAt && (
                     <button

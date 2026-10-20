@@ -21,6 +21,11 @@ Never apply `supabase/tests/auth-shim.sql` to a Supabase project. It is a local 
 | `SUPABASE_SERVICE_ROLE_KEY` | Project Settings → API | **server only**: account deletion. Never prefix with `NEXT_PUBLIC_` |
 | `DATABASE_URL` | Connect → Transaction pooler (port 6543) | used by Drizzle; prepared statements are disabled for the pooler |
 
+All four are required in every deployed environment (preview and production). The app fails closed without
+them: auth pages return HTTP 500 ("Supabase is not configured") rather than falling back to anything.
+`NEXT_PUBLIC_*` values are inlined at build time, so set them before `next build`. `AUTH_PROVIDER=dev` is
+refused in production.
+
 ## 3. Dashboard configuration
 
 - **Authentication → Providers → Email:** enabled. Decide on "Confirm email". If enabled, sign-up returns

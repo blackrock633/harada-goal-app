@@ -74,6 +74,8 @@ describe('TodayView', () => {
     const m = muts({ completeAction: vi.fn(() => new Promise<Res>((r) => { resolve = r; })) });
     const { rerender } = render(<TodayView data={data()} mutations={m} focusMutations={fmuts()} />);
     await userEvent.click(screen.getByRole('button', { name: 'Complete: Write chapter' }));
+    // EXEC-01: an unconfirmed write is visibly marked, not shown as settled.
+    expect(screen.getByRole('status', { name: '' })).toHaveTextContent('Saving…');
     // Revalidated server data lands while the mutation is still pending.
     const fresh = data({
       next: [item({ id: 'a2', title: 'Other' }), item({ id: 'a3', title: 'Newly due' })],

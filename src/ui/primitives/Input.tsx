@@ -76,10 +76,11 @@ export type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement>;
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, ...props }, ref) => {
     const field = useField();
-    const refCb = useAdoptPrehydrationValue(ref, props.value, props.onChange);
+    // No pre-hydration adoption for selects: a controlled value that isn't among the options reads
+    // back from the DOM as the first option and would be silently switched on mount.
     return (
       <select
-        ref={refCb}
+        ref={ref}
         id={field?.id}
         aria-invalid={field?.isInvalid}
         aria-describedby={field?.describedBy}
