@@ -15,7 +15,7 @@ describe('outcome', () => {
   });
 
   test('updateOutcome', () => {
-    let o = createOutcome({ id: 'o1', goalId: 'g1', title: 'O1' }, [], now);
+    const o = createOutcome({ id: 'o1', goalId: 'g1', title: 'O1' }, [], now);
     const { outcome: next, changed } = updateOutcome(o, { title: 'O2', measure: { target: 10, current: 0, unit: 'kg' } }, now);
     expect(next.title).toBe('O2');
     expect(next.measure?.target).toBe(10);
@@ -24,7 +24,7 @@ describe('outcome', () => {
   });
 
   test('setMeasureCurrent', () => {
-    let o = createOutcome({ id: 'o1', goalId: 'g1', title: 'O1', measure: { target: 10, current: 0, unit: 'kg' } }, [], now);
+    const o = createOutcome({ id: 'o1', goalId: 'g1', title: 'O1', measure: { target: 10, current: 0, unit: 'kg' } }, [], now);
     const res = setMeasureCurrent(o, 5, now);
     expect(res.outcome.measure?.current).toBe(5);
     expect(res.from).toBe(0);

@@ -219,9 +219,9 @@ Routine check/uncheck and reflections do **not** emit events (they have their ow
 ## 4. Metrics (pure functions, `src/domain/progress.ts`)
 
 There are three distinct metrics plus pace. They answer different questions and are never blended.
-**Action completion is not goal attainment**: ticking tasks off moves execution, never attainment or pace.
+**Action completion is not goal attainment**: ticking tasks off moves the task ratio, never attainment or pace.
 `computeGoalMetrics(goal, outcomes, actions, checksByActionId, today)` returns all of them in one call:
-`{ planning, execution, attainment, pace, outcomes: [{ outcomeId, execution, attainment }] }`.
+`{ planning, tasks, routines, attainment, pace, outcomes: [{ outcomeId, tasks, routines, attainment }] }`.
 
 Scope for every metric: only **active** outcomes (`archivedAt === null`) and **active** actions under active outcomes.
 Archived outcomes, archived actions and actions under archived outcomes are ignored. Progress values are in **[0, 1]** or
@@ -231,18 +231,23 @@ Archived outcomes, archived actions and actions under archived outcomes are igno
 `filled = (active outcomes with a non-blank title, max 8) + (active actions under active outcomes, max 64)`;
 `{ filled, total: 72, ratio: filled / 72 }`. Never null. An empty matrix is `0/72`, ratio 0.
 
-### 4.2 Execution — "how much of the planned work is done?"
-Mean of action progress over active actions in active outcomes:
-- task: `completedAt ? 1 : 0`.
-- routine: 28-day adherence (4.5); `null` adherence is excluded from the mean.
+### 4.2 Tasks and routines — "how much of the planned work is done?"
+Task completion and routine adherence are different measures and are reported separately, never averaged together.
+- `tasks = { completed, total, ratio }`: over active tasks in active outcomes; `ratio = completed / total`, `null` when `total` is 0.
+- `routines = { count, adherence }`: `count` is the number of active routines; `adherence` is the mean 28-day adherence (4.5)
+  over active routines whose adherence is non-null, `null` if none.
 
-`value` is `null` when no action is measurable. Also returns `{ completedTasks, totalTasks }` (active tasks only).
-`outcomeExecution(outcome, actions, ...)` is the same over one outcome's active actions (archived outcome: `value` null, counts 0).
+Both are also reported per outcome (`outcomes[].tasks`, `outcomes[].routines`) over that outcome's active actions.
 
 ### 4.3 Attainment — "how close is the real-world result?"
 Per outcome: `clamp(current / target, 0, 1)` when the outcome has a measure with a finite `target > 0`; otherwise `null`
 (no measure, missing or non-positive target, archived). Goal: mean over active outcomes that have a measure; `null` when
 none do. Action completion never feeds attainment.
+
+Notes:
+- Attainment is the mean of each measure's own progress toward its target, a unit-agnostic normalisation (kg and dollars both become 0..1). It is a summary, not a physical quantity.
+- Goal status `achieved` is authoritative; attainment is informational and never changes status.
+- The UI should show each outcome's own measure (current / target unit) beside the aggregate.
 
 ### 4.4 Pace ("am I on track?") — driven by attainment only
 For `active` goals with `targetDate` and `activatedOn` and `targetDate > activatedOn`:
@@ -271,8 +276,6 @@ Today is excluded unless already checked, so the user isn't penalised before the
   Sum both over weeks.
 - `adherence = expected === 0 ? null : min(1, kept / expected)`.
 
-Deprecated: `outcomeProgress`, `goalProgress`, `computeGoalProgress` blended measures and action completion; use the functions above.
-
 ### 4.6 Streak (informational only)
 For a routine: the number of consecutive scheduled periods kept, counting back from the most recent
 completed period (today counts only if checked; an unchecked today does not break the streak).
@@ -288,6 +291,16 @@ completed period (today counts only if checked; an unchecked today does not brea
 2. **Open tasks**, ordered: overdue (dueDate < today, oldest first) → due today → future due date (soonest first) → no due date (by outcome position, action position).
 
 Routines checked today and tasks completed today appear in a separate "Done today" list.
+
+### 5.x Daily focus (`src/domain/focus.ts`)
+
+A user may pick up to `MAX_DAILY_FOCUS` (5) actions to focus on for a given local date, independent of due dates
+(`DailyFocus { actionId, date, slot 0..4 }`, unique per owner, date and slot). `planFocusAdd` decides how to add one:
+- `date` must be within `[today, today + FOCUS_PLAN_AHEAD_DAYS (7)]`, else `VALIDATION`.
+- The action and its outcome must not be archived and the goal must not be `archived` or `achieved`, else `INVALID_STATE`.
+- Re-adding an already focused action is a no-op (`already_focused`).
+- The new item takes the lowest free slot (freed gaps are reused); a sixth item fails with `LIMIT_REACHED`.
+- Items focused for a date are excluded from the `next` suggestions for that date.
 
 ## 6. Domain errors
 
@@ -323,6 +336,6 @@ The domain exposes pure functions for managing entities without side effects.
 - **outcome.ts**: `createOutcome`, `updateOutcome`, `setMeasureCurrent`, `archiveOutcome`, `restoreOutcome`, `validateMeasure`
 - **action.ts**: `createAction`, `updateAction`, `completeTask`, `reopenTask`, `archiveAction`, `restoreAction`, `moveAction`, `computeReorder`, `validateCheckDate`, `normalizeSchedule`
 - **reflection.ts**: `createReflection`, `updateReflection`
-- **progress.ts**: `taskProgress`, `routineAdherence`, `actionProgress`, `outcomeProgress`, `goalProgress`, `pace`, `routineStreak`, `computeGoalProgress`
+- **progress.ts**: `taskProgress`, `routineAdherence`, `actionProgress`, `pace`, `routineStreak`, `planningCompleteness`, `outcomeAttainment`, `goalAttainment`, `computeGoalMetrics`
 - **next.ts**: `isDueToday`, `nextActions`
 - **templates.ts**: `TEMPLATES`, `instantiateTemplate`

@@ -143,6 +143,8 @@ export const updateActionSchema = z.object({
 });
 export const actionIdSchema = z.object({ actionId: id });
 export const routineCheckSchema = z.object({ actionId: id, date: localDate });
+/** `date` defaults to today in the use case. */
+export const focusSchema = z.object({ actionId: id, date: localDate.optional() });
 export const moveActionSchema = z.object({
   actionId: id,
   toOutcomeId: id,

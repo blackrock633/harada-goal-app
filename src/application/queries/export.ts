@@ -17,7 +17,11 @@ export interface ExportDTO {
   >;
 }
 
-/** Everything the user owns, as JSON-safe data. Structure/checks are batched; reflections and events are per goal. */
+/**
+ * Everything the user owns, as JSON-safe data. Goals, outcomes, actions and checks are batched.
+ * Known limitation: reflections and events are read per goal (N queries for N goals) because the ports
+ * have no batched methods for them. Acceptable for an occasional export.
+ */
 export async function exportData(deps: Deps, ctx: Ctx, _input?: unknown): Promise<Result<ExportDTO>> {
   return guard(deps.logger, () =>
     deps.uow.run(ctx.userId, async (repos) => {

@@ -1,7 +1,7 @@
 import { Action, Goal, Id, LocalDate, Outcome, Progress, Pace, RoutineCheck } from './types.js';
 import { ADHERENCE_WINDOW_DAYS, MAX_OUTCOMES_PER_GOAL, MAX_ACTIONS_PER_OUTCOME } from './limits.js';
 
-import { addDays, diffDays, eachDay, isoWeekStart, isoWeekEnd, weekdayOf } from './dates.js';
+import { addDays, diffDays, eachDay, isoWeekStart, weekdayOf } from './dates.js';
 
 export function taskProgress(action: Action): Progress {
   if (action.kind !== 'task') return null;
@@ -49,7 +49,7 @@ export function routineAdherence(action: Action, checks: (LocalDate | RoutineChe
     let expectedWeekSum = 0;
     let keptWeekSum = 0;
 
-    for (const [wStart, daysInWeek] of weeks.entries()) {
+    for (const daysInWeek of weeks.values()) {
       const expectedWeek = times * daysInWeek.length / 7;
       expectedWeekSum += expectedWeek;
       
@@ -71,62 +71,6 @@ export function actionProgress(action: Action, checks: (LocalDate | RoutineCheck
   return routineAdherence(action, checks, today);
 }
 
-/** @deprecated Blends measure and action completion; use outcomeAttainment / outcomeExecution. */
-export function outcomeProgress(
-  outcome: Outcome,
-  activeActions: Action[],
-  checksByActionId: Map<Id, LocalDate[]>,
-  today: LocalDate
-): Progress {
-  if (outcome.archivedAt !== null) return null;
-  if (outcome.measure) {
-    const { target, current } = outcome.measure;
-    if (target === 0) return null; // should not happen if validated
-    return Math.max(0, Math.min(1, current / target));
-  }
-
-  const validActions = activeActions.filter(a => a.outcomeId === outcome.id && a.archivedAt === null);
-  if (validActions.length === 0) return null;
-
-  let sum = 0;
-  let count = 0;
-  for (const a of validActions) {
-    const checks = checksByActionId.get(a.id) || [];
-    const p = actionProgress(a, checks, today);
-    if (p !== null) {
-      sum += p;
-      count++;
-    }
-  }
-
-  return count === 0 ? null : sum / count;
-}
-
-/** @deprecated Blends measure and action completion; use goalAttainment / executionProgress. */
-export function goalProgress(
-  activeOutcomes: Outcome[],
-  activeActionsByOutcome: Map<Id, Action[]>,
-  checksByActionId: Map<Id, LocalDate[]>,
-  today: LocalDate
-): Progress {
-  const outcomes = activeOutcomes.filter(o => o.archivedAt === null);
-  if (outcomes.length === 0) return null;
-
-  let sum = 0;
-  let count = 0;
-
-  for (const o of outcomes) {
-    const actions = activeActionsByOutcome.get(o.id) || [];
-    const p = outcomeProgress(o, actions, checksByActionId, today);
-    if (p !== null) {
-      sum += p;
-      count++;
-    }
-  }
-
-  return count === 0 ? null : sum / count;
-}
-
 /** Pace is driven by real-world attainment only; action completion never feeds it. */
 export function pace(goal: Goal, attainment: Progress, today: LocalDate): Pace {
   if (goal.status !== 'active') return 'unknown';
@@ -145,46 +89,18 @@ export function pace(goal: Goal, attainment: Progress, today: LocalDate): Pace {
   return 'behind';
 }
 
-/** @deprecated Use computeGoalMetrics. */
-export function computeGoalProgress(
-  goal: Goal,
-  activeOutcomes: Outcome[],
-  activeActions: Action[],
-  checksByActionId: Map<Id, LocalDate[]>,
-  today: LocalDate
-): { goal: Progress; outcomes: Map<Id, Progress>; actions: Map<Id, Progress>; pace: Pace } {
-  const actionProgs = new Map<Id, Progress>();
-  for (const a of activeActions) {
-    actionProgs.set(a.id, actionProgress(a, checksByActionId.get(a.id) || [], today));
-  }
-
-  const outcomeProgs = new Map<Id, Progress>();
-  const actionsByOut = new Map<Id, Action[]>();
-  for (const a of activeActions) {
-    if (!actionsByOut.has(a.outcomeId)) actionsByOut.set(a.outcomeId, []);
-    actionsByOut.get(a.outcomeId)!.push(a);
-  }
-
-  for (const o of activeOutcomes) {
-    outcomeProgs.set(o.id, outcomeProgress(o, actionsByOut.get(o.id) || [], checksByActionId, today));
-  }
-
-  const gp = goalProgress(activeOutcomes, actionsByOut, checksByActionId, today);
-  const p = pace(goal, goalAttainment(activeOutcomes), today);
-
-  return { goal: gp, outcomes: outcomeProgs, actions: actionProgs, pace: p };
-}
-
 // ---------- Canonical metrics (see docs/DOMAIN_MODEL.md section 4) ----------
 
 export const PLANNING_TOTAL = MAX_OUTCOMES_PER_GOAL + MAX_OUTCOMES_PER_GOAL * MAX_ACTIONS_PER_OUTCOME;
 
 export interface PlanningCompleteness { filled: number; total: number; ratio: number }
-export interface ExecutionProgress { value: Progress; completedTasks: number; totalTasks: number }
-export interface OutcomeMetrics { outcomeId: Id; execution: ExecutionProgress; attainment: Progress }
+export interface TaskMetrics { completed: number; total: number; ratio: number | null }
+export interface RoutineMetrics { count: number; adherence: number | null }
+export interface OutcomeMetrics { outcomeId: Id; tasks: TaskMetrics; routines: RoutineMetrics; attainment: Progress }
 export interface GoalMetrics {
   planning: PlanningCompleteness;
-  execution: ExecutionProgress;
+  tasks: TaskMetrics;
+  routines: RoutineMetrics;
   attainment: Progress;
   pace: Pace;
   outcomes: OutcomeMetrics[];
@@ -206,40 +122,21 @@ export function planningCompleteness(outcomes: Outcome[], actions: Action[]): Pl
   return { filled, total: PLANNING_TOTAL, ratio: filled / PLANNING_TOTAL };
 }
 
-function executionOf(actions: Action[], checksByActionId: Map<Id, LocalDate[]>, today: LocalDate): ExecutionProgress {
+function tasksOf(actions: Action[]): TaskMetrics {
+  const tasks = actions.filter(a => a.kind === 'task');
+  const completed = tasks.filter(a => a.completedAt !== null).length;
+  return { completed, total: tasks.length, ratio: tasks.length === 0 ? null : completed / tasks.length };
+}
+
+function routinesOf(actions: Action[], checksByActionId: Map<Id, LocalDate[]>, today: LocalDate): RoutineMetrics {
+  const routines = actions.filter(a => a.kind === 'routine');
   let sum = 0;
-  let count = 0;
-  let completedTasks = 0;
-  let totalTasks = 0;
-  for (const a of actions) {
-    if (a.kind === 'task') {
-      totalTasks++;
-      if (a.completedAt !== null) completedTasks++;
-    }
-    const p = actionProgress(a, checksByActionId.get(a.id) ?? [], today);
-    if (p !== null && Number.isFinite(p)) { sum += p; count++; }
+  let n = 0;
+  for (const r of routines) {
+    const p = routineAdherence(r, checksByActionId.get(r.id) ?? [], today);
+    if (p !== null && Number.isFinite(p)) { sum += p; n++; }
   }
-  return { value: count === 0 ? null : sum / count, completedTasks, totalTasks };
-}
-
-/** Goal-level execution: mean action progress over active actions in active outcomes. */
-export function executionProgress(
-  outcomes: Outcome[],
-  actions: Action[],
-  checksByActionId: Map<Id, LocalDate[]>,
-  today: LocalDate
-): ExecutionProgress {
-  return executionOf(activeScope(outcomes, actions).activeActions, checksByActionId, today);
-}
-
-export function outcomeExecution(
-  outcome: Outcome,
-  actions: Action[],
-  checksByActionId: Map<Id, LocalDate[]>,
-  today: LocalDate
-): ExecutionProgress {
-  if (outcome.archivedAt !== null) return { value: null, completedTasks: 0, totalTasks: 0 };
-  return executionOf(actions.filter(a => a.outcomeId === outcome.id && a.archivedAt === null), checksByActionId, today);
+  return { count: routines.length, adherence: n === 0 ? null : sum / n };
 }
 
 /** Measure-based progress of one outcome; null when archived or without a usable measure. */
@@ -268,18 +165,18 @@ export function computeGoalMetrics(
   checksByActionId: Map<Id, LocalDate[]>,
   today: LocalDate
 ): GoalMetrics {
-  const { activeOutcomes } = activeScope(outcomes, actions);
+  const { activeOutcomes, activeActions } = activeScope(outcomes, actions);
   const attainment = goalAttainment(activeOutcomes);
   return {
     planning: planningCompleteness(outcomes, actions),
-    execution: executionProgress(outcomes, actions, checksByActionId, today),
+    tasks: tasksOf(activeActions),
+    routines: routinesOf(activeActions, checksByActionId, today),
     attainment,
     pace: pace(goal, attainment, today),
-    outcomes: activeOutcomes.map(o => ({
-      outcomeId: o.id,
-      execution: outcomeExecution(o, actions, checksByActionId, today),
-      attainment: outcomeAttainment(o)
-    }))
+    outcomes: activeOutcomes.map(o => {
+      const own = activeActions.filter(a => a.outcomeId === o.id);
+      return { outcomeId: o.id, tasks: tasksOf(own), routines: routinesOf(own, checksByActionId, today), attainment: outcomeAttainment(o) };
+    })
   };
 }
 
@@ -319,10 +216,9 @@ export function routineStreak(action: Action, checks: LocalDate[], today: LocalD
     }
   } else if (type === 'weekly') {
     const times = action.schedule.timesPerWeek;
-    let currentWeekStart = isoWeekStart(today);
+    const currentWeekStart = isoWeekStart(today);
     const earliestWeek = isoWeekStart(action.startDate);
 
-    let d = today;
     let checksThisWeek = 0;
     let evalD = currentWeekStart;
     while (evalD <= addDays(currentWeekStart, 6) && evalD <= today) {

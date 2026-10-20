@@ -1,4 +1,4 @@
-import { Goal, Outcome, Action, Id, Instant, LocalDate } from './types.js';
+import { Goal, Outcome, Action, Id, Instant, LocalDate, Schedule } from './types.js';
 
 import { createGoal } from './goal.js';
 import { createOutcome } from './outcome.js';
@@ -201,7 +201,7 @@ export function instantiateTemplate(
         outcomeId,
         title: at.title,
         kind: at.kind,
-        schedule: at.schedule as any
+        schedule: at.schedule as Schedule
       }, activeSiblingsInOutcome, ctx.today, ctx.now);
       
       activeSiblingsInOutcome.push(action);

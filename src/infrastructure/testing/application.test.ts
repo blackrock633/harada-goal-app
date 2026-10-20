@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createTestDeps, type TestDeps } from '@/infrastructure/testing/create-test-deps';
 import { goals as goalsTable, goalEvents } from '@/infrastructure/db/schema';
-import type { Ctx } from './result';
-import { makeCtx } from './context';
-import * as uc from './use-cases';
-import * as q from './queries';
-import { toAppError } from './errors';
-import { UniqueViolationError, AuthGatewayError } from './ports';
+import type { Ctx } from '@/application/result';
+import { makeCtx } from '@/application/context';
+import * as uc from '@/application/use-cases';
+import * as q from '@/application/queries';
+import { toAppError } from '@/application/errors';
+import { UniqueViolationError, AuthGatewayError } from '@/application/ports';
 
 let t: TestDeps;
 let userId: string;
@@ -119,7 +119,8 @@ describe('matrix, outcomes and actions (mocked auth)', () => {
     expect(g.matrix.outcomes).toHaveLength(8);
     expect(g.matrix.outcomes.every((o) => o === null)).toBe(true);
     expect(g.metrics.planning).toEqual({ filled: 0, total: 72, ratio: 0 });
-    expect(g.metrics.execution).toBeNull();
+    expect(g.metrics.taskCompletion).toBeNull();
+    expect(g.metrics.routineAdherence).toBeNull();
     expect(g.metrics.attainment).toBeNull();
   });
 
@@ -427,5 +428,112 @@ describe('toAppError', () => {
     expect(internal.code).toBe('INTERNAL');
     expect(internal.message).not.toContain('secret');
     expect(logged).toBe(1);
+  });
+});
+
+describe('replays of archived rows (mocked auth)', () => {
+  it('addOutcome replay with an archived outcome returns its DTO, not INTERNAL', async () => {
+    const g = await newGoal();
+    const id = crypto.randomUUID();
+    await newOutcome(g.id, 'Once', { id });
+    must(await uc.archiveOutcome(t.deps, ctx, { outcomeId: id }));
+    const again = must(await uc.addOutcome(t.deps, ctx, { id, goalId: g.id, title: 'Once' }));
+    expect(again.id).toBe(id);
+    expect(again.archivedAt).not.toBeNull();
+  });
+
+  it('addAction replay with an archived action returns its DTO; foreign outcome id is CONFLICT', async () => {
+    const g = await newGoal();
+    const o = await newOutcome(g.id);
+    const o2 = await newOutcome(g.id, 'Other');
+    const id = crypto.randomUUID();
+    await newTask(o.id, 'Once', { id });
+    must(await uc.archiveAction(t.deps, ctx, { actionId: id }));
+    const again = must(await uc.addAction(t.deps, ctx, { id, outcomeId: o.id, title: 'Once', kind: 'task' }));
+    expect(again.id).toBe(id);
+    const wrong = await uc.addAction(t.deps, ctx, { id, outcomeId: o2.id, title: 'Once', kind: 'task' });
+    expect(!wrong.ok && wrong.error.code).toBe('CONFLICT');
+  });
+
+  it('createGoal and addReflection replays on an archived goal return the existing entity', async () => {
+    const id = crypto.randomUUID();
+    const g = must(await uc.createGoal(t.deps, ctx, { id, title: 'Replay' }));
+    const rid = crypto.randomUUID();
+    must(await uc.addReflection(t.deps, ctx, { id: rid, goalId: g.id, date: ctx.today, kind: 'daily', wentWell: 'x' }));
+    must(await uc.archiveGoal(t.deps, ctx, { goalId: g.id }));
+    expect(must(await uc.createGoal(t.deps, ctx, { id, title: 'Replay' })).status).toBe('archived');
+    expect(must(await uc.addReflection(t.deps, ctx, { id: rid, goalId: g.id, date: ctx.today, kind: 'daily', wentWell: 'x' })).id).toBe(rid);
+  });
+});
+
+describe('daily focus (mocked auth)', () => {
+  async function activeTask(title = 'T') {
+    const g = await newGoal();
+    const o = await newOutcome(g.id, 'O', { position: 1 });
+    const a = await newTask(o.id, title);
+    must(await uc.activateGoal(t.deps, ctx, { goalId: g.id }));
+    return { g, o, a };
+  }
+
+  it('addToToday is idempotent, shows in getToday.focus and not in next; removeFromToday is idempotent', async () => {
+    const { a } = await activeTask();
+    const first = must(await uc.addToToday(t.deps, ctx, { actionId: a.id }));
+    const second = must(await uc.addToToday(t.deps, ctx, { actionId: a.id }));
+    expect(first.focusedToday && second.focusedToday).toBe(true);
+    const today = must(await q.getToday(t.deps, ctx));
+    expect(today.focus.map((i) => i.action.id)).toEqual([a.id]);
+    expect(today.focus[0]!.outcomePosition).toBe(1);
+    expect(today.next.map((i) => i.action.id)).not.toContain(a.id);
+    const r1 = must(await uc.removeFromToday(t.deps, ctx, { actionId: a.id }));
+    const r2 = must(await uc.removeFromToday(t.deps, ctx, { actionId: a.id }));
+    expect(r1.focusedToday || r2.focusedToday).toBe(false);
+    const after = must(await q.getToday(t.deps, ctx));
+    expect(after.focus).toEqual([]);
+    expect(after.next.map((i) => i.action.id)).toContain(a.id);
+  });
+
+  it('a 6th focus is LIMIT_REACHED', async () => {
+    const g = await newGoal();
+    const o = await newOutcome(g.id);
+    const ids: string[] = [];
+    for (let i = 0; i < 6; i++) ids.push((await newTask(o.id, `T${i}`)).id);
+    for (let i = 0; i < 5; i++) must(await uc.addToToday(t.deps, ctx, { actionId: ids[i] }));
+    const r = await uc.addToToday(t.deps, ctx, { actionId: ids[5] });
+    expect(!r.ok && r.error.code).toBe('LIMIT_REACHED');
+  });
+
+  it("another user's action is NOT_FOUND and a past date is VALIDATION", async () => {
+    const g = await newGoal(other);
+    const o = must(await uc.addOutcome(t.deps, other, { goalId: g.id, title: 'O' }));
+    const foreign = must(await uc.addAction(t.deps, other, { outcomeId: o.id, title: 'A', kind: 'task' }));
+    const r = await uc.addToToday(t.deps, ctx, { actionId: foreign.id });
+    expect(!r.ok && r.error.code).toBe('NOT_FOUND');
+    const rm = await uc.removeFromToday(t.deps, ctx, { actionId: foreign.id });
+    expect(!rm.ok && rm.error.code).toBe('NOT_FOUND');
+    const { a } = await activeTask();
+    const past = await uc.addToToday(t.deps, ctx, { actionId: a.id, date: '2000-01-01' });
+    expect(!past.ok && past.error.code).toBe('VALIDATION');
+  });
+});
+
+describe('metrics split (mocked auth)', () => {
+  it('2 of 4 tasks done gives taskCompletion 0.5 and leaves attainment untouched', async () => {
+    const g = await newGoal();
+    const o = await newOutcome(g.id, 'Measured', { measure: { target: 10, current: 2, unit: 'x' } });
+    const tasks = [];
+    for (let i = 0; i < 4; i++) tasks.push(await newTask(o.id, `T${i}`));
+    must(await uc.completeAction(t.deps, ctx, { actionId: tasks[0]!.id }));
+    must(await uc.completeAction(t.deps, ctx, { actionId: tasks[1]!.id }));
+    const d = must(await q.getGoalDetail(t.deps, ctx, { goalId: g.id }));
+    expect(d.metrics).toMatchObject({
+      taskCompletion: 0.5,
+      completedTasks: 2,
+      totalTasks: 4,
+      routineAdherence: null,
+      routineCount: 0,
+      attainment: 0.2,
+    });
+    expect(d.outcomes[0]).toMatchObject({ taskCompletion: 0.5, completedTasks: 2, totalTasks: 4, attainment: 0.2 });
+    expect(d.metrics.planning).toMatchObject({ filled: 5, total: 72 });
   });
 });
