@@ -37,13 +37,14 @@ type UseCase<I, O> = (deps: Deps, ctx: Ctx, input: unknown) => Promise<Result<O>
 
 ## 2. DTOs (returned to UI)
 
-DTOs are plain serialisable objects (Instants as ISO strings). They mirror the domain types with these additions:
+DTOs are plain serialisable objects (Instants as ISO strings), defined in code in `src/application/dto.ts` (canonical). Summary:
 
 ```ts
 interface GoalSummaryDTO {
   id; title; status; targetDate; activatedOn; updatedAt;
   progress: number | null; pace: 'ahead'|'on_track'|'behind'|'overdue'|'unknown';
   outcomeCount: number; actionCount: number; openTaskCount: number; dueTodayCount: number;
+  lastReflectedOn: LocalDate | null;
 }
 
 interface ActionDTO extends ActionFields {
@@ -120,6 +121,7 @@ interface NextItemDTO { action: ActionDTO; goalId; goalTitle; outcomeId; outcome
 | `getGoalHistory` | `{ goalId, limit?=50, before?: ISO }` | `GoalEventDTO[]` |
 | `listReflections` | `{ goalId, limit?=30, before?: LocalDate }` | `ReflectionDTO[]` |
 | `getRoutineSheet` | `{ goalId, month: 'YYYY-MM' }` | per routine: `{ action, scheduledDates, checkedDates }` |
+| `listTemplates` | — | `TemplateSummaryDTO[]` |
 | `exportData` | — | JSON of all the user's data (download via `GET /api/export`) |
 
 Queries must not N+1. `getGoalDetail` loads a goal with ≤ 4 queries (goal, outcomes, actions, recent checks).

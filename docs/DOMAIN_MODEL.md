@@ -294,3 +294,16 @@ The application layer adds `NOT_FOUND`, `UNAUTHENTICATED`, `CONFLICT`, `INTERNAL
 Starting templates (e.g. "Run a marathon", "Launch a product", "Make the varsity roster", "Earn a 4.0")
 create a **new draft goal** pre-filled with outcomes and actions. They never touch existing data.
 Template content lives in `src/domain/templates.ts` as plain data.
+
+## 9. Domain operations (API)
+
+The domain exposes pure functions for managing entities without side effects.
+
+- **dates.ts**: `isValidLocalDate`, `assertLocalDate`, `addDays`, `diffDays`, `compareDates`, `weekdayOf`, `isoWeekStart`, `isoWeekEnd`, `eachDay`, `isValidTimeZone`, `localDateInZone`, `monthDays`
+- **goal.ts**: `createGoal`, `updateGoalDetails`, `activateGoal`, `markGoalAchieved`, `reopenGoal`, `archiveGoal`, `restoreGoal`, `assertGoalEditable`, `assertPermanentDeleteAllowed`
+- **outcome.ts**: `createOutcome`, `updateOutcome`, `setMeasureCurrent`, `archiveOutcome`, `restoreOutcome`, `validateMeasure`
+- **action.ts**: `createAction`, `updateAction`, `completeTask`, `reopenTask`, `archiveAction`, `restoreAction`, `moveAction`, `computeReorder`, `validateCheckDate`, `normalizeSchedule`
+- **reflection.ts**: `createReflection`, `updateReflection`
+- **progress.ts**: `taskProgress`, `routineAdherence`, `actionProgress`, `outcomeProgress`, `goalProgress`, `pace`, `routineStreak`, `computeGoalProgress`
+- **next.ts**: `isDueToday`, `nextActions`
+- **templates.ts**: `TEMPLATES`, `instantiateTemplate`
