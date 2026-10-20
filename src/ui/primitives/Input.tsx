@@ -16,7 +16,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         aria-invalid={field?.isInvalid}
         aria-describedby={field?.describedBy}
         className={clsx(
-          'flex h-11 sm:h-10 w-full rounded-[var(--radius-sm)] border bg-surface px-3 py-2 text-base sm:text-sm text-ink placeholder:text-ink-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50',
+          'flex h-11 sm:h-10 w-full rounded-[var(--radius-sm)] border bg-surface px-3 py-2 text-base sm:text-sm text-ink placeholder:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50',
           field?.isInvalid ? 'border-danger' : 'border-rule-input',
           className
         )}
@@ -50,7 +50,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
             onChange?.(e);
           }}
           className={clsx(
-            'flex min-h-[80px] w-full rounded-[var(--radius-sm)] border bg-surface px-3 py-2 text-base sm:text-sm text-ink placeholder:text-ink-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50',
+            'flex min-h-[80px] w-full rounded-[var(--radius-sm)] border bg-surface px-3 py-2 text-base sm:text-sm text-ink placeholder:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50',
             field?.isInvalid ? 'border-danger' : 'border-rule-input',
             className
           )}
@@ -101,7 +101,7 @@ export const DateInput = React.forwardRef<HTMLInputElement, InputProps>(
         aria-invalid={field?.isInvalid}
         aria-describedby={field?.describedBy}
         className={clsx(
-          'flex h-11 sm:h-10 w-full rounded-[var(--radius-sm)] border bg-surface px-3 py-2 text-base sm:text-sm text-ink placeholder:text-ink-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50',
+          'flex h-11 sm:h-10 w-full rounded-[var(--radius-sm)] border bg-surface px-3 py-2 text-base sm:text-sm text-ink placeholder:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50',
           field?.isInvalid ? 'border-danger' : 'border-rule-input',
           className
         )}

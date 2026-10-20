@@ -200,13 +200,13 @@ export default function StyleguidePage() {
               <div className="grid grid-cols-3 gap-1 bg-rule p-1 rounded-[var(--radius-md)] max-w-sm">
                 <div className="aspect-square bg-surface rounded-[var(--radius-sm)] p-2 flex flex-col justify-between">
                   <p className="text-xs font-medium text-ink line-clamp-2">Intervals</p>
-                  <div className="self-end"><span className="text-[10px] text-ink-faint">↻</span></div>
+                  <div className="self-end"><span className="text-xs text-ink-muted">↻</span></div>
                 </div>
                 <div className="aspect-square bg-accent-soft rounded-[var(--radius-sm)] p-2 flex flex-col items-center justify-center text-center">
-                  <p className="text-sm font-serif font-semibold text-accent-ink line-clamp-2">Speed</p>
+                  <p className="text-sm font-serif font-semibold text-ink line-clamp-2">Speed</p>
                 </div>
                 <div className="aspect-square bg-surface rounded-[var(--radius-sm)] p-2 flex flex-col justify-between">
-                  <p className="text-xs font-medium text-ink line-clamp-2 opacity-50 line-through">Buy cleats</p>
+                  <p className="text-xs font-medium text-ink-muted line-clamp-2 line-through">Buy cleats</p>
                   <div className="self-end"><CheckCircle label="done" checked className="scale-50 origin-bottom-right" /></div>
                 </div>
               </div>

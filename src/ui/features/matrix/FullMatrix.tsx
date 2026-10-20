@@ -96,7 +96,7 @@ export function FullMatrix({ goal, mutations, onActionSaved, className }: FullMa
         base = 'border-2 border-accent bg-accent text-accent-ink';
         inner = (
           <Link {...common} href={routes.goal(goal.id)} title={goal.title} aria-label={`Goal: ${goal.title}`} className={cell(base)}>
-            <span className="text-[9px] font-bold uppercase tracking-wider">Goal</span>
+            <span className="text-xs font-bold uppercase tracking-wide">Goal</span>
             <span className="line-clamp-3 font-serif text-xs font-bold leading-tight [overflow-wrap:anywhere]">{goal.title}</span>
           </Link>
         );
@@ -116,7 +116,7 @@ export function FullMatrix({ goal, mutations, onActionSaved, className }: FullMa
             aria-label={ref.kind === 'hub' ? hubLabel(a) : `${hubLabel(a)} (centre of its block)`}
             className={cell(base)}
           >
-            <span className="text-[9px] font-semibold uppercase tracking-wider text-ink-muted">Key area {a.position + 1}</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Key area {a.position + 1}</span>
             {a.outcome ? (
               <span className="line-clamp-2 text-xs font-semibold leading-tight [overflow-wrap:anywhere]">{a.outcome.title}</span>
             ) : (
@@ -138,9 +138,9 @@ export function FullMatrix({ goal, mutations, onActionSaved, className }: FullMa
         const body = act ? (
           <>
             <span className="flex items-center gap-0.5 text-ink-muted" aria-hidden="true">
-              {act.kind === 'routine' ? <Repeat className="h-3 w-3" /> : done ? <Check className="h-3 w-3 text-success" /> : <span className="text-[10px] leading-none">○</span>}
+              {act.kind === 'routine' ? <Repeat className="h-3 w-3" /> : done ? <Check className="h-3 w-3 text-success" /> : <span className="text-xs leading-none">○</span>}
             </span>
-            <span className={clsx('line-clamp-2 text-[11px] leading-tight [overflow-wrap:anywhere]', done && 'line-through')}>{act.title}</span>
+            <span className={clsx('line-clamp-2 text-xs leading-tight [overflow-wrap:anywhere]', done && 'line-through')}>{act.title}</span>
           </>
         ) : (
           <Plus className="h-3.5 w-3.5 text-ink-faint" aria-hidden="true" />

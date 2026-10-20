@@ -30,7 +30,7 @@ export function MatrixOverview({ goal, className }: MatrixOverviewProps) {
             data-testid="overview-goal"
             className="flex min-h-[104px] min-w-0 flex-col justify-center rounded-[var(--radius-md)] border-2 border-accent bg-accent p-2 text-accent-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
           >
-            <span className="text-[10px] font-bold uppercase tracking-wider opacity-90">Goal</span>
+            <span className="text-xs font-bold uppercase tracking-wide">Goal</span>
             <span className="line-clamp-3 font-serif text-sm font-bold leading-tight [overflow-wrap:anywhere]">{goal.title}</span>
           </Link>,
         );
@@ -68,7 +68,7 @@ function AreaTile({ area, goalId }: { area: MatrixArea; goalId: string }) {
         aria-label={`Key area ${n}: empty, add key area`}
         className="flex min-h-[104px] min-w-0 flex-col items-center justify-center gap-1 rounded-[var(--radius-md)] border border-dashed border-rule-strong bg-paper p-2 text-center text-ink-muted hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
-        <span className="text-[10px] font-semibold uppercase tracking-wider">Key area {n}</span>
+        <span className="text-xs font-semibold uppercase tracking-wide">Key area {n}</span>
         <Plus className="h-4 w-4" aria-hidden="true" />
         <span className="text-xs font-medium">Add key area</span>
       </Link>
@@ -82,7 +82,7 @@ function AreaTile({ area, goalId }: { area: MatrixArea; goalId: string }) {
       className="flex min-h-[104px] min-w-0 flex-col justify-between rounded-[var(--radius-md)] border border-rule-strong bg-accent-soft p-2 hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
       <div className="min-w-0">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">Key area {n}</span>
+        <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Key area {n}</span>
         <span className="line-clamp-2 block text-sm font-medium leading-tight text-ink [overflow-wrap:anywhere]">{o.title}</span>
       </div>
       <div>
@@ -98,7 +98,7 @@ function AreaTile({ area, goalId }: { area: MatrixArea; goalId: string }) {
             />
           ))}
         </span>
-        <span className="block text-[11px] tabular-nums text-ink-muted">{doneLabel(area.doneCount, area.actionCount)}</span>
+        <span className="block text-xs tabular-nums text-ink-muted">{doneLabel(area.doneCount, area.actionCount)}</span>
       </div>
     </Link>
   );
