@@ -45,3 +45,14 @@ _Last updated: 2026-10-06 (orchestrator)_
 ## Known limitations (by design, for now)
 
 - No email verification or email-based password reset (no email provider configured).
+
+## Data layer (branch `data/supabase`) — 2026-10-19, data orchestrator
+
+- **Stack change:** Supabase Postgres + Supabase Auth with RLS (D-013). Schema of record: `supabase/migrations/`.
+- **Done:** migrations (8 tables, RLS on all), Supabase/dev auth gateways, middleware, `requireCtx`, repositories,
+  all API_CONTRACTS use cases and queries, daily focus, separate planning/task/routine/attainment metrics.
+- **Tests:** 20 files / 242 tests on real PGlite with the Supabase auth shim (RLS, constraints and triggers are real).
+  Supabase Auth (GoTrue) is mocked (`FakeAuthGateway`); auth error mapping is unit-tested with constructed errors.
+  **Never run against a real Supabase project** (none is configured): see SUPABASE_SETUP.md.
+- **Known limitations:** `exportData` reads reflections/events per goal (N+1); no event for routine checks or
+  reflections; in-memory rate limiter is per process; generated supabase-js types need a linked project.
