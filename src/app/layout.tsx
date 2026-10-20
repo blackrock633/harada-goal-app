@@ -42,9 +42,6 @@ export default async function RootLayout({
         <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131311" />
       </head>
       <body>
-        <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:p-4 focus:bg-paper focus:text-ink focus:z-50 focus:top-0 focus:left-0">
-          Skip to main content
-        </a>
         <ToastProvider>
           {children}
         </ToastProvider>

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { clsx } from 'clsx';
 import { CalendarCheck, Target, Grid3x3, NotebookPen, Settings, LogOut, User } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -34,10 +34,13 @@ const focusRing =
 
 export function AppShell({ user, focusedGoalId, signOutAction, children }: AppShellProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // Keep the focused goal across tabs; a server layout cannot read ?goal=, so read it here.
+  const goalId = focusedGoalId ?? searchParams?.get('goal') ?? undefined;
   const tabs = primaryTabs.map((tab) => ({
     key: tab.key,
     label: tab.label,
-    href: tab.href(focusedGoalId),
+    href: tab.href(goalId),
     Icon: tabIcons[tab.key],
     active: isActivePath(pathname, tab.key),
   }));

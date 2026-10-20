@@ -4,7 +4,8 @@ import { render, screen, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const pathnameMock = vi.fn<() => string>();
-vi.mock('next/navigation', () => ({ usePathname: () => pathnameMock() }));
+const searchMock = vi.fn<() => URLSearchParams>(() => new URLSearchParams());
+vi.mock('next/navigation', () => ({ usePathname: () => pathnameMock(), useSearchParams: () => searchMock() }));
 
 import { AppShell } from './AppShell';
 
@@ -24,7 +25,16 @@ function setup(goalId?: string) {
 }
 
 describe('AppShell', () => {
-  beforeEach(() => pathnameMock.mockReturnValue('/today'));
+  beforeEach(() => {
+    pathnameMock.mockReturnValue('/today');
+    searchMock.mockReturnValue(new URLSearchParams());
+  });
+
+  it('carries ?goal= from the current URL into goal-scoped tabs', () => {
+    searchMock.mockReturnValue(new URLSearchParams('goal=g-42'));
+    setup();
+    expect(within(bottomNav()).getByRole('link', { name: /Matrix/ })).toHaveAttribute('href', '/matrix?goal=g-42');
+  });
 
   it('renders four tabs with hrefs carrying the focused goal', () => {
     setup('g1');
