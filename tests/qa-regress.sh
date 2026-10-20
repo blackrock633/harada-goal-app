@@ -56,16 +56,24 @@ gate typecheck npm run --silent typecheck
 gate lint      npx eslint .
 gate vitest    npx vitest run --maxWorkers="${QA_WORKERS:-4}"
 
-# Guard against silently lost tests: compare the executed test count with the last run on this branch.
+# Guard against silently lost tests. Vitest prints e.g. "Tests  317 passed (490)": the number in
+# parentheses is the total collected. Tests that never ran (crashed worker, file that failed to load)
+# show up as total > passed + failed + skipped, or as a drop in the total versus the last run.
 BRANCH=$(g rev-parse --abbrev-ref HEAD | tr '/' '_')
-COUNT=$(grep -Eo 'Tests +[0-9]+ failed \| [0-9]+ passed|Tests +[0-9]+ passed' "$LOG" | tail -1 | grep -Eo '[0-9]+' | paste -sd+ - | bc)
+TLINE=$(awk '/===== vitest/,/===== e2e|----- summary/' "$LOG" | grep -E '^ +Tests ' | tail -1)
+TOTAL=$(echo "$TLINE" | grep -Eo '\(([0-9]+)\)' | tr -d '()')
+RAN=$(echo "$TLINE" | grep -Eo '[0-9]+ (passed|failed|skipped|expected fail|todo)' | grep -Eo '^[0-9]+' | paste -sd+ - | bc)
 PREV=$(cat "$OUT/count-$BRANCH" 2>/dev/null || echo 0)
-if [ -n "$COUNT" ] && [ "$COUNT" -lt "$PREV" ]; then
-  SUMMARY+=("FAIL  test count dropped $PREV -> $COUNT on $BRANCH (tests silently not running?)")
+if [ -z "$TOTAL" ]; then
+  SUMMARY+=("FAIL  test count unreadable (vitest summary missing)")
+elif [ "${RAN:-0}" -lt "$TOTAL" ]; then
+  SUMMARY+=("FAIL  only ${RAN:-0} of $TOTAL tests ran (crashed worker or unloadable file)")
+elif [ "$TOTAL" -lt "$PREV" ]; then
+  SUMMARY+=("FAIL  test count dropped $PREV -> $TOTAL on $BRANCH")
 else
-  SUMMARY+=("PASS  test count ${COUNT:-?} (previous $PREV)")
+  SUMMARY+=("PASS  test count $TOTAL ran (previous $PREV)")
+  echo "$TOTAL" >"$OUT/count-$BRANCH"
 fi
-[ -n "$COUNT" ] && echo "$COUNT" >"$OUT/count-$BRANCH"
 
 if [ -z "${SKIP_E2E:-}" ]; then
   # Local dev auth + a fresh embedded DB: exercises real pages, use cases and RLS without a Supabase project.

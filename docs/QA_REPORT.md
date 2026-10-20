@@ -1,6 +1,6 @@
 # QA Status — Harada Goal App
 
-_Independent QA monitor · updated **2026-10-20 08:40** · rerun with `bash tests/qa-regress.sh [checkout]`
+_Independent QA monitor · updated **2026-10-20 12:30** · rerun with `bash tests/qa-regress.sh [checkout]`
 (`SNAPSHOT=1` for other agents' worktrees, which tests committed HEAD only) · logs in `test-results/qa/`._
 
 Related: `HARADA_SPEC.md` · `ACCEPTANCE_CRITERIA.md` · `research/HARADA_METHOD_SOURCES.md` · `research/MOBILE_USABILITY_REVIEW.md`.
@@ -22,29 +22,22 @@ none is configured, so this needs a user action. (2) A real mobile device or iOS
 Peers report that the user chose this. Native iOS/Android cannot be verified for this codebase. Mobile coverage is
 Chromium emulation (360×640, 390×844); WebKit/Safari is NOT TESTED.
 
-## 2. Status on main `638a017` (= ui/integration 07fd5e9 + qa/system)
+## 2. Status on main `7eb2d3d` (verified by QA, 2026-10-20 12:11–12:30, under `caffeinate -i`)
 
-main is now the integration point: data/supabase → ui/integration (fast-forward) → main, plus the qa/system merge.
-**Re-verification of main is PENDING.** The last runs were invalid: the machine was overloaded (load average ≈ 30 on 10 cores,
-Spotlight/XProtect scanning every snapshot and PGlite DB), so tests hit hook timeouts and failed to start workers.
-Those are environment failures, not app results, and are not counted. The runner now uses a `.noindex` scratch
-dir and caps vitest workers; the rerun is next.
-
-Pre-merge evidence (verified at committed snapshots, carried forward until re-run on main):
-
-| Gate | data/supabase `97c845e` | ui/integration `07fd5e9` |
+| Gate | Result | Evidence |
 |---|---|---|
-| typecheck | VERIFIED 0 | VERIFIED 0 |
-| vitest | VERIFIED 269/269 | VERIFIED 371/371 (06:16 run, under load; passed regardless) |
-| e2e journeys 1–8 + 6b | n/a | **VERIFIED 9/9** (§5b) |
-| e2e mobile shell | n/a | VERIFIED 15/15 (477ca3f) |
-| matrix structure / metrics / data integrity | VERIFIED 5/5 · 11/11 · 21/21 | inherits |
-| RLS branch suite / adversarial | VERIFIED 63/63 · 81 + 1 accepted (H4) | adversarial re-run PENDING |
-| lint | FAILED | FAILED (generator scripts, `scripts/migrate.ts`, `src/infrastructure/logger.ts`); `tests/` now clean |
-| Real Supabase / device / WebKit | NOT TESTED | NOT TESTED |
+| typecheck (src + tests) | **VERIFIED** 0 errors | qa-regress 20261020-121119 |
+| lint | **FAILED, 5 errors, all in `fix_imports.cjs`, `gen_domain.js`, `screenshot.cjs`** (one-off scaffold scripts; deleting them is a user decision). Everything else is clean | `npx eslint .` |
+| vitest (all of src + tests/integration) | **VERIFIED 490/490** | JSON reporter rerun, 4 workers. The first run lost 4 workers ("Worker exited unexpectedly"; 317 of 490 ran). Not reproduced; likely the concurrent kill of another session's hung vitest. The count guard now fails any run where tests didn't execute |
+| routes | VERIFIED | `/` → 307 (signin redirect), `/styleguide` 200, `/api/health` 200 |
+| e2e journeys 1–8 + 6b | **VERIFIED 9/9** | dev auth, fresh PGlite, Chrome 390×844 |
+| e2e mobile shell | **VERIFIED 15/15** | axe, touch targets, overflow, focus, safe area at 360/390 px |
+| Matrix / metrics / data integrity / RLS adversarial | **VERIFIED** 5 · 11 · 21 · 81 + 1 accepted (H4) | `tests/integration` |
+| RLS branch suite | VERIFIED 63/63 | in the vitest total |
+| Real Supabase project, `\dp public.*` | NOT TESTED | none configured (user action) |
+| iOS Safari / WebKit / real device | NOT TESTED | no simulator or device; Playwright WebKit not installed |
 
-QA suites on main after this commit (**VERIFIED 118/118 + 1 accepted-risk, 5.6 s**, under `caffeinate`): `tests/integration/{data-integrity,progress-metrics,matrix-structure,rls-adversarial}.test.ts`
-(promoted from `tests/pending/`; the old-API suites are retired). `tests/` passes tsc and eslint.
+Unmerged: data/supabase `0121743` is docs only (`docs/DATABASE.md`, verified by diff). Merging it is a user decision.
 
 ## 3. Open defects
 
@@ -59,11 +52,11 @@ Owner: **D** = data/backend orchestrator · **F** = frontend orchestrator · **Q
 | H3 | P3 → FIXED 97c845e (verified) | D | schema `:187-193` | A `routine_checks` row for a task-kind action is accepted | Trigger or routine-only FK | `rls-holes` |
 | H4 | P3 accepted risk | D | schema `:219-227` | `goal_events.subject_id` can name another tenant's action; documented as an untrusted label | Constrain if any feature ever joins on it | `rls-holes` (`it.fails`, accepted) |
 | M-08b | P2 | D+F | `schemas.ts` | `expectedUpdatedAt` is optional, so a client that omits it still last-write-wins. Goal/key-area/action editors send it (verified in code); reflections have no edit UI | Make it required on updates, or document | — |
-| L-01 | P2 | D+U | main | Lint red, so `npm run verify` is red. Remaining: `fix_imports.cjs`, `gen_domain.js`, `screenshot.cjs` (deletion is a user decision), `scripts/migrate.ts`, `src/infrastructure/logger.ts`. `tests/` and `src/ui`, `src/app` are clean | Fix or delete | lint gate |
+| L-01 | P3 | U | main | Lint red, so `npm run verify` is red. Remaining: `fix_imports.cjs`, `gen_domain.js`, `screenshot.cjs` (deletion is a user decision), `scripts/migrate.ts`, `src/infrastructure/logger.ts`. `tests/` and `src/ui`, `src/app` are clean | Fix or delete | lint gate |
 | U-09 | P2 | F | Toast | Reported fixed on ui/integration 64a7d81 | — | NOT TESTED by QA |
 | U-10 | P2 | F+D | Today | No daily priority pick → D added `daily_focus` + use cases in 761b5b1; UI pending | — | NOT TESTED |
 | Q-7 | P2 → FIXED | Q | QA runner, environment | Random multi-minute "hangs" on different tests each run (383–910 s). **Root cause: macOS idle sleep** (`pmset sleep 1`) froze workers between tool calls, plus Spotlight indexing. With `caffeinate -i` the same 4 suites pass in **5.6 s** (118 + 1 accepted). Runner now self-wraps in `caffeinate -i`, uses a `.noindex` scratch dir and caps workers. 204 MB of leaked QA temp dirs removed | — | `tests/integration` 118/118 + H4 |
-| ENV-01 | P2 | U/F | machine | A hung `vitest run src --maxWorkers=1` from the frontend session (pid 31399) had been at 100% CPU for 4.5 h, reported twice. Also `.data/` in main's checkout is 501 MB; it holds old leaked test DBs **and possibly the dev DB**, so QA has not touched it | Kill the stale process; prune `.data/test-*` (not `.data/dev`) | — |
+| ENV-01 | P3 | U | machine | The hung frontend vitest (pid 31399, 4.5 h) is now killed. Still open: `.data/` in main's checkout is 501 MB; it holds old leaked test DBs **and possibly the dev DB**, so QA has not touched it | Kill the stale process; prune `.data/test-*` (not `.data/dev`) | — |
 | Q-6 | P3 | U | `ui/integration` commits | Author is `Your Name <your-email@example.com>`: git identity not configured | `git config user.name/email` | — |
 | P-5 | — | U | product | Attainment = mean of per-measure progress (each normalised to its own target; verified unit-agnostic); `achieved` status is authoritative. User-designated success-criteria measures were declined for R1. **Product decision.** | — | `progress-metrics` |
 
@@ -129,9 +122,11 @@ iOS Safari or a device; the keyboard is simulated by viewport resize. Session *e
 | Journeys automated | VERIFIED 9/9 |
 | iOS / Android device | NOT TESTED (web app; no device) |
 
-**Verdict: NOT releasable yet.** There are no open P0 or P1 defects, and the core journeys pass end to end. Before release:
-run the journeys against a real Supabase project and on a real phone (WebKit at minimum), test session expiry,
-get lint green, and merge ui/integration → main. The QA files also need committing (user decision).
+**Verdict: NOT releasable yet. Engineering gates on main are green** (tsc 0, 490/490 tests, 9/9 journeys, 15/15 mobile
+checks, no open P0/P1). The remaining blockers are verification-environment gaps, not known defects:
+(1) the journeys against a **real Supabase project**, plus the `\dp public.*` grant check; (2) a **real phone** or at least
+WebKit/iOS Safari; (3) **session expiry** (not just sign-out); (4) the native-vs-web platform question. Plus lint
+(scaffold scripts) and merging the docs-only `0121743`.
 
 ## 7. Roadmap
 
