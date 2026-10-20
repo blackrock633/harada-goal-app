@@ -6,7 +6,8 @@ import type { GoalFieldsDTO } from '@/application/dto';
 import type { GoalMutations } from '@/ui/actions';
 import { Button, DateInput, Field, Input } from '@/ui/primitives';
 import { formatLocalDate } from '@/ui/format';
-import { PurposeFields, VisionField } from './GoalFields';
+import { newClientId } from '@/ui/errors';
+import { PurposeFields, SuccessCriteriaField, VisionField } from './GoalFields';
 import {
   FIELD_LIMITS,
   buildPayload,
@@ -29,6 +30,8 @@ export interface GoalFormProps {
   onSaved?: (goal: GoalFieldsDTO) => void;
   /** Where "Cancel" goes. */
   cancelHref?: string;
+  /** Called by the "Reload latest" button shown after a CONFLICT (the page wires router.refresh). */
+  onReloadLatest?: () => void;
   /** Local date 'YYYY-MM-DD'; defaults to the browser's today. Injectable for tests. */
   today?: string;
 }
@@ -38,17 +41,23 @@ function draftFrom(goal?: GoalFieldsDTO): GoalDraft {
   return {
     title: goal.title,
     vision: goal.vision,
+    successCriteria: goal.successCriteria,
     targetDate: goal.targetDate ?? '',
     purpose: { ...goal.purpose },
   };
 }
 
-export function GoalForm({ mode, goal, mutations, onCreated, onSaved, cancelHref, today: todayProp }: GoalFormProps) {
+export function GoalForm({ mode, goal, mutations, onCreated, onSaved, cancelHref, onReloadLatest, today: todayProp }: GoalFormProps) {
   const today = todayProp ?? localToday();
   const [draft, setDraft] = React.useState<GoalDraft>(() => draftFrom(goal));
   const [errors, setErrors] = React.useState<FieldErrors>({});
   const [formError, setFormError] = React.useState('');
   const [pending, setPending] = React.useState(false);
+  const [conflict, setConflict] = React.useState(false);
+  // One client id per create attempt: reused on retry so a retried create is idempotent.
+  const createIdRef = React.useRef<string | null>(null);
+  // Latest updatedAt we know about; sent as expectedUpdatedAt on edit.
+  const baselineRef = React.useRef<string | undefined>(goal?.updatedAt);
   const refs = React.useRef<Partial<Record<FieldKey, HTMLElement | null>>>({});
   const [focusKey, setFocusKey] = React.useState<{ key: FieldKey; n: number } | null>(null);
 
@@ -58,6 +67,17 @@ export function GoalForm({ mode, goal, mutations, onCreated, onSaved, cancelHref
     },
     [],
   );
+
+  // A fresher goal arrived from the page (e.g. after "Reload latest"): adopt it.
+  React.useEffect(() => {
+    if (goal && goal.updatedAt !== baselineRef.current) {
+      baselineRef.current = goal.updatedAt;
+      setDraft(draftFrom(goal));
+      setErrors({});
+      setFormError('');
+      setConflict(false);
+    }
+  }, [goal]);
 
   React.useEffect(() => {
     if (focusKey) refs.current[focusKey.key]?.focus();
@@ -86,22 +106,32 @@ export function GoalForm({ mode, goal, mutations, onCreated, onSaved, cancelHref
     }
     setErrors({});
     setFormError('');
+    setConflict(false);
     setPending(true);
     try {
       const payload = buildPayload(draft);
+      createIdRef.current ??= newClientId();
       const res =
         isEdit && goal
-          ? await mutations.updateGoal({ goalId: goal.id, ...payload })
-          : await mutations.createGoal(payload);
+          ? await mutations.updateGoal({
+              goalId: goal.id,
+              expectedUpdatedAt: baselineRef.current ?? goal.updatedAt,
+              ...payload,
+            })
+          : await mutations.createGoal({ id: createIdRef.current, ...payload });
       const out = toOutcome(res);
       if (out.ok) {
         if (isEdit) {
           // Show exactly what was persisted, not what was typed.
+          baselineRef.current = out.data.updatedAt;
           setDraft(draftFrom(out.data));
           onSaved?.(out.data);
+        } else {
+          createIdRef.current = null;
+          onCreated?.(out.data);
         }
-        else onCreated?.(out.data);
       } else {
+        if (out.code === 'CONFLICT') setConflict(true);
         failWith(out.fields, out.message);
       }
     } catch {
@@ -111,7 +141,7 @@ export function GoalForm({ mode, goal, mutations, onCreated, onSaved, cancelHref
     }
   }
 
-  const set = <K extends 'title' | 'vision' | 'targetDate'>(k: K, v: string) =>
+  const set = <K extends 'title' | 'vision' | 'successCriteria' | 'targetDate'>(k: K, v: string) =>
     setDraft((d) => ({ ...d, [k]: v }));
   const titleLen = draft.title.length;
 
@@ -126,6 +156,14 @@ export function GoalForm({ mode, goal, mutations, onCreated, onSaved, cancelHref
       {formError && (
         <p role="alert" className="rounded-[var(--radius-sm)] border border-danger/30 bg-danger/5 p-3 text-sm text-danger">
           {formError}
+          {conflict && onReloadLatest && (
+            <>
+              {' '}
+              <button type="button" onClick={onReloadLatest} className="min-h-[44px] font-medium underline underline-offset-2">
+                Reload latest
+              </button>
+            </>
+          )}
         </p>
       )}
 
@@ -164,6 +202,14 @@ export function GoalForm({ mode, goal, mutations, onCreated, onSaved, cancelHref
         </p>
       )}
 
+      <SuccessCriteriaField
+        value={draft.successCriteria}
+        onChange={(v) => set('successCriteria', v)}
+        error={errors.successCriteria}
+        register={register}
+        disabled={pending}
+      />
+
       <VisionField
         value={draft.vision}
         onChange={(v) => set('vision', v)}
@@ -171,9 +217,6 @@ export function GoalForm({ mode, goal, mutations, onCreated, onSaved, cancelHref
         register={register}
         disabled={pending}
       />
-      <p className="-mt-4 text-sm text-ink-muted">
-        This is saved as your goal&apos;s vision. Measurable targets live on each key area.
-      </p>
 
       <PurposeFields
         purpose={draft.purpose}

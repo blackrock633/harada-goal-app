@@ -1,7 +1,6 @@
 import Link from 'next/link';
-import type { GoalDetailDTO, OutcomeDTO } from '@/application/dto';
+import type { GoalDetailDTO } from '@/application/dto';
 import type { GoalMutations } from '@/ui/actions';
-import { MAX_ACTIONS_PER_OUTCOME, MAX_OUTCOMES_PER_GOAL } from '@/domain/limits';
 import { routes } from '@/ui/routes';
 import { formatLocalDate } from '@/ui/format';
 import { Badge } from '@/ui/primitives';
@@ -18,7 +17,12 @@ export interface GoalOverviewProps {
 }
 
 const STATUS_LABEL = { draft: 'Draft', active: 'Active', achieved: 'Achieved', archived: 'Archived' } as const;
-const TOTAL_POSITIONS = MAX_OUTCOMES_PER_GOAL * (1 + MAX_ACTIONS_PER_OUTCOME);
+const PACE_LABEL = {
+  ahead: 'Ahead (by measures)',
+  on_track: 'On track (by measures)',
+  behind: 'Behind (by measures)',
+  overdue: 'Overdue (by measures)',
+} as const;
 
 function dayPhrase(target: string, today: string): string {
   const n = daysBetween(today, target);
@@ -29,41 +33,26 @@ function dayPhrase(target: string, today: string): string {
   return `${Math.abs(n)} days ago`;
 }
 
-function slots(outcomes: OutcomeDTO[]): (OutcomeDTO | null)[] {
-  const result: (OutcomeDTO | null)[] = Array.from({ length: MAX_OUTCOMES_PER_GOAL }, () => null);
-  const extra: OutcomeDTO[] = [];
-  for (const o of outcomes) {
-    if (o.position !== null && o.position >= 0 && o.position < MAX_OUTCOMES_PER_GOAL && !result[o.position]) {
-      result[o.position] = o;
-    } else extra.push(o);
-  }
-  for (const o of extra) {
-    const i = result.findIndex((r) => r === null);
-    if (i >= 0) result[i] = o;
-  }
-  return result;
-}
-
 function fmtNum(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
 }
 
 export function GoalOverview({ goal, today, activateGoal, onActivated }: GoalOverviewProps) {
-  const rows = slots(goal.outcomes);
-  const filledAreas = goal.outcomes.length;
-  const activeActions = goal.outcomes.flatMap((o) => o.actions.filter((a) => a.archivedAt === null));
-  const filledPositions = filledAreas + activeActions.length;
-  const tasks = activeActions.filter((a) => a.kind === 'task');
-  const tasksDone = tasks.filter((a) => a.completedAt !== null).length;
+  const { metrics } = goal;
+  const rows = goal.matrix.outcomes;
+  const filledAreas = rows.filter((o) => o !== null).length;
   const measured = goal.outcomes.filter((o) => o.measure !== null);
   const purposes = PURPOSE_FIELDS.filter((f) => goal.purpose[f.key].trim());
   const vision = goal.vision.trim();
+  const criteria = goal.successCriteria.trim();
+  const pace = goal.pace;
 
   return (
     <div className="space-y-10">
       <header className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={goal.status}>{STATUS_LABEL[goal.status]}</Badge>
+          {pace !== 'unknown' && <Badge variant={pace}>{PACE_LABEL[pace]}</Badge>}
         </div>
         <h1 className="font-serif text-3xl leading-tight text-ink break-words text-balance">{goal.title}</h1>
         <p className="text-ink-muted">
@@ -91,19 +80,23 @@ export function GoalOverview({ goal, today, activateGoal, onActivated }: GoalOve
         <dl className="divide-y divide-rule">
           <div className="py-3">
             <dt className="text-sm text-ink-muted">Plan</dt>
-            <dd className="text-ink tabular-nums">{filledPositions} of {TOTAL_POSITIONS} positions filled</dd>
+            <dd className="text-ink tabular-nums">{metrics.planning.filled} of {metrics.planning.total} positions filled</dd>
           </div>
           <div className="py-3">
             <dt className="text-sm text-ink-muted">Actions</dt>
             <dd className="text-ink tabular-nums">
-              {tasksDone} of {tasks.length} tasks done
-              <span className="block text-sm text-ink-muted">Routines are not counted here.</span>
+              {metrics.completedTasks} of {metrics.totalTasks} tasks done
+              {metrics.routineCount > 0 && (
+                <span className="block text-sm text-ink-muted">
+                  and {metrics.routineCount} {metrics.routineCount === 1 ? 'routine' : 'routines'} (routines are not counted as tasks)
+                </span>
+              )}
             </dd>
           </div>
           <div className="py-3">
             <dt className="text-sm text-ink-muted">Goal attainment</dt>
             <dd className="text-ink">
-              {measured.length === 0 ? (
+              {measured.length === 0 && metrics.attainment === null ? (
                 <>
                   Not measured yet
                   <span className="block text-sm text-ink-muted">
@@ -111,6 +104,7 @@ export function GoalOverview({ goal, today, activateGoal, onActivated }: GoalOve
                   </span>
                 </>
               ) : (
+                <>
                 <ul className="space-y-1">
                   {measured.map((o) => (
                     <li key={o.id} className="tabular-nums">
@@ -119,15 +113,31 @@ export function GoalOverview({ goal, today, activateGoal, onActivated }: GoalOve
                     </li>
                   ))}
                 </ul>
+                {metrics.attainment !== null && (
+                  <p className="mt-2 tabular-nums">
+                    Measured attainment: {Math.round(metrics.attainment * 100)}%
+                    <span className="block text-sm text-ink-muted">
+                      Averaged from the measures on your key areas. Tasks and routines are not included.
+                    </span>
+                  </p>
+                )}
+                </>
               )}
             </dd>
           </div>
         </dl>
       </section>
 
+      {criteria && (
+        <section aria-labelledby="g-criteria" className="space-y-2">
+          <h2 id="g-criteria" className="font-serif text-xl text-ink">How you&apos;ll know</h2>
+          <p className="whitespace-pre-wrap break-words text-ink">{criteria}</p>
+        </section>
+      )}
+
       {vision && (
-        <section aria-labelledby="g-success" className="space-y-2">
-          <h2 id="g-success" className="font-serif text-xl text-ink">Success looks like</h2>
+        <section aria-labelledby="g-vision" className="space-y-2">
+          <h2 id="g-vision" className="font-serif text-xl text-ink">Vision</h2>
           <p className="whitespace-pre-wrap break-words text-ink">{vision}</p>
         </section>
       )}

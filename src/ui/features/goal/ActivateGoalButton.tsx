@@ -4,6 +4,7 @@ import * as React from 'react';
 import type { GoalFieldsDTO } from '@/application/dto';
 import type { GoalMutations } from '@/ui/actions';
 import { Button } from '@/ui/primitives';
+import { errorMessage } from '@/ui/errors';
 
 export function ActivateGoalButton({
   goalId,
@@ -23,7 +24,7 @@ export function ActivateGoalButton({
     try {
       const res = await activateGoal({ goalId });
       if (res.ok) onActivated?.(res.data);
-      else setError(res.error.message);
+      else setError(errorMessage(res.error));
     } catch {
       setError('Could not activate. Please try again.');
     } finally {

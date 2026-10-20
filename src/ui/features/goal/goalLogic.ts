@@ -1,5 +1,6 @@
 import { createGoalSchema } from '@/application/schemas';
-import type { Result } from '@/application/result';
+import type { AppErrorCode, Result } from '@/application/result';
+import { errorMessage } from '@/ui/errors';
 import { LIMITS } from '@/domain/limits';
 
 export type PurposeKey = 'selfTangible' | 'selfIntangible' | 'othersTangible' | 'othersIntangible';
@@ -7,17 +8,19 @@ export type PurposeKey = 'selfTangible' | 'selfIntangible' | 'othersTangible' | 
 export interface GoalDraft {
   title: string;
   vision: string;
+  successCriteria: string;
   targetDate: string;
   purpose: Record<PurposeKey, string>;
 }
 
-export type FieldKey = 'title' | 'targetDate' | 'vision' | PurposeKey;
+export type FieldKey = 'title' | 'targetDate' | 'vision' | 'successCriteria' | PurposeKey;
 export type FieldErrors = Partial<Record<FieldKey, string>>;
 
 /** Order used for focusing the first invalid field. */
 export const FIELD_ORDER: FieldKey[] = [
   'title',
   'targetDate',
+  'successCriteria',
   'vision',
   'selfTangible',
   'selfIntangible',
@@ -35,6 +38,7 @@ export const PURPOSE_FIELDS: { key: PurposeKey; label: string; hint: string }[] 
 export const emptyDraft = (): GoalDraft => ({
   title: '',
   vision: '',
+  successCriteria: '',
   targetDate: '',
   purpose: { selfTangible: '', selfIntangible: '', othersTangible: '', othersIntangible: '' },
 });
@@ -54,14 +58,15 @@ export function daysBetween(fromDate: string, toDate: string): number {
 /** Observable signal: a number, a date/time word, or a "someone would notice" phrase. */
 const SIGNAL = /\d|\b(daily|weekly|monthly|every|each|per|by|until|before|first|noticed?|says?|tell|told|see|sees|finish(ed)?|publish(ed)?|launch(ed)?|ship(ped)?|complete[d]?)\b|[%$€£]/i;
 
-export function visionNeedsSignal(vision: string): boolean {
-  const v = vision.trim();
+export function criteriaNeedsSignal(criteria: string): boolean {
+  const v = criteria.trim();
   return v.length >= 12 && !SIGNAL.test(v);
 }
 
 export const FIELD_LIMITS = {
   title: LIMITS.goalTitle,
   vision: LIMITS.vision,
+  successCriteria: LIMITS.successCriteria,
   purpose: LIMITS.purposeQuadrant,
 } as const;
 
@@ -69,6 +74,7 @@ export function buildPayload(draft: GoalDraft) {
   return {
     title: draft.title,
     vision: draft.vision,
+    successCriteria: draft.successCriteria,
     targetDate: draft.targetDate ? draft.targetDate : null,
     purpose: { ...draft.purpose },
   };
@@ -112,12 +118,16 @@ export function mapServerErrors(fieldErrors?: Record<string, string[]>): {
   return { fields, unmapped };
 }
 
-export type SubmitOutcome<T> = { ok: true; data: T } | { ok: false; fields: FieldErrors; message: string };
+export type SubmitOutcome<T> = { ok: true; data: T } | { ok: false; fields: FieldErrors; message: string; code: AppErrorCode };
 
 export function toOutcome<T>(res: Result<T>): SubmitOutcome<T> {
   if (res.ok) return { ok: true, data: res.data };
   const { fields, unmapped } = mapServerErrors(res.error.fieldErrors);
   const hasFields = Object.keys(fields).length > 0;
-  const message = hasFields && unmapped.length === 0 ? '' : unmapped[0] ?? res.error.message;
-  return { ok: false, fields, message: hasFields && !message ? 'Please fix the highlighted fields.' : message };
+  const code = res.error.code;
+  let message: string;
+  if (hasFields && unmapped.length === 0) message = 'Please fix the highlighted fields.';
+  else if (code === 'VALIDATION' && unmapped[0]) message = unmapped[0];
+  else message = errorMessage(res.error);
+  return { ok: false, fields, message, code };
 }

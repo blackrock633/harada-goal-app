@@ -9,7 +9,7 @@ import {
   type FieldKey,
   type GoalDraft,
   type PurposeKey,
-  visionNeedsSignal,
+  criteriaNeedsSignal,
 } from './goalLogic';
 
 export type RegisterRef = (key: FieldKey) => (el: HTMLElement | null) => void;
@@ -24,27 +24,64 @@ function Counter({ length, max }: { length: number; max: number }) {
   );
 }
 
-export function VisionField({
+export function SuccessCriteriaField({
   value,
   onChange,
   error,
   register,
   disabled,
-  label = 'What does success look like?',
 }: {
   value: string;
   onChange: (v: string) => void;
   error?: string;
   register?: RegisterRef;
   disabled?: boolean;
-  label?: string;
 }) {
-  const showHint = !error && visionNeedsSignal(value);
+  const showHint = !error && criteriaNeedsSignal(value);
   return (
     <div>
       <Field
-        label={label}
-        hint="How will you know you've arrived? A number, a date, or something someone else would notice."
+        label="How you'll know you've succeeded (optional)"
+        hint="Something observable — a number, a date, or something someone else would notice. Include where you're starting from if it helps."
+        error={error}
+      >
+        <Textarea
+          ref={register?.('successCriteria') as React.Ref<HTMLTextAreaElement>}
+          value={value}
+          disabled={disabled}
+          rows={3}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </Field>
+      <Counter length={value.length} max={FIELD_LIMITS.successCriteria} />
+      {showHint && (
+        <p role="note" className="mt-1 text-sm text-ink-muted">
+          Tip: this reads as qualitative, which is fine. If you can, add one thing you could observe, such
+          as a number or a date. You can set measurable targets per key area later.
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function VisionField({
+  value,
+  onChange,
+  error,
+  register,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  error?: string;
+  register?: RegisterRef;
+  disabled?: boolean;
+}) {
+  return (
+    <div>
+      <Field
+        label="Vision (optional)"
+        hint="The picture of the future, and why this goal matters to you."
         error={error}
       >
         <Textarea
@@ -56,12 +93,6 @@ export function VisionField({
         />
       </Field>
       <Counter length={value.length} max={FIELD_LIMITS.vision} />
-      {showHint && (
-        <p role="note" className="mt-1 text-sm text-ink-muted">
-          Tip: this reads as qualitative, which is fine. If you can, add one thing you could observe, such
-          as a number or a date. You can set measurable targets per key area later.
-        </p>
-      )}
     </div>
   );
 }

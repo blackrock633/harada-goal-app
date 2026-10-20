@@ -5,8 +5,9 @@ import type { GoalFieldsDTO, TemplateSummaryDTO } from '@/application/dto';
 import type { Result } from '@/application/result';
 import type { GoalMutations } from '@/ui/actions';
 import { routes } from '@/ui/routes';
+import { errorMessage, newClientId } from '@/ui/errors';
 import { Button, ButtonLink, DateInput, Field, Input } from '@/ui/primitives';
-import { PurposeFields, VisionField } from './GoalFields';
+import { PurposeFields, SuccessCriteriaField, VisionField } from './GoalFields';
 import {
   FIELD_LIMITS,
   buildPayload,
@@ -23,7 +24,8 @@ import {
 export interface GoalOnboardingProps {
   mutations: Pick<GoalMutations, 'createGoal' | 'updateGoal'>;
   templates: TemplateSummaryDTO[];
-  onUseTemplate: (id: string) => Promise<Result<GoalFieldsDTO>>;
+  /** `clientId` is stable across retries of the same template choice (idempotency). */
+  onUseTemplate: (templateId: string, clientId: string) => Promise<Result<GoalFieldsDTO>>;
   today?: string;
 }
 
@@ -50,6 +52,9 @@ export function GoalOnboarding({ mutations, templates, onUseTemplate, today: tod
     if (focusKey) refs.current[focusKey.key]?.focus();
   }, [focusKey]);
 
+  const createIdRef = React.useRef<string | null>(null);
+  const templateIdRef = React.useRef<{ templateId: string; id: string } | null>(null);
+
   const busy = pending || pendingTemplate !== null;
 
   const failWith = (fields: FieldErrors, message: string) => {
@@ -69,8 +74,12 @@ export function GoalOnboarding({ mutations, templates, onUseTemplate, today: tod
     setPending(true);
     try {
       const p = buildPayload(draft);
-      const out = toOutcome(await mutations.createGoal({ title: p.title, targetDate: p.targetDate }));
+      createIdRef.current ??= newClientId();
+      const out = toOutcome(
+        await mutations.createGoal({ id: createIdRef.current, title: p.title, targetDate: p.targetDate }),
+      );
       if (out.ok) {
+        createIdRef.current = null;
         setGoal(out.data);
         setStep('details');
       } else failWith(out.fields, out.message);
@@ -94,7 +103,13 @@ export function GoalOnboarding({ mutations, templates, onUseTemplate, today: tod
     try {
       const p = buildPayload(draft);
       const out = toOutcome(
-        await mutations.updateGoal({ goalId: goal.id, vision: p.vision, purpose: p.purpose }),
+        await mutations.updateGoal({
+          goalId: goal.id,
+          expectedUpdatedAt: goal.updatedAt,
+          successCriteria: p.successCriteria,
+          vision: p.vision,
+          purpose: p.purpose,
+        }),
       );
       if (out.ok) {
         setGoal(out.data);
@@ -112,11 +127,13 @@ export function GoalOnboarding({ mutations, templates, onUseTemplate, today: tod
     setFormError('');
     setPendingTemplate(id);
     try {
-      const res = await onUseTemplate(id);
+      if (templateIdRef.current?.templateId !== id) templateIdRef.current = { templateId: id, id: newClientId() };
+      const res = await onUseTemplate(id, templateIdRef.current.id);
       if (res.ok) {
+        templateIdRef.current = null;
         setGoal(res.data);
         setStep('done');
-      } else setFormError(res.error.message);
+      } else setFormError(errorMessage(res.error));
     } catch {
       setFormError('Could not use that example. Please try again.');
     } finally {
@@ -153,17 +170,23 @@ export function GoalOnboarding({ mutations, templates, onUseTemplate, today: tod
         <div>
           <h2 className="font-serif text-2xl text-ink">Make it yours (optional)</h2>
           <p className="mt-1 text-ink-muted">
-            &ldquo;{goal.title}&rdquo; is saved. These two notes help you stay motivated, and you can skip them.
+            &ldquo;{goal.title}&rdquo; is saved. These notes are optional, and you can skip them.
           </p>
         </div>
         {errorBox}
+        <SuccessCriteriaField
+          value={draft.successCriteria}
+          onChange={(v) => setDraft((d) => ({ ...d, successCriteria: v }))}
+          error={errors.successCriteria}
+          register={register}
+          disabled={busy}
+        />
         <VisionField
           value={draft.vision}
           onChange={(v) => setDraft((d) => ({ ...d, vision: v }))}
           error={errors.vision}
           register={register}
           disabled={busy}
-          label="Success looks like"
         />
         <PurposeFields
           purpose={draft.purpose}
