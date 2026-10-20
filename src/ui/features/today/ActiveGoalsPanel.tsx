@@ -1,12 +1,19 @@
 import Link from 'next/link';
 import type { GoalSummaryDTO } from '@/application/dto';
+import type { Pace } from '@/domain/types';
 import { routes } from '@/ui/routes';
 import { Badge } from '@/ui/primitives';
 
+const PACE_LABEL: Record<Exclude<Pace, 'unknown'>, string> = {
+  ahead: 'Ahead',
+  on_track: 'On track',
+  behind: 'Behind',
+  overdue: 'Overdue',
+};
+
 /**
- * Deliberately shows no progress bar or pace badge: GoalSummaryDTO.progress/pace are derived from
- * action completion alone and are not an honest measure of goal progress. "Actions: X of Y" is
- * also omitted because openTaskCount excludes routines while actionCount includes them.
+ * Shows honest counts only: tasks done, plan completeness and due-today. Never a merged percentage bar.
+ * Pace is shown only when it exists, and it derives from measured attainment alone.
  */
 export function ActiveGoalsPanel({ goals }: { goals: GoalSummaryDTO[] }) {
   if (goals.length === 0) return null;
@@ -30,6 +37,19 @@ export function ActiveGoalsPanel({ goals }: { goals: GoalSummaryDTO[] }) {
               </Badge>
             </div>
             <p className="mt-2 text-sm text-ink-muted">{g.dueTodayCount} due today</p>
+            {g.metrics.totalTasks > 0 && (
+              <p className="text-sm text-ink-muted">
+                {g.metrics.completedTasks} of {g.metrics.totalTasks} tasks done
+              </p>
+            )}
+            <p className="mt-1 text-xs text-ink-muted">
+              {g.metrics.planning.filled}/{g.metrics.planning.total} planned
+            </p>
+            {g.pace !== 'unknown' && (
+              <p className="mt-2">
+                <Badge variant={g.pace}>{PACE_LABEL[g.pace]} (by measures)</Badge>
+              </p>
+            )}
           </li>
         ))}
       </ul>

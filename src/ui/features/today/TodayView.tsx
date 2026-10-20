@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { NextItemDTO, TodayDTO } from '@/application/dto';
 import type { ExecutionMutations } from '@/ui/actions';
 import { routes } from '@/ui/routes';
+import { errorMessage } from '@/ui/errors';
 import { describeSchedule, formatLocalDate, relativeDay } from '@/ui/format';
 import { ButtonLink, CheckCircle, EmptyState, ProgressBar } from '@/ui/primitives';
 import { ActiveGoalsPanel } from './ActiveGoalsPanel';
@@ -14,8 +15,6 @@ export interface TodayViewProps {
   data: TodayDTO;
   mutations: ExecutionMutations;
   onError?: (message: string) => void;
-  /** outcomeId -> slot position (0..7); used to deep-link rows to the key area. */
-  outcomePositions?: Record<string, number>;
 }
 
 /** Stable overdue-first ordering. */
@@ -23,7 +22,7 @@ function overdueFirst(items: NextItemDTO[]): NextItemDTO[] {
   return [...items.filter((i) => i.overdue), ...items.filter((i) => !i.overdue)];
 }
 
-export function TodayView({ data, mutations, onError, outcomePositions }: TodayViewProps) {
+export function TodayView({ data, mutations, onError }: TodayViewProps) {
   const [next, setNext] = React.useState<NextItemDTO[]>(() => overdueFirst(data.next));
   const [done, setDone] = React.useState<NextItemDTO[]>(data.doneToday);
   const [pending, setPending] = React.useState<ReadonlySet<string>>(new Set());
@@ -73,9 +72,9 @@ export function TodayView({ data, mutations, onError, outcomePositions }: TodayV
           ? await (complete ? mutations.checkRoutine : mutations.uncheckRoutine)({ actionId: id, date: data.today })
           : await (complete ? mutations.completeAction : mutations.reopenAction)({ actionId: id });
         if (res.ok) updated = res.data;
-        else failure = res.error.message;
+        else failure = errorMessage(res.error);
       } catch {
-        failure = 'Something went wrong. Please try again.';
+        failure = errorMessage({ code: 'UNAVAILABLE', message: '' });
       }
 
       if (failure === null) {
@@ -148,7 +147,6 @@ export function TodayView({ data, mutations, onError, outcomePositions }: TodayV
                   today={data.today}
                   checked={false}
                   pending={pending.has(item.action.id)}
-                  outcomePositions={outcomePositions}
                   onToggle={() => void toggle(item, true)}
                 />
               ))}
@@ -190,8 +188,7 @@ export function TodayView({ data, mutations, onError, outcomePositions }: TodayV
                     today={data.today}
                     checked
                     pending={pending.has(item.action.id)}
-                    outcomePositions={outcomePositions}
-                    onToggle={() => void toggle(item, false)}
+                      onToggle={() => void toggle(item, false)}
                   />
                 ))}
               </ul>
@@ -246,15 +243,13 @@ interface RowProps {
   today: string;
   checked: boolean;
   pending: boolean;
-  outcomePositions?: Record<string, number>;
   onToggle: () => void;
 }
 
-function Row({ item, today, checked, pending, outcomePositions, onToggle }: RowProps) {
+function Row({ item, today, checked, pending, onToggle }: RowProps) {
   const { action } = item;
   const routine = action.kind === 'routine';
-  const position = outcomePositions?.[item.outcomeId];
-  const href = position === undefined ? routes.matrix(item.goalId) : routes.keyArea(item.goalId, position);
+  const href = routes.keyArea(item.goalId, item.outcomePosition);
   return (
     <li className="flex items-start gap-1 px-1 py-1 motion-safe:animate-[fadein_160ms_ease-out]">
       <CheckCircle

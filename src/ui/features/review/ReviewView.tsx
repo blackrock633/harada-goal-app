@@ -1,13 +1,13 @@
 import * as React from 'react';
 import type { GoalEventDTO, OutcomeDTO, ReflectionDTO } from '@/application/dto';
 import { formatLocalDate } from '@/ui/format';
-import { EmptyState, ProgressBar } from '@/ui/primitives';
+import { EmptyState } from '@/ui/primitives';
 import { ReflectionCard } from './ReflectionCard';
 
 export interface ReviewViewProps {
   /** Slot for <ReflectionForm />. */
   reflectionForm: React.ReactNode;
-  /** Tasks completed in the current week. */
+  /** Tasks completed in the current week; the page passes GoalSummaryDTO.completedThisWeek. */
   completedThisWeek: number;
   outcomes: OutcomeDTO[];
   reflections: ReflectionDTO[];
@@ -75,12 +75,14 @@ export function ReviewView({ reflectionForm, completedThisWeek, outcomes, reflec
                   {tasks.length === 0 ? (
                     <p className="text-sm text-ink-muted">No tasks yet</p>
                   ) : (
-                    <>
-                      <p className="text-sm text-ink-muted">
-                        {doneCount} of {tasks.length} tasks done
-                      </p>
-                      <ProgressBar progress={doneCount / tasks.length} label="Action completion" />
-                    </>
+                    <p className="text-sm text-ink-muted">
+                      {doneCount} of {tasks.length} tasks done
+                    </p>
+                  )}
+                  {o.measure && (
+                    <p className="text-sm text-ink-muted">
+                      Measure: {o.measure.current} of {o.measure.target} {o.measure.unit}
+                    </p>
                   )}
                 </li>
               );

@@ -4,6 +4,7 @@ import * as React from 'react';
 import type { ReflectionDTO } from '@/application/dto';
 import { addReflectionSchema } from '@/application/schemas';
 import type { ReviewMutations } from '@/ui/actions';
+import { errorMessage, newClientId } from '@/ui/errors';
 import { Button, Field, Textarea } from '@/ui/primitives';
 
 export interface ReflectionFormProps {
@@ -33,6 +34,8 @@ export function ReflectionForm({ goalId, today, addReflection, onSaved }: Reflec
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
   const [saved, setSaved] = React.useState(false);
+  // One client id per logical save: reused on retry, replaced after a successful save.
+  const clientId = React.useRef<string | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,7 +47,9 @@ export function ReflectionForm({ goalId, today, addReflection, onSaved }: Reflec
       setError('Write something in at least one box before saving.');
       return;
     }
+    clientId.current ??= newClientId();
     const input = {
+      id: clientId.current,
       goalId,
       date,
       kind,
@@ -68,16 +73,17 @@ export function ReflectionForm({ goalId, today, addReflection, onSaved }: Reflec
       const res = await addReflection(input);
       if (res.ok) {
         setValues({ wentWell: '', didntGoWell: '', nextChange: '' });
+        clientId.current = null;
         setSaved(true);
         onSaved?.(res.data);
       } else {
         const fe: Record<string, string> = {};
         for (const [k, v] of Object.entries(res.error.fieldErrors ?? {})) if (v[0]) fe[k] = v[0];
         setFieldErrors(fe);
-        setError(res.error.message);
+        setError(errorMessage(res.error));
       }
     } catch {
-      setError('Could not save your reflection. Your text is still here, so you can try again.');
+      setError(errorMessage({ code: 'UNAVAILABLE', message: '' }));
     } finally {
       setSaving(false);
     }

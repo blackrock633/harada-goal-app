@@ -18,12 +18,13 @@ function action(over: Partial<ActionDTO> = {}): ActionDTO {
   };
 }
 function item(over: Partial<ActionDTO> = {}, overdue = false): NextItemDTO {
-  return { action: action(over), goalId: 'g1', goalTitle: 'Goal', outcomeId: 'o1', outcomeTitle: 'Area', overdue };
+  return { action: action(over), goalId: 'g1', goalTitle: 'Goal', outcomeId: 'o1', outcomeTitle: 'Area', outcomePosition: 3, overdue };
 }
 function goal(over: Partial<GoalSummaryDTO> = {}): GoalSummaryDTO {
   return {
     id: 'g1', title: 'Run a marathon', status: 'active', targetDate: null, activatedOn: null, updatedAt: '',
-    progress: 0.5, pace: 'behind', outcomeCount: 1, actionCount: 2, openTaskCount: 1, dueTodayCount: 2, lastReflectedOn: null,
+    metrics: { planning: { filled: 10, total: 72, ratio: 10 / 72 }, execution: 0.5, completedTasks: 1, totalTasks: 4, routineCount: 1, attainment: null },
+    pace: 'unknown', outcomeCount: 1, actionCount: 2, openTaskCount: 1, dueTodayCount: 2, lastReflectedOn: null, completedThisWeek: 0,
     ...over,
   };
 }
@@ -52,7 +53,7 @@ describe('TodayView', () => {
 
   it('rolls back and reports the error on failure', async () => {
     const onError = vi.fn();
-    const m = muts({ completeAction: vi.fn(async () => ({ ok: false as const, error: { code: 'INTERNAL' as const, message: 'Boom' } })) });
+    const m = muts({ completeAction: vi.fn(async () => ({ ok: false as const, error: { code: 'NOT_FOUND' as const, message: 'Boom' } })) });
     render(<TodayView data={data()} mutations={m} onError={onError} />);
     await userEvent.click(screen.getByRole('button', { name: 'Complete: Write chapter' }));
     await waitFor(() => expect(within(nextList()).getByText('Write chapter')).toBeTruthy());
@@ -111,9 +112,9 @@ describe('TodayView', () => {
     expect(rows[0]).toHaveTextContent('Overdue');
   });
 
-  it('renders long titles and links to the key area when position is known', () => {
+  it('renders long titles and links to the key area via outcomePosition', () => {
     const long = 'x'.repeat(160);
-    render(<TodayView data={data({ next: [item({ title: long })] })} mutations={muts()} outcomePositions={{ o1: 3 }} />);
+    render(<TodayView data={data({ next: [item({ title: long })] })} mutations={muts()} />);
     expect(screen.getByText(long)).toBeTruthy();
     expect(screen.getByRole('link', { name: new RegExp(long) })).toHaveAttribute('href', '/matrix/3?goal=g1');
   });
@@ -128,10 +129,29 @@ describe('TodayView', () => {
     expect(screen.getByRole('link', { name: 'Open goal' })).toHaveAttribute('href', '/goal?goal=d1');
   });
 
-  it('active goals panel shows no progress or pace', () => {
+  it('rolls back with the UNAVAILABLE message', async () => {
+    const onError = vi.fn();
+    const m = muts({ completeAction: vi.fn(async () => ({ ok: false as const, error: { code: 'UNAVAILABLE' as const, message: 'raw' } })) });
+    render(<TodayView data={data()} mutations={m} onError={onError} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Complete: Write chapter' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("Couldn't reach the server"));
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('your input is kept'));
+    expect(within(nextList()).getByText('Write chapter')).toBeTruthy();
+  });
+
+  it('active goals panel shows task counts and plan, and hides pace when unknown', () => {
     render(<TodayView data={data()} mutations={muts()} />);
     expect(screen.getByText('2 due today')).toBeTruthy();
-    expect(screen.queryByText('Behind')).toBeNull();
-    expect(screen.queryByText('50%')).toBeNull();
+    expect(screen.getByText('1 of 4 tasks done')).toBeTruthy();
+    expect(screen.getByText('10/72 planned')).toBeTruthy();
+    expect(screen.queryByText(/by measures/)).toBeNull();
+    expect(within(screen.getByRole('complementary', { name: 'Active goals' })).queryByText(/%/)).toBeNull();
+  });
+
+  it('shows pace labelled by measures when known, and omits task counts with no tasks', () => {
+    const g = goal({ pace: 'behind', metrics: { ...goal().metrics, totalTasks: 0, completedTasks: 0, attainment: 0.4 } });
+    render(<TodayView data={data({ goals: [g] })} mutations={muts()} />);
+    expect(screen.getByText('Behind (by measures)')).toBeTruthy();
+    expect(screen.queryByText(/tasks done/)).toBeNull();
   });
 });
