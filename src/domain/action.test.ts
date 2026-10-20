@@ -19,7 +19,7 @@ describe('action', () => {
   });
 
   test('updateAction kind change', () => {
-    let a = createAction({ id: 'a1', goalId: 'g1', outcomeId: 'o1', title: 'Task', kind: 'task' }, [], '2024-01-01', now);
+    const a = createAction({ id: 'a1', goalId: 'g1', outcomeId: 'o1', title: 'Task', kind: 'task' }, [], '2024-01-01', now);
     const { action: next } = updateAction(a, { kind: 'routine', schedule: { type: 'daily' } }, '2024-01-02', now);
     expect(next.kind).toBe('routine');
     expect(next.startDate).toBe('2024-01-02');
@@ -27,7 +27,7 @@ describe('action', () => {
   });
 
   test('complete and reopen task', () => {
-    let a = createAction({ id: 'a1', goalId: 'g1', outcomeId: 'o1', title: 'Task', kind: 'task' }, [], '2024-01-01', now);
+    const a = createAction({ id: 'a1', goalId: 'g1', outcomeId: 'o1', title: 'Task', kind: 'task' }, [], '2024-01-01', now);
     const { action: completed, changed } = completeTask(a, now);
     expect(completed.completedAt).toBe(now);
     expect(changed).toBe(true);

@@ -21,7 +21,7 @@ describe('reflection', () => {
   });
 
   test('updateReflection', () => {
-    let r = createReflection({ id: 'r1', goalId: 'g1', date: '2024-01-01', kind: 'daily', wentWell: 'Everything' }, '2024-01-02', now);
+    const r = createReflection({ id: 'r1', goalId: 'g1', date: '2024-01-01', kind: 'daily', wentWell: 'Everything' }, '2024-01-02', now);
     const { reflection: next, changed } = updateReflection(r, { didntGoWell: 'Nothing' }, '2024-01-02', now);
     expect(next.wentWell).toBe('Everything');
     expect(next.didntGoWell).toBe('Nothing');
@@ -29,7 +29,7 @@ describe('reflection', () => {
   });
 
   test('updateReflection to all empty throws', () => {
-    let r = createReflection({ id: 'r1', goalId: 'g1', date: '2024-01-01', kind: 'daily', wentWell: 'Everything' }, '2024-01-02', now);
+    const r = createReflection({ id: 'r1', goalId: 'g1', date: '2024-01-01', kind: 'daily', wentWell: 'Everything' }, '2024-01-02', now);
     expect(() => updateReflection(r, { wentWell: '' }, '2024-01-02', now)).toThrowError(/At least one/);
   });
 });

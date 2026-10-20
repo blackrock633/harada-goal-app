@@ -1,6 +1,6 @@
 import { Action, Goal, Id, LocalDate, Outcome } from './types.js';
 
-import { isoWeekStart, weekdayOf, addDays, diffDays } from './dates.js';
+import { isoWeekStart, weekdayOf, addDays } from './dates.js';
 
 export interface NextItem {
   action: Action;

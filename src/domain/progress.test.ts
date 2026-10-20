@@ -1,6 +1,6 @@
 import { expect, test, describe } from 'vitest';
-import { planningCompleteness, executionProgress, outcomeExecution, goalAttainment, outcomeAttainment, computeGoalMetrics, taskProgress, routineAdherence, actionProgress, outcomeProgress, goalProgress, pace, routineStreak } from './progress.js';
-import { Action, Outcome, Goal, LocalDate } from './types.js';
+import { planningCompleteness, goalAttainment, outcomeAttainment, computeGoalMetrics, taskProgress, routineAdherence, pace, routineStreak } from './progress.js';
+import { Action, Outcome, Goal } from './types.js';
 
 describe('progress', () => {
   test('taskProgress', () => {
@@ -34,26 +34,6 @@ describe('progress', () => {
     const a = { kind: 'routine', startDate: '2024-01-01', schedule: { type: 'weekly', timesPerWeek: 3 }, archivedAt: null } as Action;
     expect(routineAdherence(a, ['2024-01-01', '2024-01-03', '2024-01-05'], '2024-01-08')).toBe(1); // week 1: 3 kept, 3 expected
     expect(routineAdherence(a, ['2024-01-01'], '2024-01-08')).toBe(1/3);
-  });
-
-  test('outcomeProgress measure', () => {
-    const o = { archivedAt: null, measure: { target: 10, current: 5, unit: 'km' } } as Outcome;
-    expect(outcomeProgress(o, [], new Map(), '2024-01-01')).toBe(0.5);
-  });
-
-  test('outcomeProgress actions', () => {
-    const o = { id: 'o1', archivedAt: null, measure: null } as Outcome;
-    const a1 = { id: 'a1', outcomeId: 'o1', kind: 'task', completedAt: new Date(), archivedAt: null } as Action;
-    const a2 = { id: 'a2', outcomeId: 'o1', kind: 'task', completedAt: null, archivedAt: null } as Action;
-    expect(outcomeProgress(o, [a1, a2], new Map(), '2024-01-01')).toBe(0.5);
-  });
-
-  test('goalProgress', () => {
-    const o1 = { id: 'o1', archivedAt: null, measure: { target: 10, current: 10, unit: 'x' } } as Outcome;
-    const o2 = { id: 'o2', archivedAt: null, measure: { target: 10, current: 0, unit: 'x' } } as Outcome;
-    const map = new Map<string, Action[]>();
-    map.set('o1', []); map.set('o2', []);
-    expect(goalProgress([o1, o2], map, new Map(), '2024-01-01')).toBe(0.5);
   });
 
   test('pace (attainment-driven)', () => {
@@ -95,7 +75,8 @@ describe('canonical metrics', () => {
   test('empty matrix', () => {
     const m = computeGoalMetrics(goal, [], [], new Map(), T);
     expect(m.planning).toEqual({ filled: 0, total: 72, ratio: 0 });
-    expect(m.execution).toEqual({ value: null, completedTasks: 0, totalTasks: 0 });
+    expect(m.tasks).toEqual({ completed: 0, total: 0, ratio: null });
+    expect(m.routines).toEqual({ count: 0, adherence: null });
     expect(m.attainment).toBeNull();
     expect(m.pace).toBe('unknown');
     expect(m.outcomes).toEqual([]);
@@ -119,24 +100,34 @@ describe('canonical metrics', () => {
     expect(planningCompleteness(os, as).filled).toBe(1 + 2);
   });
 
-  test('execution excludes archived actions and archived outcomes', () => {
+  test('tasks exclude archived actions and archived outcomes', () => {
     const os = [out('o1'), out('o2', { archivedAt: new Date() })];
     const as = [
       task('a1', 'o1', true), task('a2', 'o1'),
       task('a3', 'o1', true, { archivedAt: new Date() }),
       task('a4', 'o2', true)
     ];
-    expect(executionProgress(os, as, new Map(), T)).toEqual({ value: 0.5, completedTasks: 1, totalTasks: 2 });
-    expect(outcomeExecution(os[1]!, as, new Map(), T)).toEqual({ value: null, completedTasks: 0, totalTasks: 0 });
+    const m = computeGoalMetrics(goal, os, as, new Map(), T);
+    expect(m.tasks).toEqual({ completed: 1, total: 2, ratio: 0.5 });
+    expect(m.outcomes.map(o => o.outcomeId)).toEqual(['o1']);
   });
 
-  test('execution mixes tasks and routines; unmeasurable routines excluded', () => {
+  test('tasks and routines are separate, never blended', () => {
     const os = [out('o1')];
     const r = { id: 'r1', outcomeId: 'o1', kind: 'routine', startDate: '2024-01-01', schedule: { type: 'daily' }, archivedAt: null } as Action;
     const checks = new Map([['r1', ['2024-01-01', '2024-01-02', '2024-01-03', '2024-01-04', '2024-01-05']]]);
-    expect(executionProgress(os, [task('a1', 'o1'), r], checks, T).value).toBe(0.5);
+    const m = computeGoalMetrics(goal, os, [task('a1', 'o1'), r], checks, T);
+    expect(m.tasks).toEqual({ completed: 0, total: 1, ratio: 0 });
+    expect(m.routines).toEqual({ count: 1, adherence: 1 });
+    expect(m.outcomes[0]!.tasks.ratio).toBe(0);
+    expect(m.outcomes[0]!.routines.adherence).toBe(1);
+    // routine with no measurable adherence: counted, adherence null
     const fresh = { ...r, startDate: T } as Action;
-    expect(executionProgress(os, [fresh], new Map(), T).value).toBeNull();
+    expect(computeGoalMetrics(goal, os, [fresh], new Map(), T).routines).toEqual({ count: 1, adherence: null });
+    // mean over routines with adherence
+    const half = { ...r, id: 'r2' } as Action;
+    const m2 = computeGoalMetrics(goal, os, [r, half], new Map([['r1', checks.get('r1')!]]), T);
+    expect(m2.routines).toEqual({ count: 2, adherence: 0.5 });
   });
 
   test('attainment: clamp, missing/zero target excluded, archived excluded', () => {
@@ -157,18 +148,18 @@ describe('canonical metrics', () => {
     const after = [task('a1', 'o1', true), task('a2', 'o1')];
     const m0 = computeGoalMetrics(goal, os, before, new Map(), T);
     const m1 = computeGoalMetrics(goal, os, after, new Map(), T);
-    expect(m0.execution.value).toBe(0);
-    expect(m1.execution.value).toBe(0.5);
+    expect(m0.tasks.ratio).toBe(0);
+    expect(m1.tasks.ratio).toBe(0.5);
     expect(m1.attainment).toBe(0.2);
     expect(m1.attainment).toBe(m0.attainment);
     expect(m1.outcomes[0]).toMatchObject({ outcomeId: 'o1', attainment: 0.2 });
-    expect(m1.outcomes[0]!.execution.value).toBe(0.5);
+    expect(m1.outcomes[0]!.tasks.ratio).toBe(0.5);
   });
 
   test('QA P-2: pace unknown when only actions are complete and no measure', () => {
     const os = [out('o1')];
     const m = computeGoalMetrics(goal, os, [task('a1', 'o1', true)], new Map(), T);
-    expect(m.execution.value).toBe(1);
+    expect(m.tasks.ratio).toBe(1);
     expect(m.attainment).toBeNull();
     expect(m.pace).toBe('unknown');
   });
@@ -183,7 +174,7 @@ describe('canonical metrics', () => {
   test('no NaN anywhere', () => {
     const os = [out('o1', { measure: ms(0, 0) }), out('o2', { measure: ms(3, 1) })];
     const m = computeGoalMetrics(goal, os, [task('a', 'o2')], new Map(), T);
-    for (const v of [m.planning.ratio, m.execution.value, m.attainment, ...m.outcomes.flatMap(o => [o.execution.value, o.attainment])]) {
+    for (const v of [m.planning.ratio, m.tasks.ratio, m.routines.adherence, m.attainment, ...m.outcomes.flatMap(o => [o.tasks.ratio, o.routines.adherence, o.attainment])]) {
       expect(finite(v)).toBe(true);
     }
   });

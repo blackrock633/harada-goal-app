@@ -1,6 +1,6 @@
 import { expect, test, describe } from 'vitest';
-import { createGoal, updateGoalDetails, activateGoal, markGoalAchieved, reopenGoal, archiveGoal, restoreGoal, assertGoalEditable, assertPermanentDeleteAllowed } from './goal.js';
-import { Goal, Instant } from './types.js';
+import { createGoal, updateGoalDetails, activateGoal, markGoalAchieved, reopenGoal, archiveGoal, restoreGoal, assertPermanentDeleteAllowed } from './goal.js';
+import { Instant } from './types.js';
 
 describe('goal', () => {
   const now = new Date() as Instant;
@@ -16,7 +16,7 @@ describe('goal', () => {
   });
 
   test('updateGoalDetails', () => {
-    let goal = createGoal({ id: 'g1', ownerId: 'u1', title: 'My Goal' }, now);
+    const goal = createGoal({ id: 'g1', ownerId: 'u1', title: 'My Goal' }, now);
     const { goal: next, changed } = updateGoalDetails(goal, { title: 'New Title', purpose: { selfTangible: 'Money' } }, now);
     expect(next.title).toBe('New Title');
     expect(next.purpose.selfTangible).toBe('Money');
