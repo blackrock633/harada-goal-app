@@ -36,7 +36,7 @@ reference implementation. Native verification follows `NATIVE_QA_PLAN.md`.
 | axe (6 real screens), offline save, 200% text, session end, forged cookie, lost response | VERIFIED on both engines |
 | Real Supabase (staging) | **BLOCKED (ready to run)**: `tests/staging/staging.test.ts` is written and skips until creds exist. Its grant/RLS queries and expected values were validated against the migrated schema (exact match) |
 | iOS Simulator / real device | **BLOCKED**: Xcode not installed (25 GB free is likely too little); Java/Maestro missing |
-| Native (Expo) app, native/app `a12bcf6` (scaffold + `@shared` domain) | jest **VERIFIED 3/3** (shared limits, dates and Zod schemas identical to web) · `tsc` **FAILED 12 errors (NAT-01)** · simulator BLOCKED |
+| Native (Expo) app, native/app `1a1d867` (scaffold, `@shared` domain, keychain session storage) | jest **VERIFIED 3/3** (shared limits, dates and Zod schemas identical to web) · `tsc` **FAILED 12 errors (NAT-01)** · simulator BLOCKED |
 
 ## 3. Open defects
 
@@ -44,6 +44,8 @@ Owner: **D** = data/backend orchestrator · **F** = frontend orchestrator · **Q
 
 | ID | P | Owner | Where | Repro → expected / actual | Fix | Test |
 |---|---|---|---|---|---|---|
+| NAT-02 | P2 | F | `mobile/src/auth/secure-session-storage.ts` @ 1a1d867 | Keychain chunks are sized in characters (1800), but the session JSON includes `display_name`; with a Japanese/emoji name, one item was **2783 UTF-8 bytes**, over the ~2 KB iOS limit → sign-in can fail on affected iOS versions. Verified with a QA jest probe | Chunk by UTF-8 bytes (TextEncoder) or ≤ 500 chars | QA probe sent for their suite |
+| NAT-03 | P3 | F | same | Parts are written before the count (a crash can splice old and new chunks; result fails to parse, not trusted); the keychain survives reinstall, so the old session is restored | Count-last write protocol; clear on first launch after install | — |
 | NAT-01 | P2 | F (+D for shared imports) | `mobile/` @ a12bcf6 | `npm run typecheck` fails: 9× missing Jest global types; shared `src/application/schemas.ts:7` uses the web `@/` alias, which mobile's tsc can't resolve (Metro and Jest remap it, so type changes to contracts would go unchecked); 3× template CSS/web typing | `types: ["jest"]`; make the shared layer use relative imports; declare `*.css` or drop template web files | mobile typecheck |
 | EXEC-01 | **P2 → FIXED db71bdd (verified, both engines)** | F | Today / KeyArea toggles (optimistic `CheckCircle`) | WebKit: tap Complete → UI shows done → reload/unload immediately → the in-flight server action is cancelled, so the completion is silently lost (5/5). Same for reopen. Chrome sends the request first. Breaks "failed writes must not appear successful" on the target platform | Track pending writes: `beforeunload` while in flight and/or a "saving…" state until confirmed | e2e #13 (WebKit) |
 | HYD-02 | P3 → FIXED db71bdd | F | `useAdoptPrehydrationValue` | A `<select>` whose controlled value isn't among its options would adopt the first option on every mount. No live case | Guard selects | — |
