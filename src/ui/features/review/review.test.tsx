@@ -54,6 +54,11 @@ describe('ReflectionForm', () => {
     expect(ids[2]).not.toBe(ids[0]);
   });
 
+  it('names the date field by its label (A11Y-01)', () => {
+    render(<ReflectionForm goalId="11111111-1111-4111-8111-111111111111" today="2026-10-19" addReflection={vi.fn()} />);
+    expect(screen.getByLabelText('Date')).toHaveValue('2026-10-19');
+  });
+
   it('requires at least one field', async () => {
     const add = vi.fn();
     render(<ReflectionForm goalId="11111111-1111-4111-8111-111111111111" today="2026-10-19" addReflection={add} />);
