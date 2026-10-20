@@ -3,7 +3,7 @@
  * Fresh unique user per test. Run with a config whose baseURL points at the app under test.
  */
 import { test, expect } from '@playwright/test';
-import { activateGoal, addAction, addKeyArea, createGoal, openMatrix, signOut, signUp, uid } from './helpers';
+import { activateGoal, addAction, addKeyArea, createGoal, openMatrix, signOut, signUp, uid, waitHydrated } from './helpers';
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
@@ -184,7 +184,9 @@ test.describe('core journeys', () => {
       expect(text, `${path} leaked key area title`).not.toContain(area);
       await expect(page.locator('body')).not.toContainText(secret);
     }
-    await page.goto('/today');
+    // B has no goals, so a foreign ?goal= falls back to onboarding (/goal/new), which can still be
+    // navigating; retry only if this navigation is aborted by that one. The assertion stays strict.
+    await expect(async () => { await page.goto('/today'); }).toPass({ timeout: 30_000 });
     await expect(page.locator('body')).not.toContainText(secret);
   });
 
@@ -377,5 +379,26 @@ test.describe('core journeys', () => {
       await expect(page, `${path} must not open with a forged cookie`).toHaveURL(/\/signin/);
       await expect(page.locator('body')).not.toContainText(secret);
     }
+  });
+  test('11. text typed before hydration is saved, not wiped (slow phone / slow network)', async ({ page, context }) => {
+    await signUp(page);
+    await createGoal(page, `Hydration goal ${uid()}`);
+    const id = await openMatrix(page);
+
+    // A second tab in the same session, with the app's JS held back so the user can type into the
+    // server-rendered form before React hydrates it.
+    const slow = await context.newPage();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    await slow.route('**/_next/static/chunks/**', async (route) => { await gate; await route.continue(); });
+    await slow.goto(`/matrix/0?goal=${id}`, { waitUntil: 'domcontentloaded' });
+    const title = `Typed early ${uid()}`;
+    await slow.getByLabel('Key area title').fill(title);
+    release();
+    await waitHydrated(slow.getByRole('button', { name: 'Create key area' }));
+    // The DOM keeps showing the text either way; what matters is whether React captured it.
+    await slow.getByRole('button', { name: 'Create key area' }).click();
+    await expect(slow.getByRole('heading', { level: 1, name: title }), 'text typed before hydration must be saved').toBeVisible();
+    await slow.close();
   });
 });

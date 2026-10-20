@@ -1,6 +1,6 @@
 # QA Status — Harada Goal App
 
-_Independent QA monitor · updated **2026-10-20 12:30** · rerun with `bash tests/qa-regress.sh [checkout]`
+_Independent QA monitor · updated **2026-10-20 14:10** · rerun with `bash tests/qa-regress.sh [checkout]`
 (`SNAPSHOT=1` for other agents' worktrees, which tests committed HEAD only) · logs in `test-results/qa/`._
 
 Related: `HARADA_SPEC.md` · `ACCEPTANCE_CRITERIA.md` · `research/HARADA_METHOD_SOURCES.md` · `research/MOBILE_USABILITY_REVIEW.md`.
@@ -30,14 +30,16 @@ Chromium emulation (360×640, 390×844); WebKit/Safari is NOT TESTED.
 | lint | **FAILED, 5 errors, all in `fix_imports.cjs`, `gen_domain.js`, `screenshot.cjs`** (one-off scaffold scripts; deleting them is a user decision). Everything else is clean | `npx eslint .` |
 | vitest (all of src + tests/integration) | **VERIFIED 490/490** | JSON reporter rerun, 4 workers. The first run lost 4 workers ("Worker exited unexpectedly"; 317 of 490 ran). Not reproduced; likely the concurrent kill of another session's hung vitest. The count guard now fails any run where tests didn't execute |
 | routes | VERIFIED | `/` → 307 (signin redirect), `/styleguide` 200, `/api/health` 200 |
-| e2e journeys 1–8 + 6b | **VERIFIED 9/9** | dev auth, fresh PGlite, Chrome 390×844 |
-| e2e #10 forged session cookie | **VERIFIED** | real user id + bad HMAC → `/today`, `/goal`, `/matrix` redirect to signin, no data shown |
-| e2e #9 session ends mid-edit | **FAILED (AUTH-01)** | wrong message; data safety VERIFIED (input kept, nothing written) |
+| e2e journeys 1–8 + 6b | **VERIFIED 9/9 on Chrome and 9/9 on WebKit** (iPhone UA, 390×844, touch) | dev auth, fresh PGlite; helpers wait for real React hydration (`waitHydrated`) |
+| e2e #10 forged session cookie | **VERIFIED (Chrome + WebKit)** | real user id + bad HMAC → `/today`, `/goal`, `/matrix` redirect to signin, no data shown |
+| e2e #9 session ends mid-edit | **FAILED (AUTH-01), both engines** | wrong message; data safety VERIFIED (input kept, nothing written) |
 | e2e mobile shell | **VERIFIED 15/15** | axe, touch targets, overflow, focus, safe area at 360/390 px |
 | Matrix / metrics / data integrity / RLS adversarial | **VERIFIED** 5 · 11 · 21 · 81 + 1 accepted (H4) | `tests/integration` |
 | RLS branch suite | VERIFIED 63/63 | in the vitest total |
 | Real Supabase project, `\dp public.*` | NOT TESTED | none configured (user action) |
-| iOS Safari / WebKit / real device | NOT TESTED | no simulator or device; Playwright WebKit not installed |
+| e2e #11 typing before hydration | **FAILED (HYD-01), both engines** | deterministic: JS chunks held back, text typed, submit → "Required" |
+| WebKit engine | **VERIFIED** via Playwright WebKit 2359 + iPhone UA (not real iOS Safari) | 10/12, same results as Chrome |
+| Real iPhone / Android device | NOT TESTED | no simulator (`simctl` missing) or device |
 
 Unmerged: data/supabase `0121743` is docs only (`docs/DATABASE.md`, verified by diff). Merging it is a user decision.
 
@@ -47,6 +49,7 @@ Owner: **D** = data/backend orchestrator · **F** = frontend orchestrator · **Q
 
 | ID | P | Owner | Where | Repro → expected / actual | Fix | Test |
 |---|---|---|---|---|---|---|
+| HYD-01 | P2 | F | `src/ui/features/matrix/KeyAreaEditor.tsx:32,100`; same pattern in `ActionEditorSheet`, `GoalOnboarding`, `GoalForm`, `GoalFields`, `ReflectionForm` | Text typed into a server-rendered form before React hydrates is visible but never reaches state, so submit sends `''` ("Required") and the field is wiped. Slow phone/network trigger; on WebKit under `next dev` it hit 8/11 journeys | Adopt the DOM value on mount (`useLayoutEffect` sync), or readOnly until mounted, or uncontrolled + FormData | e2e #11 |
 | AUTH-01 | P2 | F | `src/middleware.ts:51` | Session cookie lost mid-edit → save shows "Something went wrong… try again" instead of "Your session has ended… nothing was saved". Middleware 307-redirects the server-action POST, the browser re-POSTs it to `/signin`, and the client gets an unexpected payload. Retrying can never succeed. Data safety VERIFIED: input kept, nothing written, next load → signin | Don't redirect requests with a `next-action` header (or non-GET); `runAuthed` already returns UNAUTHENTICATED | e2e #9 (fails until fixed) |
 | AUTH-02 | P3 | F | UNAUTHENTICATED UX | The message has no "Sign in" action; no return-to after sign-in (reported by F) | Inline sign-in link with `?next=` | — |
 | INT-02 | P1 → FIXED f703e23 | F | `src/domain/*` uses `.js` import specifiers (e.g. `./errors.js`) | `next dev`: every page that imports the domain failed with "Can't resolve './errors.js'". Vitest/tsc resolve these; webpack didn't. Found by F | webpack `resolve.extensionAlias {'.js': ['.ts','.tsx','.js']}` in `next.config.ts` (or drop the `.js` specifiers) | journeys 1–8 on 07fd5e9 load domain-backed pages |
