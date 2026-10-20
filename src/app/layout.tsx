@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter, Fraunces } from 'next/font/google';
 import { cookies } from 'next/headers';
 import './globals.css';
@@ -15,8 +15,10 @@ const fraunces = Fraunces({
   display: 'swap',
   variable: '--font-fraunces',
   axes: ['opsz'],
-  weight: ['400', '500', '600'],
 });
+
+// viewport-fit=cover lets env(safe-area-inset-*) apply on notched phones.
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' };
 
 export const metadata: Metadata = {
   title: { default: 'Harada', template: '%s · Harada' },
@@ -40,9 +42,6 @@ export default async function RootLayout({
         <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131311" />
       </head>
       <body>
-        <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:p-4 focus:bg-paper focus:text-ink focus:z-50 focus:top-0 focus:left-0">
-          Skip to main content
-        </a>
         <ToastProvider>
           {children}
         </ToastProvider>

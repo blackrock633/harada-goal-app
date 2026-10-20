@@ -10,6 +10,7 @@ const config = [
   {
     ignores: [
       'legacy/**',
+      '.claude/**',
       '.next/**',
       'node_modules/**',
       '.data/**',

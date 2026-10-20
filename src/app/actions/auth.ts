@@ -1,0 +1,61 @@
+'use server';
+
+import { redirect } from 'next/navigation';
+import * as uc from '@/application/use-cases';
+import { getDeps } from '@/infrastructure/container';
+import { errorMessage } from '@/ui/errors';
+
+export interface AuthFormState {
+  error?: string;
+  fieldErrors?: Record<string, string[]>;
+  /** Echoed back so a failed submit keeps what the user typed (never the password). */
+  values?: { email?: string; displayName?: string };
+  notice?: string;
+}
+
+const str = (v: FormDataEntryValue | null) => (typeof v === 'string' ? v : '');
+
+export async function signInAction(_prev: AuthFormState, form: FormData): Promise<AuthFormState> {
+  const email = str(form.get('email'));
+  let result;
+  try {
+    result = await uc.signIn(await getDeps(), { email, password: str(form.get('password')) });
+  } catch {
+    return { error: errorMessage({ code: 'UNAVAILABLE', message: '' }), values: { email } };
+  }
+  if (!result.ok) {
+    return { error: errorMessage(result.error), fieldErrors: result.error.fieldErrors, values: { email } };
+  }
+  redirect('/');
+}
+
+export async function signUpAction(_prev: AuthFormState, form: FormData): Promise<AuthFormState> {
+  const email = str(form.get('email'));
+  const displayName = str(form.get('displayName'));
+  const timeZone = str(form.get('timeZone')) || 'UTC';
+  let result;
+  try {
+    result = await uc.signUp(await getDeps(), { email, displayName, timeZone, password: str(form.get('password')) });
+  } catch {
+    return { error: errorMessage({ code: 'UNAVAILABLE', message: '' }), values: { email, displayName } };
+  }
+  if (!result.ok) {
+    return {
+      error: errorMessage(result.error),
+      fieldErrors: result.error.fieldErrors,
+      values: { email, displayName },
+    };
+  }
+  if (result.data.needsEmailConfirmation) {
+    return { notice: 'Check your email to confirm your account, then sign in.', values: { email } };
+  }
+  redirect('/goal/new');
+}
+
+export async function signOutAction(): Promise<void> {
+  try {
+    await uc.signOut(await getDeps());
+  } finally {
+    redirect('/signin');
+  }
+}

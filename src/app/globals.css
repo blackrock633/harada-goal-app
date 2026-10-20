@@ -9,6 +9,7 @@
   --color-ink-faint: var(--ink-faint);
   --color-rule: var(--rule);
   --color-rule-strong: var(--rule-strong);
+  --color-rule-input: var(--rule-input);
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
@@ -33,6 +34,8 @@ html[data-theme="light"] {
   --ink-faint: #8A857B;
   --rule: #E2DED4;
   --rule-strong: #CBC6BA;
+  /* Control boundaries (inputs, selects): >= 3:1 against paper/surface/sunken (WCAG 1.4.11). */
+  --rule-input: #857F74;
   --accent: #C2401C;
   --accent-ink: #FFFFFF;
   --accent-soft: #F5E2DA;
@@ -52,6 +55,7 @@ html[data-theme="light"] {
     --ink-faint: #78746B;
     --rule: #2C2A26;
     --rule-strong: #3D3A35;
+    --rule-input: #77726A;
     --accent: #EB6A45;
     --accent-ink: #1B0B05;
     --accent-soft: #3A1E15;
@@ -71,6 +75,7 @@ html[data-theme="dark"] {
   --ink-faint: #78746B;
   --rule: #2C2A26;
   --rule-strong: #3D3A35;
+    --rule-input: #77726A;
   --accent: #EB6A45;
   --accent-ink: #1B0B05;
   --accent-soft: #3A1E15;

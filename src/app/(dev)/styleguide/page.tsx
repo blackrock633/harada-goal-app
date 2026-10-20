@@ -1,13 +1,15 @@
+'use client';
+
 import React from 'react';
 import { notFound } from 'next/navigation';
 import { 
-  Button, ButtonLink, IconButton, Field, Input, Textarea, Select, DateInput,
+  Button, IconButton, Field, Input, Textarea, Select, DateInput,
   CheckCircle, ProgressBar, ProgressRing, DialogRoot, DialogTrigger, DialogContent,
   ConfirmDialog, MenuRoot, MenuTrigger, MenuContent, MenuItem, MenuSeparator,
-  Tabs, Badge, ToastProvider, useToast, Skeleton, EmptyState, ErrorState, Spinner
+  Badge, useToast, Skeleton, EmptyState, ErrorState
 } from '@/ui/primitives';
 import { AppShell } from '@/ui/shell/AppShell';
-import { Settings, Plus, MoreHorizontal } from 'lucide-react';
+import { Check, Settings, Plus, MoreHorizontal } from 'lucide-react';
 
 export default function StyleguidePage() {
   if (process.env.NODE_ENV === 'production') {
@@ -16,8 +18,8 @@ export default function StyleguidePage() {
 
   return (
     <AppShell 
-      user={{ displayName: 'Noah Dockery' }} 
-      signOutAction={async () => { console.log('sign out'); }}
+      user={{ displayName: 'Sample User' }} 
+      signOutAction={async () => {}}
     >
       <div className="p-6 md:p-12 space-y-16 max-w-[720px] mx-auto">
         <header className="space-y-2">
@@ -112,7 +114,7 @@ export default function StyleguidePage() {
               description="This action cannot be undone. This will permanently delete the goal."
               destructive
               requireText="Delete"
-              onConfirm={() => console.log('deleted')}
+              onConfirm={() => {}}
             >
               <Button variant="danger">Delete Goal</Button>
             </ConfirmDialog>
@@ -182,10 +184,10 @@ export default function StyleguidePage() {
                   </div>
                   <Badge variant="overdue">Overdue</Badge>
                 </div>
-                <div className="flex items-center p-3 gap-3 bg-surface-sunken opacity-60">
+                <div className="flex items-center p-3 gap-3 bg-surface-sunken">
                   <CheckCircle label="Stretching" kind="routine" checked />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-ink line-through truncate">Evening stretching</p>
+                    <p className="text-sm font-medium text-ink-muted line-through truncate">Evening stretching</p>
                     <p className="text-xs text-ink-muted truncate">Fitness · Recovery</p>
                   </div>
                 </div>
@@ -198,14 +200,14 @@ export default function StyleguidePage() {
               <div className="grid grid-cols-3 gap-1 bg-rule p-1 rounded-[var(--radius-md)] max-w-sm">
                 <div className="aspect-square bg-surface rounded-[var(--radius-sm)] p-2 flex flex-col justify-between">
                   <p className="text-xs font-medium text-ink line-clamp-2">Intervals</p>
-                  <div className="self-end"><span className="text-[10px] text-ink-faint">↻</span></div>
+                  <div className="self-end"><span className="text-xs text-ink-muted">↻</span></div>
                 </div>
                 <div className="aspect-square bg-accent-soft rounded-[var(--radius-sm)] p-2 flex flex-col items-center justify-center text-center">
-                  <p className="text-sm font-serif font-semibold text-accent-ink line-clamp-2">Speed</p>
+                  <p className="text-sm font-serif font-semibold text-ink line-clamp-2">Speed</p>
                 </div>
                 <div className="aspect-square bg-surface rounded-[var(--radius-sm)] p-2 flex flex-col justify-between">
-                  <p className="text-xs font-medium text-ink line-clamp-2 opacity-50 line-through">Buy cleats</p>
-                  <div className="self-end"><CheckCircle label="done" checked className="scale-50 origin-bottom-right" /></div>
+                  <p className="text-xs font-medium text-ink-muted line-clamp-2 line-through">Buy cleats</p>
+                  <div className="self-end text-success"><Check className="h-4 w-4" aria-label="Done" /></div>
                 </div>
               </div>
             </div>

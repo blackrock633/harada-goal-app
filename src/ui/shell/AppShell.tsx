@@ -1,140 +1,177 @@
-"use client";
+'use client';
 
 import * as React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { clsx } from 'clsx';
-import { LayoutDashboard, Target, Settings, LogOut, User } from 'lucide-react';
+import { CalendarCheck, Target, Grid3x3, NotebookPen, Settings, LogOut, User } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { MenuRoot, MenuTrigger, MenuContent, MenuItem, MenuSeparator } from '../primitives/Menu';
+import { primaryTabs, routes } from '../routes';
 
 export interface AppShellProps {
   user: { displayName: string };
+  focusedGoalId?: string;
   signOutAction: () => Promise<void>;
   children: React.ReactNode;
 }
 
-export function AppShell({ user, signOutAction, children }: AppShellProps) {
-  const pathname = usePathname();
-  
-  const navItems = [
-    { name: 'Today', href: '/today', icon: LayoutDashboard },
-    { name: 'Goals', href: '/goals', icon: Target },
-  ];
+const tabIcons: Record<(typeof primaryTabs)[number]['key'], LucideIcon> = {
+  today: CalendarCheck,
+  goal: Target,
+  matrix: Grid3x3,
+  review: NotebookPen,
+};
 
-  const bottomNavItems = [
-    { name: 'Today', href: '/today', icon: LayoutDashboard },
-    { name: 'Goals', href: '/goals', icon: Target },
-    { name: 'Settings', href: '/settings', icon: Settings },
-  ];
+function isActivePath(pathname: string | null, key: string): boolean {
+  if (!pathname) return false;
+  const prefix = `/${key}`;
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
+const focusRing =
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+
+export function AppShell({ user, focusedGoalId, signOutAction, children }: AppShellProps) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // Keep the focused goal across tabs; a server layout cannot read ?goal=, so read it here.
+  const goalId = focusedGoalId ?? searchParams?.get('goal') ?? undefined;
+  const tabs = primaryTabs.map((tab) => ({
+    key: tab.key,
+    label: tab.label,
+    href: tab.href(goalId),
+    Icon: tabIcons[tab.key],
+    active: isActivePath(pathname, tab.key),
+  }));
+  const settingsActive = isActivePath(pathname, 'settings');
 
   return (
-    <div className="flex min-h-screen flex-col lg:flex-row bg-paper">
-      {/* Mobile Top Bar */}
-      <header className="lg:hidden sticky top-0 z-40 flex h-14 items-center justify-between border-b border-rule bg-paper/90 px-4 backdrop-blur-sm safe-top">
-        <div className="font-serif text-lg font-semibold tracking-tight text-ink">Harada</div>
+    <div className="flex min-h-dvh flex-col bg-paper text-ink lg:flex-row">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[60] focus:rounded-[var(--radius-sm)] focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:text-ink focus:outline-2 focus:outline-accent"
+      >
+        Skip to content
+      </a>
+
+      {/* Phone / tablet top bar */}
+      <header className="sticky top-0 z-40 flex min-h-14 items-center justify-between border-b border-rule bg-paper px-4 pt-[env(safe-area-inset-top)] lg:hidden">
+        <span className="font-serif text-lg font-semibold tracking-tight">Harada</span>
         <MenuRoot>
           <MenuTrigger asChild>
-            <button className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-sunken text-ink transition-colors hover:bg-rule focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer">
-              <User className="h-4 w-4" />
-              <span className="sr-only">User menu</span>
+            <button
+              type="button"
+              className={clsx(
+                'flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-ink hover:bg-surface-sunken',
+                focusRing
+              )}
+            >
+              <User className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+              <span className="sr-only">Account menu</span>
             </button>
           </MenuTrigger>
-          <MenuContent align="end">
-            <div className="px-2 py-1.5 text-sm font-medium text-ink truncate max-w-[200px]">{user.displayName}</div>
+          <MenuContent align="end" className="w-56">
+            <div className="truncate px-2 py-1.5 text-sm font-medium">{user.displayName}</div>
             <MenuSeparator />
-            <MenuItem onSelect={() => signOutAction()}>
-              <LogOut className="mr-2 h-4 w-4" />
+            <MenuItem asChild className="min-h-11">
+              <Link href={routes.settings}>
+                <Settings className="mr-2 h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                Settings
+              </Link>
+            </MenuItem>
+            <MenuItem className="min-h-11" onSelect={() => void signOutAction()}>
+              <LogOut className="mr-2 h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
               Sign out
             </MenuItem>
           </MenuContent>
         </MenuRoot>
       </header>
 
-      {/* Desktop Left Rail */}
-      <aside className="hidden lg:flex w-64 flex-col border-r border-rule bg-surface sticky top-0 h-screen overflow-y-auto">
+      {/* Desktop left rail */}
+      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-rule bg-paper lg:flex">
         <div className="flex h-16 items-center px-6">
-          <div className="font-serif text-xl font-semibold tracking-tight text-ink">Harada</div>
+          <span className="font-serif text-xl font-semibold tracking-tight">Harada</span>
         </div>
-        
-        <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Main Navigation">
-          {navItems.map((item) => {
-            const isActive = pathname?.startsWith(item.href);
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={clsx(
-                  'flex items-center rounded-[var(--radius-sm)] px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-                  isActive ? 'bg-accent-soft text-ink' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink'
-                )}
-                aria-current={isActive ? 'page' : undefined}
-              >
-                <item.icon className="mr-3 h-5 w-5 flex-shrink-0" aria-hidden="true" strokeWidth={1.75} />
-                {item.name}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 space-y-1 px-3 py-2" aria-label="Primary">
+          {tabs.map(({ key, label, href, Icon, active }) => (
+            <Link
+              key={key}
+              href={href}
+              aria-current={active ? 'page' : undefined}
+              className={clsx(
+                'flex min-h-11 items-center gap-3 rounded-[var(--radius-sm)] px-3 text-sm font-medium',
+                focusRing,
+                active ? 'bg-accent-soft text-ink' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink'
+              )}
+            >
+              <Icon className="h-5 w-5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+              {label}
+            </Link>
+          ))}
         </nav>
-
-        <div className="mt-auto p-3">
+        <div className="space-y-1 border-t border-rule p-3">
           <Link
-            href="/settings"
+            href={routes.settings}
+            aria-current={settingsActive ? 'page' : undefined}
             className={clsx(
-              'flex items-center rounded-[var(--radius-sm)] px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent mb-2',
-              pathname?.startsWith('/settings') ? 'bg-accent-soft text-ink' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink'
+              'flex min-h-11 items-center gap-3 rounded-[var(--radius-sm)] px-3 text-sm font-medium',
+              focusRing,
+              settingsActive ? 'bg-accent-soft text-ink' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink'
             )}
           >
-            <Settings className="mr-3 h-5 w-5 flex-shrink-0" aria-hidden="true" strokeWidth={1.75} />
+            <Settings className="h-5 w-5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
             Settings
           </Link>
-
-          <MenuRoot>
-            <MenuTrigger asChild>
-              <button className="flex w-full items-center rounded-[var(--radius-sm)] px-3 py-2 text-left transition-colors hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer group">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-rule text-ink-muted group-hover:text-ink transition-colors mr-3">
-                  <User className="h-4 w-4" />
-                </div>
-                <div className="flex-1 truncate text-sm font-medium text-ink">
-                  {user.displayName}
-                </div>
-              </button>
-            </MenuTrigger>
-            <MenuContent align="end" className="w-56">
-              <MenuItem onSelect={() => signOutAction()}>
-                <LogOut className="mr-2 h-4 w-4" />
+          <div className="px-3 py-1">
+            <p className="truncate text-sm text-ink-muted">{user.displayName}</p>
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                className={clsx(
+                  'flex min-h-11 cursor-pointer items-center gap-2 text-sm text-ink-muted hover:text-ink',
+                  focusRing
+                )}
+              >
+                <LogOut className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                 Sign out
-              </MenuItem>
-            </MenuContent>
-          </MenuRoot>
+              </button>
+            </form>
+          </div>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main id="main-content" className="flex-1 w-full max-w-[1120px] mx-auto pb-20 lg:pb-0 outline-none" tabIndex={-1}>
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="min-w-0 flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] outline-none lg:pb-0"
+      >
         {children}
       </main>
 
-      {/* Mobile Bottom Tab Bar */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-rule bg-surface/90 backdrop-blur-sm safe-bottom" aria-label="Mobile Navigation">
-        <div className="flex justify-around">
-          {bottomNavItems.map((item) => {
-            const isActive = pathname?.startsWith(item.href);
-            return (
+      {/* Phone / tablet bottom tab bar */}
+      <nav
+        aria-label="Primary"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-paper pb-[env(safe-area-inset-bottom)] lg:hidden"
+      >
+        <ul className="flex">
+          {tabs.map(({ key, label, href, Icon, active }) => (
+            <li key={key} className="flex-1">
               <Link
-                key={item.name}
-                href={item.href}
+                href={href}
+                aria-current={active ? 'page' : undefined}
                 className={clsx(
-                  'flex flex-col items-center justify-center w-full py-2 px-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset',
-                  isActive ? 'text-accent' : 'text-ink-muted hover:text-ink'
+                  'flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 text-[0.8125rem] font-medium',
+                  'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent',
+                  active ? 'text-accent' : 'text-ink-muted hover:text-ink'
                 )}
-                aria-current={isActive ? 'page' : undefined}
               >
-                <item.icon className="mb-1 h-5 w-5" aria-hidden="true" strokeWidth={1.75} />
-                {item.name}
+                <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                <span>{label}</span>
               </Link>
-            );
-          })}
-        </div>
+            </li>
+          ))}
+        </ul>
       </nav>
     </div>
   );

@@ -1,3 +1,5 @@
+'use client';
+
 import * as React from 'react';
 import { clsx } from 'clsx';
 import { Check } from 'lucide-react';
@@ -14,7 +16,6 @@ export const CheckCircle = React.forwardRef<HTMLButtonElement, CheckCircleProps>
       <button
         ref={ref}
         type="button"
-        role="button"
         aria-pressed={checked}
         aria-label={label}
         className={clsx(
@@ -28,14 +29,16 @@ export const CheckCircle = React.forwardRef<HTMLButtonElement, CheckCircleProps>
             'flex h-[28px] w-[28px] items-center justify-center rounded-full border-2 transition-colors',
             checked
               ? 'border-accent bg-accent text-accent-ink'
-              : 'border-rule-strong bg-surface hover:border-accent text-transparent'
+              : 'border-rule-input bg-surface hover:border-accent text-ink-muted'
           )}
         >
-          {kind === 'task' ? (
+          {/* Checked state is a check mark for both kinds (shape, not just colour);
+              an unchecked routine shows its repeat glyph, an unchecked task is an empty ring. */}
+          {checked ? (
             <Check className="h-4 w-4" strokeWidth={3} aria-hidden="true" />
-          ) : (
+          ) : kind === 'routine' ? (
             <span className="text-xs font-bold" aria-hidden="true">↻</span>
-          )}
+          ) : null}
         </div>
       </button>
     );

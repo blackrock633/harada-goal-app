@@ -27,7 +27,8 @@ sections, decorative illustrations, gamification chrome (XP bars, badges, confet
 | `--ink-muted` | `#5E5A52` | `#A6A196` | secondary text (≥ 4.5:1 on paper) |
 | `--ink-faint` | `#8A857B` | `#78746B` | placeholders, disabled, meta (large text / non-essential only) |
 | `--rule` | `#E2DED4` | `#2C2A26` | hairlines, borders |
-| `--rule-strong` | `#CBC6BA` | `#3D3A35` | input borders, focused containers |
+| `--rule-strong` | `#CBC6BA` | `#3D3A35` | stronger hairlines, focused containers (decorative) |
+| `--rule-input` | `#857F74` | `#77726A` | input/select/textarea boundaries (≥ 3:1, WCAG 1.4.11) |
 | `--accent` | `#C2401C` | `#EB6A45` | primary buttons, links, progress fill, focus ring |
 | `--accent-ink` | `#FFFFFF` | `#1B0B05` | text on accent |
 | `--accent-soft` | `#F5E2DA` | `#3A1E15` | selected states, accent backgrounds |

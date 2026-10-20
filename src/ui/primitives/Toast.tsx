@@ -44,29 +44,44 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div 
-        className="fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px] pointer-events-none gap-2"
+      {/* Bottom of the screen, above the phone tab bar, so toasts never cover the header or page title. */}
+      <div
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[100] flex flex-col gap-2 p-4 md:left-auto md:max-w-[420px] lg:bottom-0"
         aria-live="polite"
       >
         {toasts.map((t) => (
-          <ToastItem key={t.id} toast={t} onRemove={() => removeToast(t.id)} />
+          <ToastItem key={t.id} toast={t} onRemove={removeToast} />
         ))}
       </div>
     </ToastContext.Provider>
   );
 }
 
-function ToastItem({ toast, onRemove }: { toast: ToastData; onRemove: () => void }) {
+/** Errors stay until dismissed; toasts with an action (e.g. Undo) get long enough to reach it. */
+export function toastDuration(toast: Pick<ToastData, 'type' | 'action'>): number | null {
+  if (toast.type === 'error') return null;
+  return toast.action ? 10_000 : 5_000;
+}
+
+function ToastItem({ toast, onRemove: removeById }: { toast: ToastData; onRemove: (id: string) => void }) {
+  const [paused, setPaused] = React.useState(false);
+  const onRemove = () => removeById(toast.id);
+  const duration = toastDuration(toast);
+
+  // Keyed on the toast id (not a per-render callback) so new toasts don't restart existing timers.
   React.useEffect(() => {
-    const timer = setTimeout(() => {
-      onRemove();
-    }, 4000);
+    if (duration === null || paused) return;
+    const timer = setTimeout(() => removeById(toast.id), duration);
     return () => clearTimeout(timer);
-  }, [onRemove]);
+  }, [toast.id, duration, paused, removeById]);
 
   return (
     <div
-      role="status"
+      role={toast.type === 'error' ? 'alert' : 'status'}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
       className={clsx(
         'group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-[var(--radius-md)] border p-4 pr-8 shadow-lg animate-in fade-in slide-in-from-bottom-5',
         toast.type === 'error' ? 'bg-danger text-accent-ink border-danger' : 'bg-surface border-rule text-ink'
@@ -92,7 +107,7 @@ function ToastItem({ toast, onRemove }: { toast: ToastData; onRemove: () => void
       <button
         aria-label="Close"
         onClick={onRemove}
-        className="absolute right-2 top-2 rounded-sm p-1 opacity-70 ring-offset-paper transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-accent cursor-pointer group-[.bg-danger]:text-accent-ink"
+        className="absolute right-0 top-0 inline-flex h-11 w-11 items-center justify-center rounded-sm opacity-70 ring-offset-paper transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-accent cursor-pointer group-[.bg-danger]:text-accent-ink"
       >
         <X className="h-4 w-4" aria-hidden="true" />
       </button>
