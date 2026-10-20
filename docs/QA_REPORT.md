@@ -30,8 +30,9 @@ Chromium emulation (360×640, 390×844); WebKit/Safari is NOT TESTED.
 | lint | **VERIFIED** 0 errors (3 warnings) | scaffold scripts deleted with user approval (b858b2f) |
 | vitest (src + tests/integration) | **VERIFIED** 493 + 1 accepted-risk (H4) of 494 | count guard: all 494 ran |
 | routes | VERIFIED | `/` → 307 signin, `/styleguide` 200 in dev (404 in production by design, 281a5ab), `/api/health` 200 |
-| e2e, Chrome | **VERIFIED 13/13 journeys** + 15/15 mobile shell | incl. #9 AUTH-01, #11 HYD-01, #12 axe (A11Y-01) |
-| e2e, WebKit (iPhone UA) | **12/13 journeys**; #13 **FAILED (EXEC-01)** | #3 and #9 pass with confirmed-save waits; see §3 |
+| e2e, Chrome | **VERIFIED 15/15 journeys** + 15/15 mobile shell | incl. #9 AUTH-01, #11 HYD-01, #12 axe (A11Y-01) |
+| e2e, WebKit (iPhone UA) | **14/15 journeys**; #13 **FAILED (EXEC-01)** | #3 and #9 pass with confirmed-save waits; see §3 |
+| Offline save (#14) and 200% text size (#15) | **VERIFIED, both engines** | offline: honest error, input kept, retry → exactly 1 row; 200% root font: 0 px horizontal overflow on 5 core screens, nav stays in view |
 | axe on real screens | **VERIFIED** 0 serious/critical on `/today`, `/goal`, `/matrix`, `/matrix/0`, `/review`, `/settings`, both engines | e2e #12 |
 | Matrix / metrics / data integrity / RLS adversarial | **VERIFIED** 5 · 11 · 21 · 81 + 1 accepted (H4) | tests/integration |
 | Real Supabase project, `\dp public.*` | NOT TESTED | none configured (user action) |

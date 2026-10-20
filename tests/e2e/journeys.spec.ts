@@ -476,4 +476,44 @@ test.describe('core journeys', () => {
       await expect(page.getByRole('button', { name: `Reopen: ${act}` }), 'shown as done, so it must have been saved').toHaveAttribute('aria-pressed', 'true');
     }
   });
+  test('14. offline: a save while the device has no network fails honestly and can be retried', async ({ page, context }) => {
+    await signUp(page);
+    await createGoal(page, `Offline goal ${uid()}`);
+    const id = await openMatrix(page);
+    await addKeyArea(page, id, 0, `Area ${uid()}`);
+    const act = `Offline action ${uid()}`;
+    await page.getByRole('button', { name: 'Add action 1 of 8' }).click();
+    const dlg = page.getByRole('dialog');
+    await dlg.getByLabel('Title').fill(act);
+
+    await context.setOffline(true);
+    await dlg.getByRole('button', { name: 'Add action' }).click();
+    await expect(dlg).toBeVisible(); // not reported as saved
+    await expect(dlg.getByRole('alert')).toBeVisible();
+    await expect(dlg.getByLabel('Title')).toHaveValue(act);
+
+    await context.setOffline(false);
+    const saved = actionSaved(page);
+    await dlg.getByRole('button', { name: 'Add action' }).click();
+    await saved;
+    await expect(dlg).toBeHidden();
+    await page.reload();
+    await expect(page.getByText(act)).toHaveCount(1);
+  });
+
+  test('15. 200% text size: core screens stay usable without horizontal scrolling', async ({ page }) => {
+    await signUp(page);
+    await createGoal(page, `Large text goal with a fairly long title ${uid()}`);
+    const id = await openMatrix(page);
+    await addKeyArea(page, id, 0, `Endurance and recovery ${uid()}`);
+    await addAction(page, 1, `Run an easy 5k with strides on Tuesday ${uid()}`);
+    for (const path of ['/today', `/goal?goal=${id}`, `/matrix?goal=${id}`, `/matrix/0?goal=${id}`, `/review?goal=${id}`]) {
+      await page.goto(path);
+      await page.addStyleTag({ content: 'html { font-size: 200% !important; }' }); // WCAG 1.4.4 resize text
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow, `${path} scrolls horizontally by ${overflow}px at 200% text`).toBeLessThanOrEqual(1);
+      // The primary navigation must remain on screen and tappable.
+      await expect(page.getByRole('link', { name: 'Today' }).last()).toBeInViewport();
+    }
+  });
 });
