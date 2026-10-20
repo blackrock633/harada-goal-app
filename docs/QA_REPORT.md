@@ -1,6 +1,6 @@
 # QA Status — Harada Goal App
 
-_Independent QA monitor · updated **2026-10-20 14:10** · rerun with `bash tests/qa-regress.sh [checkout]`
+_Independent QA monitor · updated **2026-10-20 15:20** · rerun with `bash tests/qa-regress.sh [checkout]`
 (`SNAPSHOT=1` for other agents' worktrees, which tests committed HEAD only) · logs in `test-results/qa/`._
 
 Related: `HARADA_SPEC.md` · `ACCEPTANCE_CRITERIA.md` · `research/HARADA_METHOD_SOURCES.md` · `research/MOBILE_USABILITY_REVIEW.md`.
@@ -22,27 +22,20 @@ none is configured, so this needs a user action. (2) A real mobile device or iOS
 Peers report that the user chose this. Native iOS/Android cannot be verified for this codebase. Mobile coverage is
 Chromium emulation (360×640, 390×844); WebKit/Safari is NOT TESTED.
 
-## 2. Status on main `7eb2d3d` (verified by QA, 2026-10-20 12:11–12:30, under `caffeinate -i`)
+## 2. Status on main `6d47a11` (verified by QA 2026-10-20 13:39–15:15, under `caffeinate -i`)
 
 | Gate | Result | Evidence |
 |---|---|---|
-| typecheck (src + tests) | **VERIFIED** 0 errors | qa-regress 20261020-121119 |
-| lint | **FAILED, 5 errors, all in `fix_imports.cjs`, `gen_domain.js`, `screenshot.cjs`** (one-off scaffold scripts; deleting them is a user decision). Everything else is clean | `npx eslint .` |
-| vitest (all of src + tests/integration) | **VERIFIED 490/490** | JSON reporter rerun, 4 workers. The first run lost 4 workers ("Worker exited unexpectedly"; 317 of 490 ran). Not reproduced; likely the concurrent kill of another session's hung vitest. The count guard now fails any run where tests didn't execute |
-| routes | VERIFIED | `/` → 307 (signin redirect), `/styleguide` 200, `/api/health` 200 |
-| e2e journeys 1–8 + 6b | **VERIFIED 9/9 on Chrome and 9/9 on WebKit** (iPhone UA, 390×844, touch) | dev auth, fresh PGlite; helpers wait for real React hydration (`waitHydrated`) |
-| e2e #10 forged session cookie | **VERIFIED (Chrome + WebKit)** | real user id + bad HMAC → `/today`, `/goal`, `/matrix` redirect to signin, no data shown |
-| e2e #9 session ends mid-edit | **FAILED (AUTH-01), both engines** | wrong message; data safety VERIFIED (input kept, nothing written) |
-| e2e mobile shell | **VERIFIED 15/15** | axe, touch targets, overflow, focus, safe area at 360/390 px |
-| Matrix / metrics / data integrity / RLS adversarial | **VERIFIED** 5 · 11 · 21 · 81 + 1 accepted (H4) | `tests/integration` |
-| RLS branch suite | VERIFIED 63/63 | in the vitest total |
+| typecheck (src + tests + scripts) | **VERIFIED** 0 errors | qa-regress 20261020-133904 |
+| lint | **VERIFIED** 0 errors (3 warnings) | scaffold scripts deleted with user approval (b858b2f) |
+| vitest (src + tests/integration) | **VERIFIED** 493 + 1 accepted-risk (H4) of 494 | count guard: all 494 ran |
+| routes | VERIFIED | `/` → 307 signin, `/styleguide` 200 in dev (404 in production by design, 281a5ab), `/api/health` 200 |
+| e2e, Chrome | **VERIFIED 13/13 journeys** + 15/15 mobile shell | incl. #9 AUTH-01, #11 HYD-01, #12 axe (A11Y-01) |
+| e2e, WebKit (iPhone UA) | **12/13 journeys**; #13 **FAILED (EXEC-01)** | #3 and #9 pass with confirmed-save waits; see §3 |
+| axe on real screens | **VERIFIED** 0 serious/critical on `/today`, `/goal`, `/matrix`, `/matrix/0`, `/review`, `/settings`, both engines | e2e #12 |
+| Matrix / metrics / data integrity / RLS adversarial | **VERIFIED** 5 · 11 · 21 · 81 + 1 accepted (H4) | tests/integration |
 | Real Supabase project, `\dp public.*` | NOT TESTED | none configured (user action) |
-| e2e #12 axe on real screens (real data) | **FAILED (A11Y-01), both engines** | `/review`: 1 critical (`label`). `/today`, `/goal`, `/matrix`, `/matrix/0`, `/settings`: **0 violations of any impact** |
-| e2e #11 typing before hydration | **FAILED (HYD-01), both engines** | deterministic: JS chunks held back, text typed, submit → "Required" |
-| WebKit engine | **VERIFIED** via Playwright WebKit 2359 + iPhone UA (not real iOS Safari) | 10/12, same results as Chrome |
-| Real iPhone / Android device | NOT TESTED | no simulator (`simctl` missing) or device |
-
-Unmerged: data/supabase `0121743` is docs only (`docs/DATABASE.md`, verified by diff). Merging it is a user decision.
+| Real iPhone / Android device | NOT TESTED | no simulator or device |
 
 ## 3. Open defects
 
@@ -50,9 +43,11 @@ Owner: **D** = data/backend orchestrator · **F** = frontend orchestrator · **Q
 
 | ID | P | Owner | Where | Repro → expected / actual | Fix | Test |
 |---|---|---|---|---|---|---|
-| A11Y-01 | P2 | F | `src/ui/features/review/ReflectionForm.tsx:111` | Reflection date field has no accessible name (axe `label`, critical): a raw `<input type="date">` in `<Field>` never receives Field's context id, so `<label htmlFor>` points at nothing | Use the `Input` primitive, or read `useField()` for id/aria | e2e #12 |
-| HYD-01 | P2 | F | `src/ui/features/matrix/KeyAreaEditor.tsx:32,100`; same pattern in `ActionEditorSheet`, `GoalOnboarding`, `GoalForm`, `GoalFields`, `ReflectionForm` | Text typed into a server-rendered form before React hydrates is visible but never reaches state, so submit sends `''` ("Required") and the field is wiped. Slow phone/network trigger; on WebKit under `next dev` it hit 8/11 journeys | Adopt the DOM value on mount (`useLayoutEffect` sync), or readOnly until mounted, or uncontrolled + FormData | e2e #11 |
-| AUTH-01 | P2 | F | `src/middleware.ts:51` | Session cookie lost mid-edit → save shows "Something went wrong… try again" instead of "Your session has ended… nothing was saved". Middleware 307-redirects the server-action POST, the browser re-POSTs it to `/signin`, and the client gets an unexpected payload. Retrying can never succeed. Data safety VERIFIED: input kept, nothing written, next load → signin | Don't redirect requests with a `next-action` header (or non-GET); `runAuthed` already returns UNAUTHENTICATED | e2e #9 (fails until fixed) |
+| EXEC-01 | **P2 (P1 argument)** | F | Today / KeyArea toggles (optimistic `CheckCircle`) | WebKit: tap Complete → UI shows done → reload/unload immediately → the in-flight server action is cancelled, so the completion is silently lost (5/5). Same for reopen. Chrome sends the request first. Breaks "failed writes must not appear successful" on the target platform | Track pending writes: `beforeunload` while in flight and/or a "saving…" state until confirmed | e2e #13 (WebKit) |
+| HYD-02 | P3 | F | `useAdoptPrehydrationValue` | A `<select>` whose controlled value isn't among its options would adopt the first option on every mount. No live case | Guard selects | — |
+| A11Y-01 | P2 → FIXED (verified both engines) | F | `src/ui/features/review/ReflectionForm.tsx:111` | Reflection date field has no accessible name (axe `label`, critical): a raw `<input type="date">` in `<Field>` never receives Field's context id, so `<label htmlFor>` points at nothing | Use the `Input` primitive, or read `useField()` for id/aria | e2e #12 |
+| HYD-01 | P2 → FIXED (verified both engines) | F | `src/ui/features/matrix/KeyAreaEditor.tsx:32,100`; same pattern in `ActionEditorSheet`, `GoalOnboarding`, `GoalForm`, `GoalFields`, `ReflectionForm` | Text typed into a server-rendered form before React hydrates is visible but never reaches state, so submit sends `''` ("Required") and the field is wiped. Slow phone/network trigger; on WebKit under `next dev` it hit 8/11 journeys | Adopt the DOM value on mount (`useLayoutEffect` sync), or readOnly until mounted, or uncontrolled + FormData | e2e #11 |
+| AUTH-01 | P2 → FIXED (verified both engines) | F | `src/middleware.ts:51` | Session cookie lost mid-edit → save shows "Something went wrong… try again" instead of "Your session has ended… nothing was saved". Middleware 307-redirects the server-action POST, the browser re-POSTs it to `/signin`, and the client gets an unexpected payload. Retrying can never succeed. Data safety VERIFIED: input kept, nothing written, next load → signin | Don't redirect requests with a `next-action` header (or non-GET); `runAuthed` already returns UNAUTHENTICATED | e2e #9 (fails until fixed) |
 | AUTH-02 | P3 | F | UNAUTHENTICATED UX | The message has no "Sign in" action; no return-to after sign-in (reported by F) | Inline sign-in link with `?next=` | — |
 | INT-02 | P1 → FIXED f703e23 | F | `src/domain/*` uses `.js` import specifiers (e.g. `./errors.js`) | `next dev`: every page that imports the domain failed with "Can't resolve './errors.js'". Vitest/tsc resolve these; webpack didn't. Found by F | webpack `resolve.extensionAlias {'.js': ['.ts','.tsx','.js']}` in `next.config.ts` (or drop the `.js` specifiers) | journeys 1–8 on 07fd5e9 load domain-backed pages |
 | INT-01 | **P1 → FIXED 07fd5e9** | F | ui/integration `477ca3f` | Branch lacks data/supabase `97c845e` (grants hardening, dev-auth allow-list, routine-only trigger) — merging it to main as-is would ship H1/H2 | Merge data/supabase into ui/integration; QA re-verifies | branch ancestry check |
@@ -61,7 +56,7 @@ Owner: **D** = data/backend orchestrator · **F** = frontend orchestrator · **Q
 | H3 | P3 → FIXED 97c845e (verified) | D | schema `:187-193` | A `routine_checks` row for a task-kind action is accepted | Trigger or routine-only FK | `rls-holes` |
 | H4 | P3 accepted risk | D | schema `:219-227` | `goal_events.subject_id` can name another tenant's action; documented as an untrusted label | Constrain if any feature ever joins on it | `rls-holes` (`it.fails`, accepted) |
 | M-08b | P2 | D+F | `schemas.ts` | `expectedUpdatedAt` is optional, so a client that omits it still last-write-wins. Goal/key-area/action editors send it (verified in code); reflections have no edit UI | Make it required on updates, or document | — |
-| L-01 | P3 | U | main | Lint red, so `npm run verify` is red. Remaining: `fix_imports.cjs`, `gen_domain.js`, `screenshot.cjs` (deletion is a user decision), `scripts/migrate.ts`, `src/infrastructure/logger.ts`. `tests/` and `src/ui`, `src/app` are clean | Fix or delete | lint gate |
+| L-01 | FIXED (b858b2f) | U | main | Lint red, so `npm run verify` is red. Remaining: `fix_imports.cjs`, `gen_domain.js`, `screenshot.cjs` (deletion is a user decision), `scripts/migrate.ts`, `src/infrastructure/logger.ts`. `tests/` and `src/ui`, `src/app` are clean | Fix or delete | lint gate |
 | U-09 | P2 | F | Toast | Reported fixed on ui/integration 64a7d81 | — | NOT TESTED by QA |
 | U-10 | P2 | F+D | Today | No daily priority pick → D added `daily_focus` + use cases in 761b5b1; UI pending | — | NOT TESTED |
 | Q-7 | P2 → FIXED | Q | QA runner, environment | Random multi-minute "hangs" on different tests each run (383–910 s). **Root cause: macOS idle sleep** (`pmset sleep 1`) froze workers between tool calls, plus Spotlight indexing. With `caffeinate -i` the same 4 suites pass in **5.6 s** (118 + 1 accepted). Runner now self-wraps in `caffeinate -i`, uses a `.noindex` scratch dir and caps workers. 204 MB of leaked QA temp dirs removed | — | `tests/integration` 118/118 + H4 |
