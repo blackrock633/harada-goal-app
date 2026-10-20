@@ -59,6 +59,33 @@ describe('row level security', () => {
     await c.query(`insert into daily_focus (id, owner_id, action_id, date, slot) values ($1,$2,$3,'2026-01-02',0)`, [uuid(), A, ids.actA]);
   });
 
+  describe('privilege hardening (QA H1, H3)', () => {
+    const bob = (): Who => ({ sub: B });
+    it.each(TABLES)('authenticated cannot TRUNCATE %s', async (table) => {
+      await expect(as(t.client, bob(), (tx) => tx.query(`truncate table ${table} cascade`))).rejects.toThrow(/permission denied/);
+    });
+    it.each(TABLES)('anon cannot TRUNCATE %s', async (table) => {
+      await expect(as(t.client, 'anon', (tx) => tx.query(`truncate table ${table} cascade`))).rejects.toThrow(/permission denied/);
+    });
+    it('a user cannot rewrite their own profile id or created_at (column grant)', async () => {
+      await expect(as(t.client, bob(), (tx) => tx.query(`update profiles set created_at = now() - interval '1 year' where id = $1`, [B]))).rejects.toThrow(/permission denied/);
+      await expect(as(t.client, bob(), (tx) => tx.query(`update profiles set display_name = 'Robert' where id = $1`, [B]))).resolves.toBeDefined();
+    });
+    it('authenticated holds no TRIGGER/REFERENCES/TRUNCATE privilege on any public table', async () => {
+      const { rows } = await t.client.query<{ table_name: string; privilege_type: string }>(
+        `select table_name, privilege_type from information_schema.role_table_grants
+         where table_schema = 'public' and grantee in ('anon','authenticated')
+           and privilege_type in ('TRUNCATE','TRIGGER','REFERENCES')`,
+      );
+      expect(rows).toEqual([]);
+    });
+    it('routine checks are rejected for task actions', async () => {
+      await expect(as(t.client, { sub: A }, (tx) => tx.query(
+        `insert into routine_checks (id, action_id, date) values ($1,$2,'2026-01-05')`, [uuid(), ids.actA],
+      ))).rejects.toThrow(/only allowed on routine actions/);
+    });
+  });
+
   describe('daily_focus', () => {
     const bob = (): Who => ({ sub: B });
     it('B cannot read or delete A focus rows', async () => {
