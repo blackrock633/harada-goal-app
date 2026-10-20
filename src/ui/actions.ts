@@ -16,6 +16,7 @@ import type {
   addOutcomeSchema,
   addReflectionSchema,
   createGoalSchema,
+  focusSchema,
   updateActionSchema,
   updateGoalSchema,
   updateOutcomeSchema,
@@ -41,6 +42,12 @@ export interface ExecutionMutations {
   reopenAction: Mutation<{ actionId: string }, ActionDTO>;
   checkRoutine: Mutation<{ actionId: string; date: string }, ActionDTO>;
   uncheckRoutine: Mutation<{ actionId: string; date: string }, ActionDTO>;
+}
+
+/** Daily focus: the user's own pick of what to work on today (max 5/day, enforced server-side). */
+export interface FocusMutations {
+  addToToday: Mutation<z.input<typeof focusSchema>, ActionDTO>;
+  removeFromToday: Mutation<z.input<typeof focusSchema>, ActionDTO>;
 }
 
 export interface ReviewMutations {
