@@ -36,7 +36,7 @@ reference implementation. Native verification follows `NATIVE_QA_PLAN.md`.
 | axe (6 real screens), offline save, 200% text, session end, forged cookie, lost response | VERIFIED on both engines |
 | Real Supabase (staging) | **BLOCKED (ready to run)**: `tests/staging/staging.test.ts` is written and skips until creds exist. Its grant/RLS queries and expected values were validated against the migrated schema (exact match) |
 | iOS Simulator / real device | **BLOCKED**: Xcode not installed (25 GB free is likely too little); Java/Maestro missing |
-| Native (Expo) app, native/app `1a1d867` (scaffold, `@shared` domain, keychain session storage) | jest **VERIFIED 3/3** (shared limits, dates and Zod schemas identical to web) · `tsc` **FAILED 12 errors (NAT-01)** · simulator BLOCKED |
+| Native (Expo) app, native/app `1a1d867` (scaffold, `@shared` domain, keychain session storage) | jest **VERIFIED 9/9** (shared contracts; keychain session storage) · `tsc` **FAILED 35 errors** (31 = missing Jest types, NAT-01 still open) · byte-size probe **FAILED (NAT-02)** · simulator BLOCKED |
 
 ## 3. Open defects
 
