@@ -75,8 +75,11 @@ Supersedes the "dense 0..n-1" invariant of D-005 (the 8×8 maximums stand).
 attainment (outcome measures only) are separate fields. Pace uses attainment only. Definitions are in
 DOMAIN_MODEL §4.
 
-## D-016 — Daily priorities are derived, not stored · 2026-10-19 · accepted
-**Decision:** Today's list is derived from due dates, routine schedules and status (`domain/next.ts`).
-There is no separate daily-planning table, so there is a single source of truth. Revisit only if users need to pick
-actions for a date independently of due dates; then add an explicit `daily_picks` table rather than
-overloading `due_date`.
+## D-016 — Daily focus is an explicit pick; everything else on Today is derived · 2026-10-19 · accepted (revised)
+**Decision:** Today's "next" list is derived from due dates, routine schedules and status (`domain/next.ts`).
+On top of that, the user may pick up to 5 actions per date as *focus* (`daily_focus` table, migration
+`20261019130000`), independent of due dates; focused actions are excluded from the derived list so nothing
+appears twice. The cap is enforced by `unique (owner_id, date, slot)` with slots 0..4.
+**History:** first recorded as "derived only, no planning table", with "users need to pick actions for a
+date independently of due dates" as the condition to revisit. QA U-10 (Harada's daily plan) met that
+condition the same day, so the table was added instead of overloading `due_date`.

@@ -3,8 +3,8 @@
 ## 1. Overview
 
 A server-rendered **Next.js 15 (App Router)** application in **strict TypeScript**, with a layered
-("clean") architecture, **PostgreSQL** via **Drizzle ORM** (PGlite embedded Postgres for local dev
-and tests), and session-based authentication.
+("clean") architecture, **Supabase Postgres** queried via **Drizzle ORM** under row-level security
+(PGlite embedded Postgres plus an auth shim for local dev and tests), and **Supabase Auth** (D-013).
 
 ```mermaid
 flowchart TD
@@ -56,25 +56,29 @@ src/
     queries/            today.ts goals.ts history.ts export.ts
     *.test.ts           integration tests against PGlite (via infrastructure test harness)
   infrastructure/
-    db/schema.ts        Drizzle schema (DATABASE.md)
+    db/schema.ts        Drizzle mirror of supabase/migrations (typed queries; schema-sync.test.ts guards drift)
     db/client.ts        driver selection (postgres-js | PGlite), singleton, auto-migrate for PGlite
+    db/unit-of-work.ts  RLS-scoped transactions (role authenticated + JWT sub)
+    db/migrations.ts    applies auth shim + supabase/migrations to local PGlite
     db/repositories/    implementations of application ports
-    auth/               password hashing (argon2id), session tokens, rate limiter
+    auth/               Supabase auth gateway, dev-only gateway (allow-listed), error mapping, rate limiter
+    supabase/           Supabase env + server client helpers
     clock.ts            system clock + time-zone → LocalDate
     logger.ts
     container.ts        builds Deps for the app (composition)
-    testing/            createTestDeps(): fresh in-memory PGlite + migrations
+    testing/            createTestDeps(): fresh in-memory PGlite + shim + migrations, FakeAuthGateway
   app/
     (auth)/signin, signup
     (app)/today, goals, goals/new, goals/[goalId]/{page,plan,routines,journal}, settings
     api/health, api/export
     actions/*.ts        'use server' adapters
-    lib/session.ts      read cookie → getCurrentUser; requireUser()
+    lib/session.ts      getCtx()/requireCtx(): auth.getUser() (server-verified) → profile time zone → today
   ui/
     primitives/         Button, Input, Textarea, Field, Dialog, Menu, Tabs, Progress, Badge, Toast, Skeleton, EmptyState
     features/           goal/, plan/, today/, routines/, journal/, settings/, auth/
     format.ts           percent/date formatting (pure display helpers)
-drizzle/                generated SQL migrations
+supabase/migrations/    canonical SQL schema, RLS policies, grants (schema of record)
+supabase/tests/         auth-shim.sql (local/test only; never applied to a real project)
 tests/e2e/              Playwright specs
 docs/                   contracts and status
 legacy/                 previous "Ascend" app (reference only; deleted when rebuild is complete)
@@ -85,16 +89,15 @@ legacy/                 previous "Ascend" app (reference only; deleted when rebu
 Defined in `src/application/ports.ts`. Summary:
 
 ```ts
-interface UnitOfWork { run<T>(fn: (r: Repos) => Promise<T>): Promise<T> } // single DB transaction
+interface UnitOfWork { run<T>(userId: Id, fn: (r: Repos) => Promise<T>): Promise<T> } // one transaction under RLS as userId
 interface Repos {
-  users: UserRepo; sessions: SessionRepo; goals: GoalRepo; outcomes: OutcomeRepo;
-  actions: ActionRepo; checks: RoutineCheckRepo; reflections: ReflectionRepo; events: GoalEventRepo;
+  profiles: ProfileRepo; goals: GoalRepo; outcomes: OutcomeRepo; actions: ActionRepo;
+  checks: RoutineCheckRepo; focus: DailyFocusRepo; reflections: ReflectionRepo; events: GoalEventRepo;
 }
 interface Deps {
   uow: UnitOfWork;           // transactional writes + consistent reads
   ids: () => string;
-  passwords: PasswordHasher; // hash / verify
-  tokens: SessionTokens;     // generate token, hash token
+  auth: AuthGateway;         // Supabase Auth (prod) | dev gateway (local only) | FakeAuthGateway (tests)
   rateLimiter: RateLimiter;
   logger: Logger;
 }
@@ -106,7 +109,7 @@ Repositories return **domain entities** (not Drizzle rows). Every method that re
 ## 5. Request flow (example: complete a task)
 
 1. Client component calls server action `completeActionAction(actionId)` with `useTransition`.
-2. Action: `const ctx = await requireCtx()` (session cookie → user → `{userId, now, today}`).
+2. Action: `const ctx = await requireCtx()` (Supabase session cookie → `auth.getUser()` → `{userId, now, today}`).
 3. `completeAction(deps, ctx, { actionId })`:
    Zod parse → `uow.run`: load action + goal scoped by user → `domain.completeTask(action, now)` →
    `actions.update` → `events.append` → commit → map to `ActionDTO`.
@@ -117,7 +120,7 @@ Repositories return **domain entities** (not Drizzle rows). Every method that re
 
 - **Time:** All "today" logic uses the user's IANA `timeZone` (stored on the user, detected at sign-up, editable in Settings). The domain only sees `LocalDate` strings.
 - **Errors:** Typed `Result` everywhere across the app boundary. No stack traces or SQL errors reach the client.
-- **Security:** Session auth (DB sessions, hashed tokens), Argon2id passwords, Next server-action Origin checks (CSRF), ownership scoping in every repo query, React escaping (no `dangerouslySetInnerHTML`), security headers in `next.config.ts`.
+- **Security:** Supabase Auth (D-013); Postgres RLS on every table with exact grants, applied to server queries via `UnitOfWork.run`; middleware only refreshes sessions and redirects page loads (not an authorization boundary); Next server-action Origin checks (CSRF), ownership scoping in every repo query as defence in depth, React escaping (no `dangerouslySetInnerHTML`), security headers in `next.config.ts`.
 - **Rendering:** Pages are dynamic server components that call queries directly. Mutations are server actions plus `revalidatePath`. Optimistic UI only for idempotent toggles (routine check, task complete) where rollback is safe.
 - **Observability:** Structured `logger` (JSON to stdout in production); `/api/health` checks the DB.
 

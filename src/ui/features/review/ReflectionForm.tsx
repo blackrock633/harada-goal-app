@@ -5,7 +5,7 @@ import type { ReflectionDTO } from '@/application/dto';
 import { addReflectionSchema } from '@/application/schemas';
 import type { ReviewMutations } from '@/ui/actions';
 import { errorMessage, newClientId } from '@/ui/errors';
-import { Button, Field, Textarea } from '@/ui/primitives';
+import { Button, DateInput, Field, Textarea } from '@/ui/primitives';
 
 export interface ReflectionFormProps {
   goalId: string;
@@ -108,12 +108,8 @@ export function ReflectionForm({ goalId, today, addReflection, onSaved }: Reflec
           ))}
         </div>
         <Field label="Date" error={fieldErrors.date}>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="h-[44px] rounded-[var(--radius-sm)] border border-rule-strong bg-surface px-3 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          />
+          {/* The primitive wires the Field label (A11Y-01), error state and pre-hydration typing. */}
+          <DateInput value={date} onChange={(e) => setDate(e.target.value)} className="sm:w-auto" />
         </Field>
       </div>
       {PROMPTS.map((p) => (
