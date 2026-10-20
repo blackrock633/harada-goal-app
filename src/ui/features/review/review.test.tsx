@@ -22,11 +22,11 @@ const GID = '11111111-1111-4111-8111-111111111111';
 const act = (id: string, done: boolean): ActionDTO => ({
   id, goalId: 'g1', outcomeId: 'o1', title: id, notes: '', kind: 'task', position: 0, dueDate: null,
   completedAt: done ? '2026-10-19T00:00:00Z' : null, schedule: null, startDate: null, archivedAt: null,
-  createdAt: '', updatedAt: '', progress: done ? 1 : 0, dueToday: false, checkedToday: false, streak: 0, recentChecks: [],
+  createdAt: '', updatedAt: '', progress: done ? 1 : 0, dueToday: false, checkedToday: false, streak: 0, focusedToday: false, recentChecks: [],
 });
 const outcome = (over: Partial<OutcomeDTO> = {}): OutcomeDTO => ({
   id: 'o1', goalId: 'g1', title: 'Fitness', description: '', measure: null, position: 0, archivedAt: null,
-  createdAt: '', updatedAt: '', execution: 0.5, attainment: null,
+  createdAt: '', updatedAt: '', taskCompletion: 0.5, completedTasks: 1, totalTasks: 2, routineAdherence: null, routineCount: 0, attainment: null,
   actions: [act('t1', true), act('t2', false)], slots: [null, null, null, null, null, null, null, null], ...over,
 });
 
