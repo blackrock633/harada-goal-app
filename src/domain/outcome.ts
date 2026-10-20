@@ -7,6 +7,37 @@ export type PositionUpdate = { id: Id; position: number };
 
 function trim(s: string) { return s.trim(); }
 
+const SLOT_COUNT = 8;
+
+/** Lowest free matrix slot in 0..7, or null when all are taken. */
+export function firstFreePosition(takenPositions: number[]): number | null {
+  const taken = new Set(takenPositions);
+  for (let i = 0; i < SLOT_COUNT; i++) if (!taken.has(i)) return i;
+  return null;
+}
+
+export function assertSlotFree(taken: number[], position: number): void {
+  if (!Number.isInteger(position) || position < 0 || position >= SLOT_COUNT) {
+    throw new DomainError('VALIDATION', 'Position must be an integer between 0 and 7', 'position');
+  }
+  if (taken.includes(position)) throw new DomainError('INVALID_STATE', 'That slot is already filled', 'position');
+}
+
+/** Resolve the slot for a new/restored row: explicit (must be free) or the first free one. */
+export function resolveSlot(takenPositions: number[], explicit: number | undefined | null, limitMessage: string): number {
+  if (explicit !== undefined && explicit !== null) {
+    assertSlotFree(takenPositions, explicit);
+    return explicit;
+  }
+  const free = firstFreePosition(takenPositions);
+  if (free === null) throw new DomainError('LIMIT_REACHED', limitMessage);
+  return free;
+}
+
+function takenOf(items: { position: number | null }[]): number[] {
+  return items.map(i => i.position).filter((p): p is number => p !== null);
+}
+
 export function validateMeasure(measure: Measure): void {
   if (measure.target <= 0 || !Number.isFinite(measure.target)) throw new DomainError('VALIDATION', 'Measure target must be a positive finite number', 'measure.target');
   if (measure.current < 0 || !Number.isFinite(measure.current)) throw new DomainError('VALIDATION', 'Measure current must be a non-negative finite number', 'measure.current');
@@ -15,7 +46,7 @@ export function validateMeasure(measure: Measure): void {
 }
 
 export function createOutcome(
-  input: { id: Id; goalId: Id; title: string; description?: string; measure?: Measure | null },
+  input: { id: Id; goalId: Id; title: string; description?: string; measure?: Measure | null; position?: number },
   activeSiblings: Outcome[],
   now: Instant
 ): Outcome {
@@ -30,6 +61,7 @@ export function createOutcome(
   if (input.measure) {
     validateMeasure(input.measure);
   }
+  const position = resolveSlot(takenOf(activeSiblings), input.position, 'Max outcomes reached');
 
   return {
     id: input.id,
@@ -37,7 +69,7 @@ export function createOutcome(
     title,
     description,
     measure: input.measure || null,
-    position: activeSiblings.length,
+    position,
     archivedAt: null,
     createdAt: now,
     updatedAt: now
@@ -107,18 +139,14 @@ export function setMeasureCurrent(
   };
 }
 
+/** Archiving frees the slot; remaining outcomes keep their positions (`positions` is always empty). */
 export function archiveOutcome(
   outcome: Outcome,
-  activeSiblings: Outcome[],
+  _activeSiblings: Outcome[],
   now: Instant
 ): { outcome: Outcome; positions: PositionUpdate[] } {
   if (outcome.archivedAt !== null) return { outcome, positions: [] };
-
-  const nextOutcome = { ...outcome, position: null, archivedAt: now, updatedAt: now };
-  const others = activeSiblings.filter(o => o.id !== outcome.id).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-  const positions: PositionUpdate[] = others.map((o, i) => ({ id: o.id, position: i })).filter(u => u.position !== others.find(x => x.id === u.id)?.position);
-
-  return { outcome: nextOutcome, positions };
+  return { outcome: { ...outcome, position: null, archivedAt: now, updatedAt: now }, positions: [] };
 }
 
 export function restoreOutcome(
@@ -127,12 +155,6 @@ export function restoreOutcome(
   now: Instant
 ): Outcome {
   if (outcome.archivedAt === null) return outcome;
-  if (activeSiblings.length >= MAX_OUTCOMES_PER_GOAL) throw new DomainError('LIMIT_REACHED', 'Max outcomes reached');
-  
-  return {
-    ...outcome,
-    position: activeSiblings.length,
-    archivedAt: null,
-    updatedAt: now
-  };
+  const position = resolveSlot(takenOf(activeSiblings), null, 'Max outcomes reached');
+  return { ...outcome, position, archivedAt: null, updatedAt: now };
 }

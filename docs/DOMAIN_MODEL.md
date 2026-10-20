@@ -54,6 +54,7 @@ interface Goal {
   ownerId: Id;
   title: string;                  // 1..120 chars, trimmed, required
   vision: string;                 // 0..2000 — "What does achieving this look and feel like?"
+  successCriteria: string;        // 0..2000 — how the user will know the goal is achieved (measurable criteria, baseline); default ''
   targetDate: LocalDate | null;
   status: GoalStatus;
   statusBeforeArchive: Exclude<GoalStatus,'archived'> | null; // set only while archived
@@ -79,7 +80,7 @@ interface Goal {
 
 Any other transition throws `DomainError('INVALID_STATE')`.
 `targetDate` may be in the past (the user may be behind); there is no validation against today.
-Editing title/vision/purpose/targetDate is allowed in every status except `archived`
+Editing title/vision/successCriteria/purpose/targetDate is allowed in every status except `archived`
 (archived goals are read-only until restored).
 
 ### 3.2 Outcome (Open Window pillar)
@@ -97,7 +98,7 @@ interface Outcome {
   title: string;                  // 1..120
   description: string;            // 0..1000 — what "done" looks like for this area
   measure: Measure | null;
-  position: number | null;        // 0..7 while active (dense, unique per goal); null while archived
+  position: number | null;        // 0..7 while active (unique per goal; gaps allowed); null while archived
   archivedAt: Instant | null;
   createdAt: Instant;
   updatedAt: Instant;
@@ -106,7 +107,7 @@ interface Outcome {
 
 Invariants:
 - **At most 8 active outcomes per goal** (`LIMIT_REACHED` otherwise).
-- Active outcome positions are exactly `0..n-1` (dense). Archiving compacts positions; restoring appends at the end (fails with `LIMIT_REACHED` if 8 active exist).
+- Active outcome positions are **unique within 0..7**; they need not be dense (empty cells are simply absent). A new outcome may name a specific free slot (`INVALID_STATE` "That slot is already filled" if taken, `VALIDATION` if outside 0..7); otherwise it takes the lowest free slot (`firstFreePosition`). Archiving does **not** compact the others; restoring takes the lowest free slot (archived rows have no position) and fails with `LIMIT_REACHED` if 8 active exist. An explicit reorder by `orderedIds` may assign `0..n-1`.
 - Archiving an outcome does **not** archive its actions' data, but they are excluded from progress and lists while the outcome is archived.
 
 ### 3.3 Action
@@ -126,7 +127,7 @@ interface Action {
   title: string;                  // 1..160
   notes: string;                  // 0..2000
   kind: ActionKind;
-  position: number | null;        // 0..7 while active (dense, unique per outcome); null while archived
+  position: number | null;        // 0..7 while active (unique per outcome; gaps allowed); null while archived
   // task fields
   dueDate: LocalDate | null;      // tasks only (must be null for routines)
   completedAt: Instant | null;    // tasks only
@@ -147,7 +148,8 @@ Invariants:
   Changing routine→task clears `schedule`/`startDate`; existing RoutineChecks are retained as history but no longer counted.
 - `completeAction` only for tasks; idempotent (completing a completed task is a no-op that returns the task unchanged).
 - `reopenAction` only for tasks; idempotent.
-- Moving an action to another outcome: target outcome must be in the same goal, be active, and have < 8 active actions.
+- Same position rules as outcomes (unique within 0..7 per outcome, explicit or first-free on create, no compaction on archive, first-free on restore).
+- Moving an action: target outcome must be in the same goal, be active, and have < 8 active actions; `toPosition` must be a free slot 0..7 in the target (a taken slot is rejected, no swapping) and no other action is repositioned.
 - Actions cannot be mutated (except restore of the parent) while their goal is `archived` or their outcome is archived.
 
 ### 3.4 RoutineCheck
@@ -214,14 +216,47 @@ interface GoalEvent {
 Events are appended by the application layer **in the same transaction** as the change.
 Routine check/uncheck and reflections do **not** emit events (they have their own records).
 
-## 4. Progress semantics (pure functions, `src/domain/progress.ts`)
+## 4. Metrics (pure functions, `src/domain/progress.ts`)
 
-All progress values are numbers in **[0, 1]** or **`null`** ("not yet measurable"). The UI formats them.
+There are three distinct metrics plus pace. They answer different questions and are never blended.
+**Action completion is not goal attainment**: ticking tasks off moves execution, never attainment or pace.
+`computeGoalMetrics(goal, outcomes, actions, checksByActionId, today)` returns all of them in one call:
+`{ planning, execution, attainment, pace, outcomes: [{ outcomeId, execution, attainment }] }`.
 
-### 4.1 Task
-`taskProgress = completedAt ? 1 : 0`
+Scope for every metric: only **active** outcomes (`archivedAt === null`) and **active** actions under active outcomes.
+Archived outcomes, archived actions and actions under archived outcomes are ignored. Progress values are in **[0, 1]** or
+**`null`** ("not measurable"); zero denominators give `null` (planning gives ratio 0); NaN never occurs.
 
-### 4.2 Routine adherence (rolling 28-day window)
+### 4.1 Planning completeness — "how much of the 8x8 matrix is filled?"
+`filled = (active outcomes with a non-blank title, max 8) + (active actions under active outcomes, max 64)`;
+`{ filled, total: 72, ratio: filled / 72 }`. Never null. An empty matrix is `0/72`, ratio 0.
+
+### 4.2 Execution — "how much of the planned work is done?"
+Mean of action progress over active actions in active outcomes:
+- task: `completedAt ? 1 : 0`.
+- routine: 28-day adherence (4.5); `null` adherence is excluded from the mean.
+
+`value` is `null` when no action is measurable. Also returns `{ completedTasks, totalTasks }` (active tasks only).
+`outcomeExecution(outcome, actions, ...)` is the same over one outcome's active actions (archived outcome: `value` null, counts 0).
+
+### 4.3 Attainment — "how close is the real-world result?"
+Per outcome: `clamp(current / target, 0, 1)` when the outcome has a measure with a finite `target > 0`; otherwise `null`
+(no measure, missing or non-positive target, archived). Goal: mean over active outcomes that have a measure; `null` when
+none do. Action completion never feeds attainment.
+
+### 4.4 Pace ("am I on track?") — driven by attainment only
+For `active` goals with `targetDate` and `activatedOn` and `targetDate > activatedOn`:
+```
+elapsed = clamp((today − activatedOn) / (targetDate − activatedOn), 0, 1)
+pace = attainment === null ? 'unknown'
+     : attainment >= elapsed + 0.10 ? 'ahead'
+     : attainment >= elapsed − 0.15 ? 'on_track'
+     : 'behind'
+```
+Otherwise `'unknown'`. If `today > targetDate` and status is active → `'overdue'` (regardless of attainment).
+A goal with no measures therefore stays `'unknown'` however many actions are done.
+
+### 4.5 Routine adherence (rolling 28-day window)
 
 ```
 windowStart = max(startDate, today − 27 days)
@@ -236,23 +271,7 @@ Today is excluded unless already checked, so the user isn't penalised before the
   Sum both over weeks.
 - `adherence = expected === 0 ? null : min(1, kept / expected)`.
 
-### 4.3 Outcome
-- If `measure` is set: `clamp(current / target, 0, 1)`.
-- Else: mean of non-null progress of its **active** actions; `null` if none are measurable.
-
-### 4.4 Goal
-Mean of non-null progress of its **active** outcomes; `null` if none.
-
-### 4.5 Pace ("am I on track?")
-For `active` goals with `targetDate` and `activatedOn` and `targetDate > activatedOn`:
-```
-elapsed = clamp((today − activatedOn) / (targetDate − activatedOn), 0, 1)
-pace = progress === null ? 'unknown'
-     : progress >= elapsed + 0.10 ? 'ahead'
-     : progress >= elapsed − 0.15 ? 'on_track'
-     : 'behind'
-```
-Otherwise `'unknown'`. If `today > targetDate` and status is active → `'overdue'`.
+Deprecated: `outcomeProgress`, `goalProgress`, `computeGoalProgress` blended measures and action completion; use the functions above.
 
 ### 4.6 Streak (informational only)
 For a routine: the number of consecutive scheduled periods kept, counting back from the most recent

@@ -1,5 +1,5 @@
 import { expect, test, describe } from 'vitest';
-import { createAction, updateAction, completeTask, reopenTask, archiveAction, moveAction, validateCheckDate } from './action.js';
+import { createAction, updateAction, completeTask, reopenTask, archiveAction, restoreAction, moveAction, validateCheckDate } from './action.js';
 import { Instant, Action, Outcome } from './types.js';
 
 describe('action', () => {
@@ -42,10 +42,30 @@ describe('action', () => {
     const a3 = createAction({ id: 'a3', goalId: 'g1', outcomeId: 'o1', title: 'A3', kind: 'task' }, [a1, a2], '2024-01-01', now);
 
     const out = { id: 'o1', goalId: 'g1', archivedAt: null } as Outcome;
-    const res = moveAction(a1, [a1, a2, a3], [a1, a2, a3], out, 2, now);
-    
-    expect(res.action.position).toBe(2);
-    expect(res.positions).toEqual([{ id: 'a2', outcomeId: 'o1', position: 0 }, { id: 'a3', outcomeId: 'o1', position: 1 }]);
+    // taken slot is rejected, no swapping
+    expect(() => moveAction(a1, [a1, a2, a3], [a1, a2, a3], out, 2, now)).toThrowError(/already filled/);
+    expect(() => moveAction(a1, [a1, a2, a3], [a1, a2, a3], out, 8, now)).toThrowError(/between 0 and 7/);
+    const res = moveAction(a1, [a1, a2, a3], [a1, a2, a3], out, 5, now);
+    expect(res.action.position).toBe(5);
+    expect(res.positions).toEqual([]);
+    expect(moveAction(a1, [a1, a2, a3], [a1, a2, a3], out, 0, now).action).toBe(a1);
+  });
+
+  test('explicit position, first free, archive does not compact, restore fills gap', () => {
+    const mk = (id: string, position?: number, sib: Action[] = []) =>
+      createAction({ id, goalId: 'g1', outcomeId: 'o1', title: id, kind: 'task', position }, sib, '2024-01-01', now);
+    const a3 = mk('a3', 3);
+    expect(a3.position).toBe(3);
+    const a0 = mk('a0', undefined, [a3]);
+    expect(a0.position).toBe(0);
+    expect(() => mk('x', 3, [a3])).toThrowError(/already filled/);
+    const full = Array.from({ length: 8 }, (_, i) => mk(`f${i}`, i));
+    expect(() => mk('x', undefined, full)).toThrowError(/Max actions reached/);
+    const res = archiveAction(a0, [a0, a3], now);
+    expect(res.positions).toEqual([]);
+    expect(a3.position).toBe(3);
+    expect(restoreAction(res.action, [a3], now).position).toBe(0);
+    expect(() => restoreAction(res.action, full, now)).toThrowError(/Max actions reached/);
   });
 
   test('moveAction different outcome', () => {

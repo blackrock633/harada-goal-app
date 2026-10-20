@@ -271,7 +271,8 @@ grant execute on function public.owns_action(uuid) to authenticated;
 revoke all on public.profiles, public.goals, public.outcomes, public.actions,
   public.routine_checks, public.reflections, public.goal_events from anon;
 
-grant select, update on public.profiles to authenticated;
+grant select on public.profiles to authenticated;
+grant update (display_name, time_zone, updated_at) on public.profiles to authenticated;
 grant select, insert, update, delete on public.goals, public.outcomes, public.actions,
   public.routine_checks, public.reflections to authenticated;
 grant select, insert on public.goal_events to authenticated;

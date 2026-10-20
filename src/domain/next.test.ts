@@ -29,9 +29,9 @@ describe('next', () => {
 
     expect(next.length).toBe(3);
     // Overdue first for tasks? Wait, routines due today are before tasks.
-    expect(next[0].action.id).toBe('a1'); // routine
-    expect(next[1].action.id).toBe('a3'); // task overdue
-    expect(next[2].action.id).toBe('a2'); // task due today
+    expect(next[0]!.action.id).toBe('a1'); // routine
+    expect(next[1]!.action.id).toBe('a3'); // task overdue
+    expect(next[2]!.action.id).toBe('a2'); // task due today
 
     expect(doneToday.length).toBe(0);
   });

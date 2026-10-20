@@ -3,7 +3,7 @@ import { ActionRepo, ActionPositionUpdate } from '@/application/ports';
 import { Action, Id, Schedule } from '@/domain/types';
 import { PgTransaction } from 'drizzle-orm/pg-core';
 import { actions, goals } from '../schema';
-import { eq, and, inArray, asc } from 'drizzle-orm';
+import { eq, and, inArray, asc, sql } from 'drizzle-orm';
 
 export class ActionRepoImpl implements ActionRepo {
   constructor(private readonly tx: PgTransaction<any, any, any>) {}
@@ -65,6 +65,7 @@ export class ActionRepoImpl implements ActionRepo {
         outcomeId: action.outcomeId,
         title: action.title,
         notes: action.notes,
+        kind: action.kind,
         position: action.position,
         dueDate: !isRoutine ? action.dueDate : null,
         completedAt: !isRoutine ? action.completedAt : null,
@@ -81,21 +82,15 @@ export class ActionRepoImpl implements ActionRepo {
   async setPositions(goalId: Id, updates: ActionPositionUpdate[]): Promise<void> {
     if (updates.length === 0) return;
 
-    // Phase 1: Bump position + 100 for all updated rows
-    for (const update of updates) {
-      await this.tx
-        .update(actions)
-        .set({ position: update.position + 100 })
-        .where(and(eq(actions.id, update.id), eq(actions.goalId, goalId)));
-    }
-
-    // Phase 2: Set final outcomeId and position
+    // See OutcomeRepoImpl.setPositions. Moves between outcomes are covered too: the constraint is per outcome.
+    await this.tx.execute(sql`set constraints actions_outcome_position_excl deferred`);
     for (const update of updates) {
       await this.tx
         .update(actions)
         .set({ outcomeId: update.outcomeId, position: update.position })
         .where(and(eq(actions.id, update.id), eq(actions.goalId, goalId)));
     }
+    await this.tx.execute(sql`set constraints actions_outcome_position_excl immediate`);
   }
 
   private mapToDomain(row: typeof actions.$inferSelect): Action {

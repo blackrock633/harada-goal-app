@@ -39,6 +39,7 @@ export class GoalRepoImpl implements GoalRepo {
       ownerId: goal.ownerId,
       title: goal.title,
       vision: goal.vision,
+      successCriteria: goal.successCriteria,
       targetDate: goal.targetDate,
       status: goal.status,
       statusBeforeArchive: goal.statusBeforeArchive,
@@ -60,6 +61,7 @@ export class GoalRepoImpl implements GoalRepo {
       .set({
         title: goal.title,
         vision: goal.vision,
+        successCriteria: goal.successCriteria,
         targetDate: goal.targetDate,
         status: goal.status,
         statusBeforeArchive: goal.statusBeforeArchive,
@@ -85,6 +87,7 @@ export class GoalRepoImpl implements GoalRepo {
       ownerId: row.ownerId,
       title: row.title,
       vision: row.vision,
+      successCriteria: row.successCriteria,
       targetDate: row.targetDate,
       status: row.status as GoalStatus,
       statusBeforeArchive: row.statusBeforeArchive as any,
