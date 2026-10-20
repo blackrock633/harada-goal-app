@@ -67,6 +67,16 @@ equivalents), the anon/publishable key, and, for QA's grant checks only, a `DATA
 project. QA will then run: the migrations check, `\dp public.*`, `rls-adversarial` against real PostgREST, and the
 journeys with real GoTrue sign-up, refresh and expiry. Never point QA at production data.
 
+## 4b. If the data path is `/api/v1` (proposed by the frontend; decision pending with the backend)
+
+The native app (`mobile/`, Expo SDK 58, Expo Router) would call the existing use cases over HTTP with a Supabase
+bearer token, and RLS stays as defense in depth. QA can then test the API **without a simulator**, using Vitest + fetch
+against `next dev`:
+- **auth:** missing, expired, or forged bearer token → 401, and never data;
+- **isolation:** user B's token on user A's ids → 404/NOT_FOUND for every route;
+- **contracts:** Zod-validated request and response shapes, idempotent creates (same `id` twice → one row), and stale `expectedUpdatedAt` → 409 CONFLICT;
+- **errors:** DB down → 503 UNAVAILABLE with no stack traces; no CORS wildcard with credentials.
+
 ## 5. Order of work
 
 1. Orchestrators agree the native architecture (supabase-js direct + RPC functions for atomic writes, or an API).
