@@ -467,14 +467,20 @@ test.describe('core journeys', () => {
     await expect(page.getByRole('button', { name: `Remove from today: ${act}` })).toBeVisible();
     await page.goto('/today');
 
+    // Fix (db71bdd): while a write is in flight, beforeunload warns. A user who chooses to stay must
+    // then see the write land; if no warning was needed, the write had already landed.
     let warned = false;
-    page.on('dialog', async (d) => { warned = d.type() === 'beforeunload'; await d.accept(); });
+    page.on('dialog', async (d) => {
+      if (d.type() === 'beforeunload') { warned = true; await d.dismiss(); } else { await d.accept(); }
+    });
     await page.getByRole('button', { name: `Complete: ${act}` }).click();
     await expect(page.getByRole('button', { name: `Reopen: ${act}` })).toBeVisible(); // UI claims success
+    await page.reload({ timeout: 5_000 }).catch(() => undefined); // stays on the page when the warning is dismissed
+    test.info().annotations.push({ type: 'EXEC-01', description: warned ? 'beforeunload warning shown and dismissed' : 'no warning needed (write already confirmed)' });
+    // Either way the completion must end up persisted.
+    await expect(page.getByRole('status').filter({ hasText: /saving/i })).toHaveCount(0, { timeout: 15_000 });
     await page.reload();
-    if (!warned) {
-      await expect(page.getByRole('button', { name: `Reopen: ${act}` }), 'shown as done, so it must have been saved').toHaveAttribute('aria-pressed', 'true');
-    }
+    await expect(page.getByRole('button', { name: `Reopen: ${act}` }), 'shown as done, so it must be saved').toHaveAttribute('aria-pressed', 'true');
   });
   test('14. offline: a save while the device has no network fails honestly and can be retried', async ({ page, context }) => {
     await signUp(page);

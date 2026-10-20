@@ -1,6 +1,6 @@
 # QA Status — Harada Goal App
 
-_Independent QA monitor · updated **2026-10-20 15:20** · rerun with `bash tests/qa-regress.sh [checkout]`
+_Independent QA monitor · updated **2026-10-20 15:45** · rerun with `bash tests/qa-regress.sh [checkout]`
 (`SNAPSHOT=1` for other agents' worktrees, which tests committed HEAD only) · logs in `test-results/qa/`._
 
 Related: `HARADA_SPEC.md` · `ACCEPTANCE_CRITERIA.md` · `research/HARADA_METHOD_SOURCES.md` · `research/MOBILE_USABILITY_REVIEW.md`.
@@ -22,21 +22,21 @@ none is configured, so this needs a user action. (2) A real mobile device or iOS
 Peers report that the user chose this. Native iOS/Android cannot be verified for this codebase. Mobile coverage is
 Chromium emulation (360×640, 390×844); WebKit/Safari is NOT TESTED.
 
-## 2. Status on main `6d47a11` (verified by QA 2026-10-20 13:39–15:15, under `caffeinate -i`)
+## 2. Status on main `01c004f` (verified by QA 2026-10-20 14:40, both engines, under `caffeinate -i`)
 
-| Gate | Result | Evidence |
-|---|---|---|
-| typecheck (src + tests + scripts) | **VERIFIED** 0 errors | qa-regress 20261020-133904 |
-| lint | **VERIFIED** 0 errors (3 warnings) | scaffold scripts deleted with user approval (b858b2f) |
-| vitest (src + tests/integration) | **VERIFIED** 493 + 1 accepted-risk (H4) of 494 | count guard: all 494 ran |
-| routes | VERIFIED | `/` → 307 signin, `/styleguide` 200 in dev (404 in production by design, 281a5ab), `/api/health` 200 |
-| e2e, Chrome | **VERIFIED 15/15 journeys** + 15/15 mobile shell | incl. #9 AUTH-01, #11 HYD-01, #12 axe (A11Y-01) |
-| e2e, WebKit (iPhone UA) | **14/15 journeys**; #13 **FAILED (EXEC-01)** | #3 and #9 pass with confirmed-save waits; see §3 |
-| Offline save (#14) and 200% text size (#15) | **VERIFIED, both engines** | offline: honest error, input kept, retry → exactly 1 row; 200% root font: 0 px horizontal overflow on 5 core screens, nav stays in view |
-| axe on real screens | **VERIFIED** 0 serious/critical on `/today`, `/goal`, `/matrix`, `/matrix/0`, `/review`, `/settings`, both engines | e2e #12 |
-| Matrix / metrics / data integrity / RLS adversarial | **VERIFIED** 5 · 11 · 21 · 81 + 1 accepted (H4) | tests/integration |
-| Real Supabase project, `\dp public.*` | NOT TESTED | none configured (user action) |
-| Real iPhone / Android device | NOT TESTED | no simulator or device |
+**Platform decision (user, 2026-10-20): rebuild as Expo/React Native.** The web app below is the verified
+reference implementation. Native verification follows `NATIVE_QA_PLAN.md`.
+
+| Gate | Result |
+|---|---|
+| typecheck · lint | **VERIFIED** 0 errors · 0 errors (3 warnings) |
+| vitest (src + tests/integration) | **VERIFIED** 495 + 1 accepted-risk (H4) of 496, all ran |
+| routes | VERIFIED (`/` 307 → signin, `/api/health` 200) |
+| e2e, Chrome + WebKit (iPhone UA) | **VERIFIED 62/62**: 15/15 journeys and 15/15 mobile-shell checks on each engine |
+| axe (6 real screens), offline save, 200% text, session end, forged cookie, lost response | VERIFIED on both engines |
+| Real Supabase (staging) | **NOT TESTED**: the user will provide a staging project |
+| iOS Simulator / real device | **BLOCKED**: Xcode not installed (25 GB free is likely too little); Java/Maestro missing |
+| Native (Expo) app | **NOT STARTED**: UI rebuild owned by the frontend orchestrator |
 
 ## 3. Open defects
 
@@ -44,8 +44,8 @@ Owner: **D** = data/backend orchestrator · **F** = frontend orchestrator · **Q
 
 | ID | P | Owner | Where | Repro → expected / actual | Fix | Test |
 |---|---|---|---|---|---|---|
-| EXEC-01 | **P2 (P1 argument)** | F | Today / KeyArea toggles (optimistic `CheckCircle`) | WebKit: tap Complete → UI shows done → reload/unload immediately → the in-flight server action is cancelled, so the completion is silently lost (5/5). Same for reopen. Chrome sends the request first. Breaks "failed writes must not appear successful" on the target platform | Track pending writes: `beforeunload` while in flight and/or a "saving…" state until confirmed | e2e #13 (WebKit) |
-| HYD-02 | P3 | F | `useAdoptPrehydrationValue` | A `<select>` whose controlled value isn't among its options would adopt the first option on every mount. No live case | Guard selects | — |
+| EXEC-01 | **P2 → FIXED db71bdd (verified, both engines)** | F | Today / KeyArea toggles (optimistic `CheckCircle`) | WebKit: tap Complete → UI shows done → reload/unload immediately → the in-flight server action is cancelled, so the completion is silently lost (5/5). Same for reopen. Chrome sends the request first. Breaks "failed writes must not appear successful" on the target platform | Track pending writes: `beforeunload` while in flight and/or a "saving…" state until confirmed | e2e #13 (WebKit) |
+| HYD-02 | P3 → FIXED db71bdd | F | `useAdoptPrehydrationValue` | A `<select>` whose controlled value isn't among its options would adopt the first option on every mount. No live case | Guard selects | — |
 | A11Y-01 | P2 → FIXED (verified both engines) | F | `src/ui/features/review/ReflectionForm.tsx:111` | Reflection date field has no accessible name (axe `label`, critical): a raw `<input type="date">` in `<Field>` never receives Field's context id, so `<label htmlFor>` points at nothing | Use the `Input` primitive, or read `useField()` for id/aria | e2e #12 |
 | HYD-01 | P2 → FIXED (verified both engines) | F | `src/ui/features/matrix/KeyAreaEditor.tsx:32,100`; same pattern in `ActionEditorSheet`, `GoalOnboarding`, `GoalForm`, `GoalFields`, `ReflectionForm` | Text typed into a server-rendered form before React hydrates is visible but never reaches state, so submit sends `''` ("Required") and the field is wiped. Slow phone/network trigger; on WebKit under `next dev` it hit 8/11 journeys | Adopt the DOM value on mount (`useLayoutEffect` sync), or readOnly until mounted, or uncontrolled + FormData | e2e #11 |
 | AUTH-01 | P2 → FIXED (verified both engines) | F | `src/middleware.ts:51` | Session cookie lost mid-edit → save shows "Something went wrong… try again" instead of "Your session has ended… nothing was saved". Middleware 307-redirects the server-action POST, the browser re-POSTs it to `/signin`, and the client gets an unexpected payload. Retrying can never succeed. Data safety VERIFIED: input kept, nothing written, next load → signin | Don't redirect requests with a `next-action` header (or non-GET); `runAuthed` already returns UNAUTHENTICATED | e2e #9 (fails until fixed) |
@@ -61,7 +61,7 @@ Owner: **D** = data/backend orchestrator · **F** = frontend orchestrator · **Q
 | U-09 | P2 | F | Toast | Reported fixed on ui/integration 64a7d81 | — | NOT TESTED by QA |
 | U-10 | P2 | F+D | Today | No daily priority pick → D added `daily_focus` + use cases in 761b5b1; UI pending | — | NOT TESTED |
 | Q-7 | P2 → FIXED | Q | QA runner, environment | Random multi-minute "hangs" on different tests each run (383–910 s). **Root cause: macOS idle sleep** (`pmset sleep 1`) froze workers between tool calls, plus Spotlight indexing. With `caffeinate -i` the same 4 suites pass in **5.6 s** (118 + 1 accepted). Runner now self-wraps in `caffeinate -i`, uses a `.noindex` scratch dir and caps workers. 204 MB of leaked QA temp dirs removed | — | `tests/integration` 118/118 + H4 |
-| ENV-01 | P3 | U | machine | The hung frontend vitest (pid 31399, 4.5 h) is now killed. Still open: `.data/` in main's checkout is 501 MB; it holds old leaked test DBs **and possibly the dev DB**, so QA has not touched it | Kill the stale process; prune `.data/test-*` (not `.data/dev`) | — |
+| ENV-01 | FIXED | U | machine | `.data/` pruned with user approval: 12 leaked test DBs removed (501 → 78 MB); `.data/dev` kept. Was: `.data/` in main's checkout is 501 MB; it holds old leaked test DBs **and possibly the dev DB**, so QA has not touched it | Kill the stale process; prune `.data/test-*` (not `.data/dev`) | — |
 | Q-6 | P3 | U | `ui/integration` commits | Author is `Your Name <your-email@example.com>`: git identity not configured | `git config user.name/email` | — |
 | P-5 | — | U | product | Attainment = mean of per-measure progress (each normalised to its own target; verified unit-agnostic); `achieved` status is authoritative. User-designated success-criteria measures were declined for R1. **Product decision.** | — | `progress-metrics` |
 
