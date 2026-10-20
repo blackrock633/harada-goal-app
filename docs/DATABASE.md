@@ -62,7 +62,14 @@ Index: `(owner_id, status)`.
 
 ### `routine_checks`
 `id`, `action_id → actions cascade`, `date`, `created_at`. `unique (action_id, date)`; inserts are
-`ON CONFLICT DO NOTHING` (idempotent check).
+`ON CONFLICT DO NOTHING` (idempotent check). Trigger `routine_checks_routine_only` rejects checks on
+task actions (it defers to RLS when the action isn't visible, so it never reveals another user's data).
+
+### `daily_focus` (D-016)
+`id`, `owner_id → profiles cascade`, `action_id → actions cascade`, `date`, `slot (0..4)`, `created_at`.
+`unique (action_id, date)` makes re-adding a no-op; `unique (owner_id, date, slot)` caps a day at 5 picks
+even under concurrent adds. Independent of due dates; the derived "next" list excludes focused actions.
+Index: `(owner_id, date)`.
 
 ### `reflections`
 `id`, `goal_id → goals cascade`, `date`, `kind ∈ daily|weekly`, three text fields (≤4000), timestamps.
@@ -70,7 +77,10 @@ Index: `(goal_id, date desc)`.
 
 ### `goal_events` (history)
 `id`, `goal_id → goals cascade`, `type`, `subject_id`, `summary`, `data jsonb`, `occurred_at`.
-**Append-only**: no UPDATE/DELETE grant or policy. Completions and reopenings are recorded here, which is
+**Append-only** for live goals: no UPDATE/DELETE grant or policy. Permanently deleting an (archived)
+goal cascades its events away. That is intended: permanent delete is the user's explicit "erase this
+goal" and is only possible from `archived`. `subject_id` is an untrusted owner-written label (not a
+foreign key); never use it for authorization or cross-goal joins. Completions and reopenings are recorded here, which is
 the activity history (no event sourcing; current state lives in the entity tables).
 Index: `(goal_id, occurred_at desc)`.
 
@@ -99,8 +109,14 @@ RLS is enabled on **every** table (a test fails if a new table lacks RLS or poli
 | goals | `owner_id = auth.uid()` | same | same (`with check` blocks re-owning) | own **and** `status='archived'` |
 | outcomes, actions, reflections | `owns_goal(goal_id)` | same | same (with check) | same |
 | routine_checks | `owns_action(action_id)` | same | — | same |
+| daily_focus | `owner_id = auth.uid()` | same **and** `owns_action(action_id)` | — | own |
 | goal_events | `owns_goal(goal_id)` | same | — (append-only) | — |
 
+- **Grants are exact** (migration `20261019140000_harden_grants.sql`): Supabase's default `ALL` privileges
+  (which include `TRUNCATE`, which bypasses RLS) are revoked from `anon` and `authenticated`, and only the
+  operations in the table above are granted. Profile updates are limited to `display_name`, `time_zone`,
+  `updated_at`. A test asserts no app role holds `TRUNCATE`/`TRIGGER`/`REFERENCES`. After `db push` to a
+  real project, confirm with `\dp public.*`.
 - `anon` has no table grants. `owns_goal` / `owns_action` are `SECURITY DEFINER` and `STABLE` with an
   empty `search_path`. They only answer "does the current user own X". Policies wrap calls in
   `(select …)` so Postgres evaluates them once per statement, not per row.

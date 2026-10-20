@@ -48,7 +48,10 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  if (!signedIn && isProtected(pathname)) {
+  // Server actions (POST) must reach the action so it can answer UNAUTHENTICATED in-band;
+  // a 307 would replay the POST against /signin and the client would get HTML instead of a Result.
+  const isNavigation = request.method === 'GET' || request.method === 'HEAD';
+  if (!signedIn && isProtected(pathname) && isNavigation) {
     const url = request.nextUrl.clone();
     url.pathname = '/signin';
     url.search = '';
