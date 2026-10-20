@@ -34,7 +34,7 @@ reference implementation. Native verification follows `NATIVE_QA_PLAN.md`.
 | routes | VERIFIED (`/` 307 → signin, `/api/health` 200) |
 | e2e, Chrome + WebKit (iPhone UA) | **VERIFIED 62/62**: 15/15 journeys and 15/15 mobile-shell checks on each engine |
 | axe (6 real screens), offline save, 200% text, session end, forged cookie, lost response | VERIFIED on both engines |
-| Real Supabase (staging) | **NOT TESTED**: the user will provide a staging project |
+| Real Supabase (staging) | **BLOCKED (ready to run)**: `tests/staging/staging.test.ts` is written and skips until creds exist. Its grant/RLS queries and expected values were validated against the migrated schema (exact match) |
 | iOS Simulator / real device | **BLOCKED**: Xcode not installed (25 GB free is likely too little); Java/Maestro missing |
 | Native (Expo) app | **NOT STARTED**: UI rebuild owned by the frontend orchestrator |
 
