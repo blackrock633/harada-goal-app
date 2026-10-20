@@ -1,47 +1,57 @@
+import crypto from 'crypto';
+import { PGlite } from '@electric-sql/pglite';
+import { drizzle } from 'drizzle-orm/pglite';
 import { Deps } from '@/application/ports';
-import { Database, createDatabase } from '../db/client';
+import type { Id } from '@/domain/types';
+import { Database } from '../db/client';
+import { applyLocalMigrations } from '../db/migrations';
 import { createUnitOfWork } from '../db/unit-of-work';
-import { Argon2PasswordHasher } from '../auth/password-hasher';
-import { CryptoSessionTokens } from '../auth/session-tokens';
 import { InMemoryRateLimiter } from '../auth/rate-limiter';
 import { ConsoleLogger } from '../logger';
-import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
+import * as schema from '../db/schema';
+import { FakeAuthGateway } from './fake-auth-gateway';
 
-let templateDbPromise: Promise<string> | null = null;
+/**
+ * Real Postgres (PGlite) with the Supabase auth shim and every migration applied, so RLS, constraints
+ * and triggers are exercised for real. Supabase Auth itself (GoTrue) is replaced by FakeAuthGateway,
+ * which creates rows in the emulated auth.users table (firing the real profile trigger).
+ *
+ * The migrated template is built once per worker and kept in memory; each test DB loads from it, so
+ * nothing is written to disk.
+ */
+let templatePromise: Promise<File | Blob> | null = null;
 
-export async function createTestDeps(options?: { fastHashing?: boolean }): Promise<{ deps: Deps; db: Database; close(): Promise<void> }> {
-  // Use PGlite data dump to dramatically speed up test DB creation.
-  if (!templateDbPromise) {
-    templateDbPromise = (async () => {
-      const { PGlite } = await import('@electric-sql/pglite');
-      const { migrate } = await import('drizzle-orm/pglite/migrator');
-      const { drizzle } = await import('drizzle-orm/pglite');
-      const dumpDir = path.join(process.cwd(), '.data/test-template-' + Date.now());
-      fs.mkdirSync(dumpDir, { recursive: true });
-      const templateClient = new PGlite(dumpDir);
-      const templateDb = drizzle(templateClient);
-      await migrate(templateDb, { migrationsFolder: './drizzle' });
-      await templateClient.close();
-      return dumpDir;
-    })();
-  }
+function buildTemplate(): Promise<File | Blob> {
+  return (async () => {
+    const client = new PGlite();
+    await applyLocalMigrations(client);
+    const dump = await client.dumpDataDir('none');
+    await client.close();
+    return dump;
+  })();
+}
 
-  const dumpDir = await templateDbPromise;
-  const testDir = path.join(process.cwd(), '.data/test-' + crypto.randomUUID());
-  fs.cpSync(dumpDir, testDir, { recursive: true });
-  
-  const { PGlite } = await import('@electric-sql/pglite');
-  const { drizzle } = await import('drizzle-orm/pglite');
-  const client = new PGlite(testDir);
-  const db = drizzle(client) as unknown as Database;
+export interface TestDeps {
+  deps: Deps;
+  /** Admin connection (postgres role, bypasses RLS). Use for setup/inspection only. */
+  db: Database;
+  client: PGlite;
+  auth: FakeAuthGateway;
+  /** Creates an auth user (and, via the trigger, a profile). Returns its id. */
+  createUser(opts?: { email?: string; displayName?: string; timeZone?: string }): Promise<Id>;
+  close(): Promise<void>;
+}
+
+export async function createTestDeps(): Promise<TestDeps> {
+  templatePromise ??= buildTemplate();
+  const client = new PGlite({ loadDataDir: await templatePromise });
+  const db = drizzle(client, { schema }) as unknown as Database;
+  const auth = new FakeAuthGateway(client);
 
   const deps: Deps = {
     uow: createUnitOfWork(db),
     ids: () => crypto.randomUUID(),
-    passwords: new Argon2PasswordHasher({ fastHashing: options?.fastHashing }),
-    tokens: new CryptoSessionTokens(),
+    auth,
     rateLimiter: new InMemoryRateLimiter(),
     logger: new ConsoleLogger(),
   };
@@ -49,8 +59,17 @@ export async function createTestDeps(options?: { fastHashing?: boolean }): Promi
   return {
     deps,
     db,
-    close: async () => {
-      await client.close();
+    client,
+    auth,
+    async createUser(opts = {}) {
+      const { user } = await auth.signUp({
+        email: opts.email ?? `user-${crypto.randomUUID()}@example.test`,
+        password: 'correct horse battery',
+        displayName: opts.displayName ?? 'Test User',
+        timeZone: opts.timeZone ?? 'UTC',
+      });
+      return user.id;
     },
+    close: () => client.close(),
   };
 }

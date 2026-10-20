@@ -18,37 +18,21 @@ import type {
   Outcome,
   Reflection,
   RoutineCheck,
-  User,
 } from '@/domain/types';
 
-export interface UserRepo {
-  findById(id: Id): Promise<User | null>;
-  /** `email` must already be normalised (trimmed, lowercased). */
-  findByEmailWithHash(email: string): Promise<{ user: User; passwordHash: string } | null>;
-  /** Throws UniqueViolationError if the email exists. */
-  insert(user: User, passwordHash: string): Promise<void>;
-  update(id: Id, patch: { displayName?: string; timeZone?: string; updatedAt: Instant }): Promise<User>;
-  getPasswordHash(id: Id): Promise<string | null>;
-  updatePasswordHash(id: Id, passwordHash: string, updatedAt: Instant): Promise<void>;
-  /** Hard delete; cascades to all owned data. */
-  delete(id: Id): Promise<void>;
-}
-
-export interface SessionRecord {
-  id: string; // SHA-256 hex of the token
-  userId: Id;
-  expiresAt: Instant;
+/** App-level profile. Credentials and email live in Supabase Auth (auth.users), not here. */
+export interface Profile {
+  id: Id;
+  displayName: string;
+  timeZone: string;
   createdAt: Instant;
+  updatedAt: Instant;
 }
 
-export interface SessionRepo {
-  insert(session: SessionRecord): Promise<void>;
-  /** Returns the session and user if the session exists and expiresAt > now. */
-  findValid(id: string, now: Instant): Promise<{ session: SessionRecord; user: User } | null>;
-  extend(id: string, expiresAt: Instant): Promise<void>;
-  delete(id: string): Promise<void>;
-  deleteAllForUser(userId: Id, exceptId?: string): Promise<void>;
-  deleteExpired(now: Instant): Promise<number>;
+export interface ProfileRepo {
+  /** The profile row is created by the `on_auth_user_created` DB trigger, never by the app. */
+  findById(id: Id): Promise<Profile | null>;
+  update(id: Id, patch: { displayName?: string; timeZone?: string; updatedAt: Instant }): Promise<Profile>;
 }
 
 export interface GoalRepo {
@@ -122,8 +106,7 @@ export interface GoalEventRepo {
 }
 
 export interface Repos {
-  users: UserRepo;
-  sessions: SessionRepo;
+  profiles: ProfileRepo;
   goals: GoalRepo;
   outcomes: OutcomeRepo;
   actions: ActionRepo;
@@ -133,11 +116,19 @@ export interface Repos {
 }
 
 export interface UnitOfWork {
-  /** Runs `fn` inside a single database transaction. Rolls back if `fn` throws. */
-  run<T>(fn: (repos: Repos) => Promise<T>): Promise<T>;
+  /**
+   * Runs `fn` inside a single database transaction AS `userId`: the transaction switches to the
+   * Postgres `authenticated` role with JWT claims `{ sub: userId }`, so row-level security applies to
+   * every query. `userId` MUST come from a verified Supabase Auth session (AuthGateway.getUser), never
+   * from client input. Rolls back if `fn` throws.
+   */
+  run<T>(userId: Id, fn: (repos: Repos) => Promise<T>): Promise<T>;
 }
 
-/** Thrown by repositories when a unique constraint is violated (mapped to CONFLICT). */
+/**
+ * Thrown by repositories when a unique or exclusion constraint is violated (SQLSTATE 23505 / 23P01),
+ * e.g. a concurrent add took the same position, or an idempotent create was replayed. Mapped to CONFLICT.
+ */
 export class UniqueViolationError extends Error {
   constructor(public readonly constraint: string) {
     super(`Unique constraint violated: ${constraint}`);
@@ -145,16 +136,59 @@ export class UniqueViolationError extends Error {
   }
 }
 
-export interface PasswordHasher {
-  hash(password: string): Promise<string>;
-  verify(hash: string, password: string): Promise<boolean>;
+/**
+ * Thrown by repositories when RLS rejects a write (SQLSTATE 42501) or a foreign key points at a row
+ * that doesn't exist / isn't in the same goal (23503). Mapped to NOT_FOUND so existence isn't leaked.
+ */
+export class NotOwnedError extends Error {
+  constructor(public readonly detail: string) {
+    super(`Row not accessible: ${detail}`);
+    this.name = 'NotOwnedError';
+  }
 }
 
-export interface SessionTokens {
-  /** Cryptographically random, URL-safe token (>= 160 bits). */
-  generate(): string;
-  /** SHA-256 hex of a token. */
-  hash(token: string): string;
+export interface AuthUser {
+  id: Id;
+  email: string;
+}
+
+export type AuthFailureReason =
+  | 'INVALID_CREDENTIALS' // wrong email/password (never says which)
+  | 'EMAIL_TAKEN'
+  | 'WEAK_PASSWORD'
+  | 'EMAIL_NOT_CONFIRMED'
+  | 'RATE_LIMITED'
+  | 'UNAVAILABLE'; // network failure / Supabase unreachable
+
+/** Expected auth failures. Anything else thrown by a gateway is unexpected (→ INTERNAL). */
+export class AuthGatewayError extends Error {
+  constructor(public readonly reason: AuthFailureReason, message?: string) {
+    super(message ?? reason);
+    this.name = 'AuthGatewayError';
+  }
+}
+
+/**
+ * Supabase Auth, bound to the current request's cookies (server-side only).
+ * Implementations throw AuthGatewayError for expected failures.
+ */
+export interface AuthGateway {
+  /** `confirmed: false` when the project requires email confirmation (no session yet). */
+  signUp(input: { email: string; password: string; displayName: string; timeZone: string }): Promise<{
+    user: AuthUser;
+    confirmed: boolean;
+  }>;
+  signIn(email: string, password: string): Promise<AuthUser>;
+  /** Clears this device's session. Idempotent. */
+  signOut(): Promise<void>;
+  /** Verified with Supabase Auth (not merely a decoded cookie). null when there is no valid session. */
+  getUser(): Promise<AuthUser | null>;
+  /** Re-authentication check for sensitive operations. */
+  verifyPassword(email: string, password: string): Promise<boolean>;
+  /** Updates the current user's password and signs out their other sessions. */
+  updatePassword(newPassword: string): Promise<void>;
+  /** Server-only (service role). Cascades to all of the user's data via FKs. */
+  deleteUser(userId: Id): Promise<void>;
 }
 
 export interface RateLimiter {
@@ -171,8 +205,7 @@ export interface Logger {
 export interface Deps {
   uow: UnitOfWork;
   ids: () => Id;
-  passwords: PasswordHasher;
-  tokens: SessionTokens;
+  auth: AuthGateway;
   rateLimiter: RateLimiter;
   logger: Logger;
 }

@@ -8,6 +8,7 @@ export type AppErrorCode =
   | 'UNAUTHENTICATED'
   | 'CONFLICT'
   | 'RATE_LIMITED'
+  | 'UNAVAILABLE'
   | 'INTERNAL';
 
 export interface AppError {

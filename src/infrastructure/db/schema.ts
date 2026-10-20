@@ -1,3 +1,11 @@
+/**
+ * Drizzle mirror of the database schema, used to TYPE queries.
+ *
+ * The canonical schema is the SQL in supabase/migrations/ (it also holds RLS policies, triggers,
+ * exclusion constraints and functions that Drizzle can't express). Keep this file in sync with it;
+ * src/infrastructure/db/schema-sync.test.ts fails when a column here doesn't exist in the database.
+ * Do NOT run drizzle-kit generate/push against Supabase.
+ */
 import {
   pgTable,
   text,
@@ -10,45 +18,32 @@ import {
   uniqueIndex,
   index,
   check,
+  pgSchema,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
-export const users = pgTable(
-  'users',
-  {
-    id: uuid('id').primaryKey(),
-    email: text('email').notNull(),
-    passwordHash: text('password_hash').notNull(),
-    displayName: text('display_name').notNull(),
-    timeZone: text('time_zone').notNull().default('UTC'),
-    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-  },
-  (table) => ({
-    emailUnique: uniqueIndex('users_email_unique').on(table.email),
-  })
-);
+/** Mirrors auth.users just enough to type the FK; owned and managed by Supabase Auth. */
+const auth = pgSchema('auth');
+export const authUsers = auth.table('users', {
+  id: uuid('id').primaryKey(),
+});
 
-export const sessions = pgTable(
-  'sessions',
-  {
-    id: text('id').primaryKey(),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-  },
-  (table) => ({
-    userIdIdx: index('sessions_user_id_idx').on(table.userId),
-  })
-);
+export const profiles = pgTable('profiles', {
+  id: uuid('id').primaryKey().references(() => authUsers.id, { onDelete: 'cascade' }),
+  displayName: text('display_name').notNull(),
+  timeZone: text('time_zone').notNull().default('UTC'),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+});
 
 export const goals = pgTable(
   'goals',
   {
     id: uuid('id').primaryKey(),
-    ownerId: uuid('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    ownerId: uuid('owner_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
     vision: text('vision').notNull().default(''),
+    successCriteria: text('success_criteria').notNull().default(''),
     targetDate: date('target_date', { mode: 'string' }),
     status: text('status').notNull(),
     statusBeforeArchive: text('status_before_archive'),
@@ -90,9 +85,8 @@ export const outcomes = pgTable(
     goalIdx: index('outcomes_goal_idx').on(table.goalId),
     titleLenCheck: check('outcomes_title_len_check', sql`char_length(title) between 1 and 120`),
     measureCheck: check('outcomes_measure_check', sql`(measure_target is null and measure_current is null and measure_unit is null) or (measure_target is not null and measure_current is not null and measure_target > 0 and measure_current >= 0)`),
-    positionCheck: check('outcomes_position_check', sql`position between 0 and 107`),
+    positionCheck: check('outcomes_position_check', sql`position between 0 and 7`),
     positionArchiveCheck: check('outcomes_position_archive_check', sql`(position is null) = (archived_at is not null)`),
-    goalPositionUnique: uniqueIndex('outcomes_goal_position_unique').on(table.goalId, table.position).where(sql`archived_at is null`),
   })
 );
 
@@ -101,7 +95,7 @@ export const actions = pgTable(
   {
     id: uuid('id').primaryKey(),
     goalId: uuid('goal_id').notNull().references(() => goals.id, { onDelete: 'cascade' }),
-    outcomeId: uuid('outcome_id').notNull().references(() => outcomes.id, { onDelete: 'cascade' }),
+    outcomeId: uuid('outcome_id').notNull(), // composite FK (outcome_id, goal_id) → outcomes(id, goal_id)
     title: text('title').notNull(),
     notes: text('notes').notNull().default(''),
     kind: text('kind').notNull(),
@@ -121,7 +115,7 @@ export const actions = pgTable(
     outcomeIdx: index('actions_outcome_idx').on(table.outcomeId),
     titleLenCheck: check('actions_title_len_check', sql`char_length(title) between 1 and 160`),
     kindCheck: check('actions_kind_check', sql`kind in ('task','routine')`),
-    positionCheck: check('actions_position_check', sql`position between 0 and 107`),
+    positionCheck: check('actions_position_check', sql`position between 0 and 7`),
     positionArchiveCheck: check('actions_position_archive_check', sql`(position is null) = (archived_at is not null)`),
     scheduleTypeCheck: check('actions_schedule_type_check', sql`schedule_type is null or schedule_type in ('daily','weekdays','weekly')`),
     weeklyTimesCheck: check('actions_weekly_times_check', sql`schedule_times_per_week is null or (schedule_times_per_week between 1 and 7)`),
@@ -129,7 +123,6 @@ export const actions = pgTable(
       (kind = 'task' and schedule_type is null and start_date is null) or
       (kind = 'routine' and schedule_type is not null and start_date is not null and due_date is null and completed_at is null)
     `),
-    outcomePositionUnique: uniqueIndex('actions_outcome_position_unique').on(table.outcomeId, table.position).where(sql`archived_at is null`),
   })
 );
 

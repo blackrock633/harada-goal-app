@@ -5,6 +5,7 @@ export const ADHERENCE_WINDOW_DAYS = 28;
 export const LIMITS = {
   goalTitle: 120,
   vision: 2000,
+  successCriteria: 2000,
   purposeQuadrant: 1000,
   outcomeTitle: 120,
   outcomeDescription: 1000,

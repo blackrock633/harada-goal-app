@@ -28,6 +28,8 @@ export interface Goal {
   ownerId: Id;
   title: string;
   vision: string;
+  /** 0..2000 — how the user will know the goal is achieved (measurable criteria, baseline). */
+  successCriteria: string;
   targetDate: LocalDate | null;
   status: GoalStatus;
   statusBeforeArchive: RestorableGoalStatus | null;

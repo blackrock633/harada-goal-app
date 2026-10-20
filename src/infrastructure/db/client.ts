@@ -1,61 +1,56 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { drizzle, PgDatabase } from 'drizzle-orm/pg-core';
-import { migrate as migratePglite } from 'drizzle-orm/pglite/migrator';
+import type { PgDatabase } from 'drizzle-orm/pg-core';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle as drizzlePglite } from 'drizzle-orm/pglite';
 import { drizzle as drizzlePostgres } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import fs from 'fs';
-import path from 'path';
 
 import * as schema from './schema';
+import { applyLocalMigrations } from './migrations';
 
 export type Database = PgDatabase<any, typeof schema>;
 
 const globalForDb = globalThis as unknown as {
-  db?: Database;
+  db?: Promise<Database>;
 };
 
+/**
+ * - `postgres://…` — Supabase Postgres (production). Use the pooler's transaction-mode URL; prepared
+ *   statements are disabled because transaction pooling doesn't support them. Schema is managed by the
+ *   Supabase CLI; this function never migrates a real database.
+ * - `pglite://<dir>` / `memory://` — local embedded Postgres with the Supabase auth shim + migrations.
+ */
 export async function createDatabase(url: string): Promise<Database> {
-  if (url === 'memory://') {
-    const client = new PGlite();
-    const db = drizzlePglite(client, { schema });
-    await migratePglite(db, { migrationsFolder: './drizzle' });
-    return db as unknown as Database;
-  }
-
-  if (url.startsWith('pglite://')) {
-    const dataDir = url.replace('pglite://', '');
-    fs.mkdirSync(dataDir, { recursive: true });
+  if (url === 'memory://' || url.startsWith('pglite://')) {
+    const dataDir = url === 'memory://' ? undefined : url.slice('pglite://'.length);
+    if (dataDir) fs.mkdirSync(dataDir, { recursive: true });
     const client = new PGlite(dataDir);
-    const db = drizzlePglite(client, { schema });
-    await migratePglite(db, { migrationsFolder: './drizzle' });
-    return db as unknown as Database;
+    await applyLocalMigrations(client);
+    return drizzlePglite(client, { schema }) as unknown as Database;
   }
 
   if (url.startsWith('postgres://') || url.startsWith('postgresql://')) {
-    const client = postgres(url);
-    const db = drizzlePostgres(client, { schema });
-    return db as unknown as Database;
+    const client = postgres(url, { prepare: false });
+    return drizzlePostgres(client, { schema }) as unknown as Database;
   }
 
-  throw new Error(`Unsupported DATABASE_URL: ${url}`);
+  throw new Error('Unsupported DATABASE_URL scheme');
 }
 
-export async function getDb(): Promise<Database> {
-  if (globalForDb.db) {
-    return globalForDb.db;
-  }
-
-  let url = process.env.DATABASE_URL;
-  if (!url) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('DATABASE_URL is required in production');
+export function getDb(): Promise<Database> {
+  if (!globalForDb.db) {
+    let url = process.env.DATABASE_URL;
+    if (!url) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('DATABASE_URL is required in production');
+      }
+      url = 'pglite://.data/dev';
     }
-    url = 'pglite://.data/dev';
+    globalForDb.db = createDatabase(url).catch((e) => {
+      globalForDb.db = undefined;
+      throw e;
+    });
   }
-
-  const db = await createDatabase(url);
-  globalForDb.db = db;
-  return db;
+  return globalForDb.db;
 }
