@@ -1,6 +1,6 @@
 # QA Status — Harada Goal App
 
-_Independent QA monitor · updated **2026-10-20 05:50** · rerun with `bash tests/qa-regress.sh [checkout]`
+_Independent QA monitor · updated **2026-10-20 08:40** · rerun with `bash tests/qa-regress.sh [checkout]`
 (`SNAPSHOT=1` for other agents' worktrees, which tests committed HEAD only) · logs in `test-results/qa/`._
 
 Related: `HARADA_SPEC.md` · `ACCEPTANCE_CRITERIA.md` · `research/HARADA_METHOD_SOURCES.md` · `research/MOBILE_USABILITY_REVIEW.md`.
@@ -22,25 +22,29 @@ none is configured, so this needs a user action. (2) A real mobile device or iOS
 Peers report that the user chose this. Native iOS/Android cannot be verified for this codebase. Mobile coverage is
 Chromium emulation (360×640, 390×844); WebKit/Safari is NOT TESTED.
 
-## 2. Branch status (all executed by QA; branches verified at committed snapshots)
+## 2. Status on main `638a017` (= ui/integration 07fd5e9 + qa/system)
 
-| Gate | main `cb2eda4` | data/supabase `97c845e` | ui/integration `07fd5e9` (merges 97c845e) |
-|---|---|---|---|
-| typecheck | FAILED (4) | **VERIFIED** 0 errors | **VERIFIED** 0 errors |
-| lint | FAILED 38 | FAILED | FAILED 26 |
-| vitest | VERIFIED 147 + 13 expected-fail | **VERIFIED 269/269** | **VERIFIED 344/344** |
-| routes 200 (`/`, `/styleguide`, `/api/health`) | VERIFIED | NOT TESTED | `/` 500 without auth env = correct fail-closed ("Supabase is not configured"); QA script now runs with dev auth |
-| e2e mobile shell | FAILED 4 (styleguide specimens) | n/a | **VERIFIED 15/15** |
-| e2e journeys 1–8 (+6b) | BLOCKED | n/a | **VERIFIED 9/9** (QA run, 2.1 min; real pages + use cases + RLS DB; dev auth; fresh PGlite; Chrome 390×844) |
-| Matrix 9×9 structure (`pending/matrix-structure`) | n/a | n/a | **VERIFIED 5/5**: 1 goal · 8 hubs · 8 centres · 64 actions, bijective |
-| Metrics semantics (`pending/progress-metrics`) | P-1/P-2 open | **VERIFIED 11/11** | inherits on merge |
-| Data integrity (`pending/data-integrity.port`) | D-01..04 open | **VERIFIED 21/21** | inherits |
-| RLS, branch suite (`rls.rls.test.ts`) | n/a | **VERIFIED 63/63** (re-run by an independent QA subagent) | inherits |
-| RLS, adversarial (`pending/rls-holes`) | n/a | **VERIFIED 81 pass + 1 accepted-risk (H4)** | includes 97c845e; re-run pending (first attempt stalled under CPU contention) |
-| Real Supabase project / GoTrue / PostgREST / `\dp public.*` | NOT TESTED | NOT TESTED (none configured; user action) | NOT TESTED |
+main is now the integration point: data/supabase → ui/integration (fast-forward) → main, plus the qa/system merge.
+**Re-verification of main is PENDING.** The last runs were invalid: the machine was overloaded (load average ≈ 30 on 10 cores,
+Spotlight/XProtect scanning every snapshot and PGlite DB), so tests hit hook timeouts and failed to start workers.
+Those are environment failures, not app results, and are not counted. The runner now uses a `.noindex` scratch
+dir and caps vitest workers; the rerun is next.
 
-Merge path: `data/supabase` → `ui/integration` → main. On merge, move `tests/pending/*` into `tests/integration/`
-and retire `tests/integration/progress-semantics.test.ts` and `data-integrity.test.ts` (old API).
+Pre-merge evidence (verified at committed snapshots, carried forward until re-run on main):
+
+| Gate | data/supabase `97c845e` | ui/integration `07fd5e9` |
+|---|---|---|
+| typecheck | VERIFIED 0 | VERIFIED 0 |
+| vitest | VERIFIED 269/269 | VERIFIED 371/371 (06:16 run, under load; passed regardless) |
+| e2e journeys 1–8 + 6b | n/a | **VERIFIED 9/9** (§5b) |
+| e2e mobile shell | n/a | VERIFIED 15/15 (477ca3f) |
+| matrix structure / metrics / data integrity | VERIFIED 5/5 · 11/11 · 21/21 | inherits |
+| RLS branch suite / adversarial | VERIFIED 63/63 · 81 + 1 accepted (H4) | adversarial re-run PENDING |
+| lint | FAILED | FAILED (generator scripts, `scripts/migrate.ts`, `src/infrastructure/logger.ts`); `tests/` now clean |
+| Real Supabase / device / WebKit | NOT TESTED | NOT TESTED |
+
+QA suites on main after this commit (**VERIFIED 118/118 + 1 accepted-risk, 5.6 s**, under `caffeinate`): `tests/integration/{data-integrity,progress-metrics,matrix-structure,rls-adversarial}.test.ts`
+(promoted from `tests/pending/`; the old-API suites are retired). `tests/` passes tsc and eslint.
 
 ## 3. Open defects
 
@@ -55,10 +59,11 @@ Owner: **D** = data/backend orchestrator · **F** = frontend orchestrator · **Q
 | H3 | P3 → FIXED 97c845e (verified) | D | schema `:187-193` | A `routine_checks` row for a task-kind action is accepted | Trigger or routine-only FK | `rls-holes` |
 | H4 | P3 accepted risk | D | schema `:219-227` | `goal_events.subject_id` can name another tenant's action; documented as an untrusted label | Constrain if any feature ever joins on it | `rls-holes` (`it.fails`, accepted) |
 | M-08b | P2 | D+F | `schemas.ts` | `expectedUpdatedAt` is optional, so a client that omits it still last-write-wins. Goal/key-area/action editors send it (verified in code); reflections have no edit UI | Make it required on updates, or document | — |
-| L-01 | P2 | D+F | all branches | Lint red, so `npm run verify` is red | Fix lint; the user decides on the scaffold scripts | lint gate |
+| L-01 | P2 | D+U | main | Lint red, so `npm run verify` is red. Remaining: `fix_imports.cjs`, `gen_domain.js`, `screenshot.cjs` (deletion is a user decision), `scripts/migrate.ts`, `src/infrastructure/logger.ts`. `tests/` and `src/ui`, `src/app` are clean | Fix or delete | lint gate |
 | U-09 | P2 | F | Toast | Reported fixed on ui/integration 64a7d81 | — | NOT TESTED by QA |
 | U-10 | P2 | F+D | Today | No daily priority pick → D added `daily_focus` + use cases in 761b5b1; UI pending | — | NOT TESTED |
-| Q-2 | P3 | D | test harness | Per-process PGlite template leaks into `$TMPDIR` | In-memory `dumpDataDir` | — |
+| Q-7 | P2 → FIXED | Q | QA runner, environment | Random multi-minute "hangs" on different tests each run (383–910 s). **Root cause: macOS idle sleep** (`pmset sleep 1`) froze workers between tool calls, plus Spotlight indexing. With `caffeinate -i` the same 4 suites pass in **5.6 s** (118 + 1 accepted). Runner now self-wraps in `caffeinate -i`, uses a `.noindex` scratch dir and caps workers. 204 MB of leaked QA temp dirs removed | — | `tests/integration` 118/118 + H4 |
+| ENV-01 | P2 | U/F | machine | A hung `vitest run src --maxWorkers=1` from the frontend session (pid 31399) had been at 100% CPU for 4.5 h, reported twice. Also `.data/` in main's checkout is 501 MB; it holds old leaked test DBs **and possibly the dev DB**, so QA has not touched it | Kill the stale process; prune `.data/test-*` (not `.data/dev`) | — |
 | Q-6 | P3 | U | `ui/integration` commits | Author is `Your Name <your-email@example.com>`: git identity not configured | `git config user.name/email` | — |
 | P-5 | — | U | product | Attainment = mean of per-measure progress (each normalised to its own target; verified unit-agnostic); `achieved` status is authoritative. User-designated success-criteria measures were declined for R1. **Product decision.** | — | `progress-metrics` |
 

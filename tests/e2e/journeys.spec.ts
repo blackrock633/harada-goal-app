@@ -2,12 +2,10 @@
  * Core user journeys against the REAL app (real server, real DB, dev auth). Phone viewport.
  * Fresh unique user per test. Run with a config whose baseURL points at the app under test.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { activateGoal, addAction, addKeyArea, createGoal, openMatrix, signOut, signUp, uid } from './helpers';
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
-
-const goalIdOf = (page: Page) => new URL(page.url()).searchParams.get('goal')!;
 
 test.describe('core journeys', () => {
   test('1. create goal and persist across reload', async ({ page }) => {
@@ -49,7 +47,7 @@ test.describe('core journeys', () => {
       await expect(page.getByRole('heading', { level: 1, name: `Key area ${p + 1} is empty` })).toBeVisible();
     }
 
-    const areas = [`Fitness ${uid()}`, `Career ${uid()}`];
+    const areas = [`Fitness ${uid()}`, `Career ${uid()}`] as const;
     const actions: Array<[number, number, string]> = [
       [0, 1, `Run 5k ${uid()}`],
       [0, 2, `Stretch ${uid()}`],
@@ -139,7 +137,7 @@ test.describe('core journeys', () => {
       const plan = await page.getByText(/\d+ of \d+ positions filled/).first().innerText();
       const tasks = await page.getByText(/\d+ of \d+ tasks done/).first().innerText();
       const attain = await page.getByText('Not measured yet').innerText();
-      console.log(`#4 plan: "${plan}" | tasks: "${tasks}" | attainment: "${attain}"`);
+      test.info().annotations.push({ type: 'evidence #4 goal', description: `plan: "${plan}" | tasks: "${tasks}" | attainment: "${attain}"` });
       await expect(page.getByText('4 of 72 positions filled')).toBeVisible();
       await expect(page.getByText(`${done} of 3 tasks done`)).toBeVisible();
       await expect(page.getByText('Not measured yet')).toBeVisible();
@@ -159,7 +157,7 @@ test.describe('core journeys', () => {
     await verify(3);
 
     await page.goto(`/matrix?goal=${id}`);
-    console.log(`#4 matrix: "${(await page.getByTestId('completeness').innerText()).replace(/\n/g, ' | ')}"`);
+    test.info().annotations.push({ type: 'evidence #4 matrix', description: (await page.getByTestId('completeness').innerText()).replace(/\n/g, ' | ') });
     await expect(page.getByTestId('completeness')).toContainText('Plan: 4 of 72 positions filled');
     await expect(page.getByTestId('completeness')).toContainText('Actions: 3 of 3 done');
   });

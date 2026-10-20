@@ -11,12 +11,22 @@
 #   SNAPSHOT=1 bash tests/qa-regress.sh <checkout-dir>
 #       test the checkout's committed HEAD (git archive into a temp dir), not its live working
 #       tree. Use this for other agents' worktrees: their uncommitted mid-edit state is not a regression.
+#   QA_WORKERS=2 ...   cap vitest workers (default 4; each PGlite DB is CPU-heavy)
 set -u
+# Keep the Mac awake for the whole run: idle sleep froze test workers mid-run and produced phantom
+# multi-minute "hangs" on random tests (pmset sleep=1 on this machine).
+if [ -z "${QA_CAFFEINATED:-}" ] && command -v caffeinate >/dev/null; then
+  QA_CAFFEINATED=1 exec caffeinate -i "$0" "$@"
+fi
+# Scratch space Spotlight/XProtect skip (".noindex"): indexing every snapshot and PGlite DB
+# pushed load past 25 on a 10-core machine and turned test hooks into timeouts.
+SCRATCH="${TMPDIR:-/tmp}/qa.noindex"
+mkdir -p "$SCRATCH"
 QA_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET="$(cd "${1:-$QA_ROOT}" && pwd)"
 if [ -n "${SNAPSHOT:-}" ]; then
   REV=$(git -C "$TARGET" rev-parse --short HEAD)
-  SNAP=$(mktemp -d -t "qa-snap-$REV")
+  SNAP=$(mktemp -d "$SCRATCH/snap-$REV.XXXXXX")
   git -C "$TARGET" archive HEAD | tar -x -C "$SNAP"
   ln -s "$TARGET/node_modules" "$SNAP/node_modules"
   trap 'rm -rf "$SNAP"' EXIT
@@ -44,7 +54,7 @@ echo "QA run $STAMP on $TARGET_GIT @ $(g rev-parse --abbrev-ref HEAD)/$(g rev-pa
 
 gate typecheck npm run --silent typecheck
 gate lint      npx eslint .
-gate vitest    npx vitest run
+gate vitest    npx vitest run --maxWorkers="${QA_WORKERS:-4}"
 
 # Guard against silently lost tests: compare the executed test count with the last run on this branch.
 BRANCH=$(g rev-parse --abbrev-ref HEAD | tr '/' '_')
@@ -60,23 +70,24 @@ fi
 if [ -z "${SKIP_E2E:-}" ]; then
   # Local dev auth + a fresh embedded DB: exercises real pages, use cases and RLS without a Supabase project.
   AUTH_PROVIDER=dev DEV_AUTH_SECRET=qa-regress-secret-0123456789 \
-  DATABASE_URL="pglite://$OUT/e2e-db-$STAMP" npx next dev -p "$PORT" >>"$LOG.server" 2>&1 &
+  DATABASE_URL="pglite://$SCRATCH/e2e-db-$STAMP" npx next dev -p "$PORT" >>"$LOG.server" 2>&1 &
   SERVER=$!
   for _ in $(seq 1 90); do curl -s -o /dev/null "http://localhost:$PORT/api/health" && break; sleep 1; done
   for path in / /styleguide /api/health; do
     code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$PORT$path")
-    [ "$code" = 200 ] && SUMMARY+=("PASS  GET $path") || SUMMARY+=("FAIL  GET $path -> $code")
+    # 2xx, or a redirect (e.g. / -> /signin when signed out); 5xx and 4xx fail.
+    case "$code" in 2??|30[1278]) SUMMARY+=("PASS  GET $path -> $code");; *) SUMMARY+=("FAIL  GET $path -> $code");; esac
   done
   # Uses system Chrome until `npx playwright install chromium` has been run.
   CFG="$OUT/pw-$STAMP.config.mjs"
   cat >"$CFG" <<EOF
-export default { testDir: '$QA_ROOT/tests/e2e', workers: 1, reporter: [['list']],
+export default { testDir: '$QA_ROOT/tests/e2e', workers: 1, reporter: [['list']], timeout: 90000, expect: { timeout: 10000 },
   outputDir: '$OUT/pw-$STAMP', use: { baseURL: 'http://localhost:$PORT', channel: 'chrome' } };
 EOF
   # Run from QA_ROOT so the specs and the runner share one @playwright/test install.
   gate e2e bash -c "cd '$QA_ROOT' && npx playwright test -c '$CFG'"
   kill "$SERVER" 2>/dev/null; pkill -f "next dev -p $PORT" 2>/dev/null
-  rm -rf "$CFG" "$OUT/e2e-db-$STAMP"
+  rm -rf "$CFG" "$SCRATCH/e2e-db-$STAMP"
 else
   SUMMARY+=("SKIP  e2e (SKIP_E2E set)")
 fi

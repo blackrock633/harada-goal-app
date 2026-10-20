@@ -39,6 +39,6 @@ describe('Open Window 64 layout', () => {
   });
 
   it('rejects out-of-range coordinates', () => {
-    for (const [r, c] of [[-1, 0], [9, 0], [0, 9], [1.5, 2]]) expect(cellAt(r, c)).toBeNull();
+    for (const [r, c] of [[-1, 0], [9, 0], [0, 9], [1.5, 2]] as const) expect(cellAt(r, c)).toBeNull();
   });
 });

@@ -60,7 +60,7 @@ for (const vp of VIEWPORTS) {
         const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
         const bad = results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
         const summary = bad.map((v) => `${v.impact} ${v.id}: ${v.nodes.length} node(s), e.g. ${v.nodes[0]?.target.join(' ')}`);
-        console.log(`[axe ${vp.name}] all violations:`, results.violations.map((v) => `${v.impact}:${v.id}(${v.nodes.length})`).join(', ') || 'none');
+        test.info().annotations.push({ type: `axe ${vp.name}`, description: results.violations.map((v) => `${v.impact}:${v.id}(${v.nodes.length})`).join(', ') || 'none' });
         expect(summary, summary.join('\n')).toEqual([]);
       });
 
@@ -80,7 +80,7 @@ for (const vp of VIEWPORTS) {
           }
           return out;
         });
-        console.log(`[touch ${vp.name}] undersized:`, small);
+        test.info().annotations.push({ type: `touch ${vp.name}`, description: small.join('; ') || 'none' });
         expect(small).toEqual([]);
       });
 
