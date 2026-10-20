@@ -3,7 +3,7 @@ import { OutcomeRepo, PositionUpdate } from '@/application/ports';
 import { Outcome, Id } from '@/domain/types';
 import { PgTransaction } from 'drizzle-orm/pg-core';
 import { outcomes, goals } from '../schema';
-import { eq, and, inArray, asc } from 'drizzle-orm';
+import { eq, and, inArray, asc, sql } from 'drizzle-orm';
 
 export class OutcomeRepoImpl implements OutcomeRepo {
   constructor(private readonly tx: PgTransaction<any, any, any>) {}
@@ -37,9 +37,9 @@ export class OutcomeRepoImpl implements OutcomeRepo {
       goalId: outcome.goalId,
       title: outcome.title,
       description: outcome.description,
-      measureTarget: outcome.measure?.target ? String(outcome.measure.target) : null,
-      measureCurrent: outcome.measure?.current !== undefined ? String(outcome.measure.current) : null,
-      measureUnit: outcome.measure?.unit || null,
+      measureTarget: outcome.measure ? String(outcome.measure.target) : null,
+      measureCurrent: outcome.measure ? String(outcome.measure.current) : null,
+      measureUnit: outcome.measure ? outcome.measure.unit : null,
       position: outcome.position,
       archivedAt: outcome.archivedAt,
       createdAt: outcome.createdAt,
@@ -53,9 +53,9 @@ export class OutcomeRepoImpl implements OutcomeRepo {
       .set({
         title: outcome.title,
         description: outcome.description,
-        measureTarget: outcome.measure?.target ? String(outcome.measure.target) : null,
-        measureCurrent: outcome.measure?.current !== undefined ? String(outcome.measure.current) : null,
-        measureUnit: outcome.measure?.unit || null,
+        measureTarget: outcome.measure ? String(outcome.measure.target) : null,
+        measureCurrent: outcome.measure ? String(outcome.measure.current) : null,
+        measureUnit: outcome.measure ? outcome.measure.unit : null,
         position: outcome.position,
         archivedAt: outcome.archivedAt,
         updatedAt: outcome.updatedAt,
@@ -66,23 +66,16 @@ export class OutcomeRepoImpl implements OutcomeRepo {
   async setPositions(goalId: Id, updates: PositionUpdate[]): Promise<void> {
     if (updates.length === 0) return;
 
-    const ids = updates.map((u) => u.id);
-
-    // Phase 1: Bump affected rows to position + 100 to avoid partial unique index conflicts
-    for (const update of updates) {
-      await this.tx
-        .update(outcomes)
-        .set({ position: update.position + 100 })
-        .where(and(eq(outcomes.id, update.id), eq(outcomes.goalId, goalId)));
-    }
-
-    // Phase 2: Set final positions
+    // Defer the exclusion constraint so intermediate states (e.g. a swap) are allowed; the IMMEDIATE
+    // switch re-checks all rows now so a bad final state fails here rather than at commit.
+    await this.tx.execute(sql`set constraints outcomes_goal_position_excl deferred`);
     for (const update of updates) {
       await this.tx
         .update(outcomes)
         .set({ position: update.position })
         .where(and(eq(outcomes.id, update.id), eq(outcomes.goalId, goalId)));
     }
+    await this.tx.execute(sql`set constraints outcomes_goal_position_excl immediate`);
   }
 
   private mapToDomain(row: typeof outcomes.$inferSelect): Outcome {
@@ -96,7 +89,7 @@ export class OutcomeRepoImpl implements OutcomeRepo {
         ? {
             target: Number(row.measureTarget),
             current: Number(row.measureCurrent),
-            unit: row.measureUnit!,
+            unit: row.measureUnit ?? '',
           }
         : null,
       position: row.position,

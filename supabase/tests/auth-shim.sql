@@ -36,10 +36,10 @@ returns uuid
 language sql
 stable
 as $$
-  select nullif(
-    coalesce(current_setting('request.jwt.claim.sub', true),
-             (current_setting('request.jwt.claims', true)::jsonb ->> 'sub')),
-    ''
+  -- Same shape as Supabase's auth.uid(): an unset or empty setting yields NULL, never an error.
+  select coalesce(
+    nullif(current_setting('request.jwt.claim.sub', true), ''),
+    (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
   )::uuid;
 $$;
 

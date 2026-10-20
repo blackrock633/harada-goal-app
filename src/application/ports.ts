@@ -58,7 +58,7 @@ export interface OutcomeRepo {
   insert(outcome: Outcome): Promise<void>;
   /** Writes all mutable fields INCLUDING position/archivedAt. */
   update(outcome: Outcome): Promise<void>;
-  /** Atomically rewrites positions of ACTIVE outcomes in a goal (two-phase to respect the partial unique index). */
+  /** Atomically rewrites positions of ACTIVE outcomes in a goal (exclusion constraint deferred for the swap). */
   setPositions(goalId: Id, updates: PositionUpdate[]): Promise<void>;
 }
 
@@ -75,7 +75,7 @@ export interface ActionRepo {
   insert(action: Action): Promise<void>;
   /** Writes all mutable fields INCLUDING outcomeId/position/archivedAt. */
   update(action: Action): Promise<void>;
-  /** Atomically rewrites outcomeId+position for ACTIVE actions within ONE goal (two-phase). */
+  /** Atomically rewrites outcomeId+position for ACTIVE actions within ONE goal (exclusion constraint deferred). */
   setPositions(goalId: Id, updates: ActionPositionUpdate[]): Promise<void>;
 }
 

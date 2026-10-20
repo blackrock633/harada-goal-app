@@ -1,107 +1,87 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createTestDeps } from './create-test-deps';
-import { Database } from '../db/client';
-import { Deps, UniqueViolationError } from '@/application/ports';
-import { users, goals } from '../db/schema';
+import { createTestDeps, type TestDeps } from './create-test-deps';
+import { UniqueViolationError } from '@/application/ports';
+import { goals, profiles } from '../db/schema';
 import { eq } from 'drizzle-orm';
 
-describe('Database Infrastructure', () => {
-  let deps: Deps;
-  let db: Database;
-  let close: () => Promise<void>;
+describe('Database infrastructure', () => {
+  let t: TestDeps;
 
   beforeEach(async () => {
-    const setup = await createTestDeps({ fastHashing: true });
-    deps = setup.deps;
-    db = setup.db;
-    close = setup.close;
+    t = await createTestDeps();
+  });
+  afterEach(() => t.close());
+
+  const goal = (ownerId: string, id: string) => ({
+    id,
+    ownerId,
+    title: 'Goal',
+    vision: '',
+    successCriteria: '',
+    targetDate: null,
+    status: 'draft' as const,
+    statusBeforeArchive: null,
+    purpose: { selfTangible: '', selfIntangible: '', othersTangible: '', othersIntangible: '' },
+    activatedOn: null,
+    achievedAt: null,
+    archivedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   });
 
-  afterEach(async () => {
-    await close();
+  const outcome = (goalId: string, id: string, position: number) => ({
+    id,
+    goalId,
+    title: `O${position}`,
+    description: '',
+    measure: null,
+    position,
+    archivedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   });
 
-  it('enforces partial unique index on outcomes (position and goal_id)', async () => {
-    const userId = deps.ids();
-    await deps.uow.run(async (repos) => {
-      await repos.users.insert({
-        id: userId,
-        email: 'test@example.com',
-        displayName: 'Test',
-        timeZone: 'UTC',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }, 'hash');
-
-      const goal = {
-        id: deps.ids(),
-        ownerId: userId,
-        title: 'Goal',
-        vision: '',
-        targetDate: null,
-        status: 'draft' as const,
-        statusBeforeArchive: null,
-        purpose: {
-          selfTangible: '',
-          selfIntangible: '',
-          othersTangible: '',
-          othersIntangible: '',
-        },
-        activatedOn: null,
-        achievedAt: null,
-        archivedAt: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      await repos.goals.insert(goal);
-
-      const outcome1 = {
-        id: deps.ids(),
-        goalId: goal.id,
-        title: 'O1',
-        description: '',
-        measure: null,
-        position: 0,
-        archivedAt: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      await repos.outcomes.insert(outcome1);
-
-      const outcome2 = {
-        id: deps.ids(),
-        goalId: goal.id,
-        title: 'O2',
-        description: '',
-        measure: null,
-        position: 0, // Duplicate position
-        archivedAt: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      await expect(repos.outcomes.insert(outcome2)).rejects.toThrow();
-    });
+  it('creates a profile via the auth trigger', async () => {
+    const userId = await t.createUser({ displayName: 'Ada', timeZone: 'Europe/London' });
+    const rows = await t.db.select().from(profiles).where(eq(profiles.id, userId));
+    expect(rows[0]).toMatchObject({ displayName: 'Ada', timeZone: 'Europe/London' });
   });
 
-  it('respects UoW rollback', async () => {
-    const userId = deps.ids();
-    
-    await expect(deps.uow.run(async (repos) => {
-      await repos.users.insert({
-        id: userId,
-        email: 'test@example.com',
-        displayName: 'Test',
-        timeZone: 'UTC',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }, 'hash');
-      
-      throw new Error('Rollback');
-    })).rejects.toThrow('Rollback');
+  it('enforces unique active outcome positions (exclusion constraint)', async () => {
+    const userId = await t.createUser();
+    const g = goal(userId, t.deps.ids());
+    await expect(
+      t.deps.uow.run(userId, async (r) => {
+        await r.goals.insert(g);
+        await r.outcomes.insert(outcome(g.id, t.deps.ids(), 0));
+        await r.outcomes.insert(outcome(g.id, t.deps.ids(), 0));
+      }),
+    ).rejects.toBeInstanceOf(UniqueViolationError);
+  });
 
-    await deps.uow.run(async (repos) => {
-      const user = await repos.users.findById(userId);
-      expect(user).toBeNull(); // Should be rolled back
-    });
+  it('rolls back the whole unit of work on error', async () => {
+    const userId = await t.createUser();
+    const g = goal(userId, t.deps.ids());
+    await expect(
+      t.deps.uow.run(userId, async (r) => {
+        await r.goals.insert(g);
+        throw new Error('Rollback');
+      }),
+    ).rejects.toThrow('Rollback');
+    const rows = await t.db.select().from(goals).where(eq(goals.id, g.id));
+    expect(rows).toEqual([]);
+  });
+
+  it('applies RLS: a user cannot read another user goal', async () => {
+    const a = await t.createUser();
+    const b = await t.createUser();
+    const g = goal(a, t.deps.ids());
+    await t.deps.uow.run(a, (r) => r.goals.insert(g));
+    expect(await t.deps.uow.run(b, (r) => r.goals.findById(b, g.id))).toBeNull();
+    expect(await t.deps.uow.run(a, (r) => r.goals.findById(a, g.id))).not.toBeNull();
+  });
+
+  it('rejects a malformed user id', async () => {
+    await expect(t.deps.uow.run('not-a-uuid', async () => 1)).rejects.toThrow();
   });
 });
