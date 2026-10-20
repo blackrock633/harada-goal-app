@@ -9,6 +9,7 @@
  */
 import type {
   Action,
+  DailyFocus,
   Goal,
   GoalEvent,
   GoalStatus,
@@ -88,6 +89,15 @@ export interface RoutineCheckRepo {
   remove(actionId: Id, date: LocalDate): Promise<void>;
 }
 
+export interface DailyFocusRepo {
+  /** The owner's focus for one date, ordered by slot. */
+  listForDate(ownerId: Id, date: LocalDate): Promise<DailyFocus[]>;
+  /** Inserts the row; returns false (no-op) if that action is already focused on that date. */
+  add(focus: DailyFocus): Promise<boolean>;
+  /** Idempotent. */
+  remove(ownerId: Id, actionId: Id, date: LocalDate): Promise<void>;
+}
+
 export interface ReflectionRepo {
   findById(ownerId: Id, reflectionId: Id): Promise<Reflection | null>;
   /** Newest first (date desc, createdAt desc). `before` is exclusive. */
@@ -111,6 +121,7 @@ export interface Repos {
   outcomes: OutcomeRepo;
   actions: ActionRepo;
   checks: RoutineCheckRepo;
+  focus: DailyFocusRepo;
   reflections: ReflectionRepo;
   events: GoalEventRepo;
 }
@@ -144,6 +155,14 @@ export class NotOwnedError extends Error {
   constructor(public readonly detail: string) {
     super(`Row not accessible: ${detail}`);
     this.name = 'NotOwnedError';
+  }
+}
+
+/** Thrown when the database can't be reached (connection refused/reset/timeout). Mapped to UNAVAILABLE. */
+export class DatabaseUnavailableError extends Error {
+  constructor(public readonly detail: string) {
+    super(`Database unavailable: ${detail}`);
+    this.name = 'DatabaseUnavailableError';
   }
 }
 

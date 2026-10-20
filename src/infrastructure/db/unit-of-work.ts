@@ -8,6 +8,7 @@ import { GoalRepoImpl } from './repositories/goal-repo';
 import { OutcomeRepoImpl } from './repositories/outcome-repo';
 import { ActionRepoImpl } from './repositories/action-repo';
 import { RoutineCheckRepoImpl } from './repositories/routine-check-repo';
+import { DailyFocusRepoImpl } from './repositories/daily-focus-repo';
 import { ReflectionRepoImpl } from './repositories/reflection-repo';
 import { GoalEventRepoImpl } from './repositories/goal-event-repo';
 
@@ -34,6 +35,7 @@ export function createUnitOfWork(db: Database): UnitOfWork {
             outcomes: new OutcomeRepoImpl(tx),
             actions: new ActionRepoImpl(tx),
             checks: new RoutineCheckRepoImpl(tx),
+            focus: new DailyFocusRepoImpl(tx),
             reflections: new ReflectionRepoImpl(tx),
             events: new GoalEventRepoImpl(tx),
           };

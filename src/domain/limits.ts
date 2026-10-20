@@ -1,6 +1,9 @@
 export const MAX_OUTCOMES_PER_GOAL = 8;
 export const MAX_ACTIONS_PER_OUTCOME = 8;
 export const ADHERENCE_WINDOW_DAYS = 28;
+export const MAX_DAILY_FOCUS = 5;
+/** How far ahead a day's focus can be planned. */
+export const FOCUS_PLAN_AHEAD_DAYS = 7;
 
 export const LIMITS = {
   goalTitle: 120,

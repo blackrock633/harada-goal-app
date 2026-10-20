@@ -173,3 +173,18 @@ export const goalEvents = pgTable(
     goalTimeIdx: index('goal_events_goal_time_idx').on(table.goalId, table.occurredAt),
   })
 );
+
+export const dailyFocus = pgTable(
+  'daily_focus',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+    actionId: uuid('action_id').notNull().references(() => actions.id, { onDelete: 'cascade' }),
+    date: date('date', { mode: 'string' }).notNull(),
+    slot: smallint('slot').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => ({
+    ownerDateIdx: index('daily_focus_owner_date_idx').on(table.ownerId, table.date),
+  })
+);
