@@ -6,7 +6,7 @@ import { LIMITS } from './limits.js';
 function trim(s: string) { return s.trim(); }
 
 export function createGoal(
-  input: { id: Id; ownerId: Id; title: string; vision?: string; targetDate?: LocalDate | null; purpose?: Partial<Purpose> },
+  input: { id: Id; ownerId: Id; title: string; vision?: string; successCriteria?: string; targetDate?: LocalDate | null; purpose?: Partial<Purpose> },
   now: Instant
 ): Goal {
   const title = trim(input.title);
@@ -14,6 +14,9 @@ export function createGoal(
   if (title.length > LIMITS.goalTitle) throw new DomainError('LIMIT_REACHED', 'Title too long', 'title');
   const vision = trim(input.vision || '');
   if (vision.length > LIMITS.vision) throw new DomainError('LIMIT_REACHED', 'Vision too long', 'vision');
+
+  const successCriteria = trim(input.successCriteria || '');
+  if (successCriteria.length > LIMITS.successCriteria) throw new DomainError('LIMIT_REACHED', 'Success criteria too long', 'successCriteria');
 
   const purpose: Purpose = {
     selfTangible: trim(input.purpose?.selfTangible || ''),
@@ -31,6 +34,7 @@ export function createGoal(
     ownerId: input.ownerId,
     title,
     vision,
+    successCriteria,
     targetDate: input.targetDate || null,
     status: 'draft',
     statusBeforeArchive: null,
@@ -45,7 +49,7 @@ export function createGoal(
 
 export function updateGoalDetails(
   goal: Goal,
-  patch: { title?: string; vision?: string; targetDate?: LocalDate | null; purpose?: Partial<Purpose> },
+  patch: { title?: string; vision?: string; successCriteria?: string; targetDate?: LocalDate | null; purpose?: Partial<Purpose> },
   now: Instant
 ): { goal: Goal; changed: (keyof typeof patch)[] } {
   if (goal.status === 'archived') throw new DomainError('INVALID_STATE', 'Cannot edit archived goal');
@@ -64,6 +68,12 @@ export function updateGoalDetails(
     const v = trim(patch.vision);
     if (v.length > LIMITS.vision) throw new DomainError('LIMIT_REACHED', 'Vision too long', 'vision');
     if (next.vision !== v) { next.vision = v; changed.push('vision'); }
+  }
+
+  if (patch.successCriteria !== undefined) {
+    const c = trim(patch.successCriteria);
+    if (c.length > LIMITS.successCriteria) throw new DomainError('LIMIT_REACHED', 'Success criteria too long', 'successCriteria');
+    if (next.successCriteria !== c) { next.successCriteria = c; changed.push('successCriteria'); }
   }
 
   if (patch.targetDate !== undefined) {

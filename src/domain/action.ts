@@ -2,7 +2,11 @@ import { Action, Id, LocalDate, Instant, ActionKind, Schedule, Outcome, Weekday 
 import { DomainError } from './errors.js';
 import { LIMITS, MAX_ACTIONS_PER_OUTCOME } from './limits.js';
 
-import { PositionUpdate } from './outcome.js';
+import { PositionUpdate, resolveSlot, assertSlotFree } from './outcome.js';
+
+function takenOf(items: { position: number | null }[]): number[] {
+  return items.map(i => i.position).filter((p): p is number => p !== null);
+}
 
 function trim(s: string) { return s.trim(); }
 
@@ -28,13 +32,13 @@ export function normalizeSchedule(schedule: Schedule): Schedule {
 }
 
 export function createAction(
-  input: { id: Id; goalId: Id; outcomeId: Id; title: string; notes?: string; kind: ActionKind; dueDate?: LocalDate | null; schedule?: Schedule | null },
+  input: { id: Id; goalId: Id; outcomeId: Id; title: string; notes?: string; kind: ActionKind; dueDate?: LocalDate | null; schedule?: Schedule | null; position?: number },
   activeSiblings: Action[],
   today: LocalDate,
   now: Instant
 ): Action {
-  if (activeSiblings.length >= MAX_ACTIONS_PER_OUTCOME) throw new DomainError('LIMIT_REACHED', 'Max actions reached');
-  
+  const position = resolveSlot(takenOf(activeSiblings), input.position, 'Max actions reached');
+
   const title = trim(input.title);
   if (!title) throw new DomainError('VALIDATION', 'Title cannot be empty', 'title');
   if (title.length > LIMITS.actionTitle) throw new DomainError('LIMIT_REACHED', 'Title too long', 'title');
@@ -61,7 +65,7 @@ export function createAction(
     title,
     notes,
     kind: input.kind,
-    position: activeSiblings.length,
+    position,
     dueDate,
     completedAt: null,
     schedule,
@@ -155,31 +159,25 @@ export function reopenTask(action: Action, now: Instant): Action {
   return { ...action, completedAt: null, updatedAt: now };
 }
 
-export function archiveAction(action: Action, activeSiblings: Action[], now: Instant): { action: Action; positions: PositionUpdate[] } {
+/** Archiving frees the slot; remaining actions keep their positions (`positions` is always empty). */
+export function archiveAction(action: Action, _activeSiblings: Action[], now: Instant): { action: Action; positions: PositionUpdate[] } {
   if (action.archivedAt !== null) return { action, positions: [] };
-
-  const nextAction = { ...action, position: null, archivedAt: now, updatedAt: now };
-  const others = activeSiblings.filter(a => a.id !== action.id).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-  const positions: PositionUpdate[] = others.map((a, i) => ({ id: a.id, position: i })).filter(u => u.position !== others.find(x => x.id === u.id)?.position);
-
-  return { action: nextAction, positions };
+  return { action: { ...action, position: null, archivedAt: now, updatedAt: now }, positions: [] };
 }
 
 export function restoreAction(action: Action, activeSiblingsInOutcome: Action[], now: Instant): Action {
   if (action.archivedAt === null) return action;
-  if (activeSiblingsInOutcome.length >= MAX_ACTIONS_PER_OUTCOME) throw new DomainError('LIMIT_REACHED', 'Max actions reached');
-  
-  return {
-    ...action,
-    position: activeSiblingsInOutcome.length,
-    archivedAt: null,
-    updatedAt: now
-  };
+  const position = resolveSlot(takenOf(activeSiblingsInOutcome), null, 'Max actions reached');
+  return { ...action, position, archivedAt: null, updatedAt: now };
 }
 
+/**
+ * Move an action into a specific free slot (0..7) of the target outcome. A taken slot is rejected
+ * (no swapping); no other action is repositioned, so `positions` is always empty.
+ */
 export function moveAction(
   action: Action,
-  fromActiveSiblings: Action[],
+  _fromActiveSiblings: Action[],
   toActiveSiblings: Action[],
   toOutcome: Outcome,
   toPosition: number,
@@ -188,41 +186,16 @@ export function moveAction(
   if (action.archivedAt !== null) throw new DomainError('INVALID_STATE', 'Cannot move archived action');
   if (toOutcome.archivedAt !== null) throw new DomainError('INVALID_STATE', 'Cannot move to an archived outcome');
   if (toOutcome.goalId !== action.goalId) throw new DomainError('VALIDATION', 'Cannot move action to a different goal');
-  
+
   const isSameOutcome = action.outcomeId === toOutcome.id;
-  
-  if (!isSameOutcome && toActiveSiblings.length >= MAX_ACTIONS_PER_OUTCOME) {
+  const others = toActiveSiblings.filter(a => a.id !== action.id);
+  if (!isSameOutcome && others.length >= MAX_ACTIONS_PER_OUTCOME) {
     throw new DomainError('LIMIT_REACHED', 'Max actions reached in target outcome');
   }
+  assertSlotFree(takenOf(others), toPosition);
 
-  const safePos = Math.max(0, Math.min(toPosition, toActiveSiblings.length + (isSameOutcome ? -1 : 0)));
-
-  const nextAction = { ...action, outcomeId: toOutcome.id, position: safePos, updatedAt: now };
-  
-  const positions: { id: Id; outcomeId: Id; position: number }[] = [];
-
-  if (isSameOutcome) {
-    const list = fromActiveSiblings.filter(a => a.id !== action.id).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-    list.splice(safePos, 0, nextAction);
-    list.forEach((a, i) => {
-      if (a.id === action.id) return;
-      if (a.position !== i) positions.push({ id: a.id, outcomeId: a.outcomeId, position: i });
-    });
-  } else {
-    const fromList = fromActiveSiblings.filter(a => a.id !== action.id).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-    fromList.forEach((a, i) => {
-      if (a.position !== i) positions.push({ id: a.id, outcomeId: a.outcomeId, position: i });
-    });
-    
-    const toList = [...toActiveSiblings].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-    toList.splice(safePos, 0, nextAction);
-    toList.forEach((a, i) => {
-      if (a.id === action.id) return;
-      if (a.position !== i) positions.push({ id: a.id, outcomeId: a.outcomeId, position: i });
-    });
-  }
-
-  return { action: nextAction, positions };
+  if (isSameOutcome && action.position === toPosition) return { action, positions: [] };
+  return { action: { ...action, outcomeId: toOutcome.id, position: toPosition, updatedAt: now }, positions: [] };
 }
 
 export function computeReorder(activeItems: { id: Id }[], orderedIds: Id[]): PositionUpdate[] | null {

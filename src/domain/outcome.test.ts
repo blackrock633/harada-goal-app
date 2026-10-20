@@ -1,5 +1,5 @@
 import { expect, test, describe } from 'vitest';
-import { createOutcome, updateOutcome, setMeasureCurrent, archiveOutcome, restoreOutcome } from './outcome.js';
+import { createOutcome, updateOutcome, setMeasureCurrent, archiveOutcome, restoreOutcome, firstFreePosition, assertSlotFree } from './outcome.js';
 import { Instant, Outcome } from './types.js';
 
 describe('outcome', () => {
@@ -39,11 +39,24 @@ describe('outcome', () => {
     const res = archiveOutcome(o1, [o1, o2, o3], now);
     expect(res.outcome.archivedAt).not.toBeNull();
     expect(res.outcome.position).toBeNull();
-    // o2 pos 1 -> 0, o3 pos 2 -> 1
-    expect(res.positions).toEqual([{ id: 'o2', position: 0 }, { id: 'o3', position: 1 }]);
+    expect(res.positions).toEqual([]); // no compaction
 
     const restored = restoreOutcome(res.outcome, [o2, o3], now);
     expect(restored.archivedAt).toBeNull();
-    expect(restored.position).toBe(2); // appended
+    expect(restored.position).toBe(0); // first free slot
+  });
+
+  test('slot helpers and explicit position', () => {
+    expect(firstFreePosition([])).toBe(0);
+    expect(firstFreePosition([0, 1, 3])).toBe(2);
+    expect(firstFreePosition([0, 1, 2, 3, 4, 5, 6, 7])).toBeNull();
+    expect(() => assertSlotFree([1], 1)).toThrowError(/already filled/);
+    expect(() => assertSlotFree([], -1)).toThrowError(/between 0 and 7/);
+    expect(() => assertSlotFree([], 1.5)).toThrowError(/between 0 and 7/);
+    expect(() => assertSlotFree([], 3)).not.toThrow();
+    const o = createOutcome({ id: 'o', goalId: 'g', title: 'O', position: 6 }, [], now);
+    expect(o.position).toBe(6);
+    expect(() => createOutcome({ id: 'p', goalId: 'g', title: 'P', position: 6 }, [o], now)).toThrowError(/already filled/);
+    expect(createOutcome({ id: 'q', goalId: 'g', title: 'Q' }, [o], now).position).toBe(0);
   });
 });

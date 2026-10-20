@@ -1,5 +1,5 @@
 import { Action, Goal, Id, LocalDate, Outcome, Progress, Pace, RoutineCheck } from './types.js';
-import { ADHERENCE_WINDOW_DAYS } from './limits.js';
+import { ADHERENCE_WINDOW_DAYS, MAX_OUTCOMES_PER_GOAL, MAX_ACTIONS_PER_OUTCOME } from './limits.js';
 
 import { addDays, diffDays, eachDay, isoWeekStart, isoWeekEnd, weekdayOf } from './dates.js';
 
@@ -71,6 +71,7 @@ export function actionProgress(action: Action, checks: (LocalDate | RoutineCheck
   return routineAdherence(action, checks, today);
 }
 
+/** @deprecated Blends measure and action completion; use outcomeAttainment / outcomeExecution. */
 export function outcomeProgress(
   outcome: Outcome,
   activeActions: Action[],
@@ -101,6 +102,7 @@ export function outcomeProgress(
   return count === 0 ? null : sum / count;
 }
 
+/** @deprecated Blends measure and action completion; use goalAttainment / executionProgress. */
 export function goalProgress(
   activeOutcomes: Outcome[],
   activeActionsByOutcome: Map<Id, Action[]>,
@@ -125,7 +127,8 @@ export function goalProgress(
   return count === 0 ? null : sum / count;
 }
 
-export function pace(goal: Goal, progress: Progress, today: LocalDate): Pace {
+/** Pace is driven by real-world attainment only; action completion never feeds it. */
+export function pace(goal: Goal, attainment: Progress, today: LocalDate): Pace {
   if (goal.status !== 'active') return 'unknown';
   if (!goal.targetDate || !goal.activatedOn) return 'unknown';
   if (goal.targetDate <= goal.activatedOn) return 'unknown'; // Edge case
@@ -135,13 +138,14 @@ export function pace(goal: Goal, progress: Progress, today: LocalDate): Pace {
   const elapsedRaw = diffDays(goal.activatedOn, today) / diffDays(goal.activatedOn, goal.targetDate);
   const elapsed = Math.max(0, Math.min(1, elapsedRaw));
 
-  if (progress === null) return 'unknown';
+  if (attainment === null || !Number.isFinite(attainment)) return 'unknown';
 
-  if (progress >= elapsed + 0.10) return 'ahead';
-  if (progress >= elapsed - 0.15) return 'on_track';
+  if (attainment >= elapsed + 0.10) return 'ahead';
+  if (attainment >= elapsed - 0.15) return 'on_track';
   return 'behind';
 }
 
+/** @deprecated Use computeGoalMetrics. */
 export function computeGoalProgress(
   goal: Goal,
   activeOutcomes: Outcome[],
@@ -166,9 +170,117 @@ export function computeGoalProgress(
   }
 
   const gp = goalProgress(activeOutcomes, actionsByOut, checksByActionId, today);
-  const p = pace(goal, gp, today);
+  const p = pace(goal, goalAttainment(activeOutcomes), today);
 
   return { goal: gp, outcomes: outcomeProgs, actions: actionProgs, pace: p };
+}
+
+// ---------- Canonical metrics (see docs/DOMAIN_MODEL.md section 4) ----------
+
+export const PLANNING_TOTAL = MAX_OUTCOMES_PER_GOAL + MAX_OUTCOMES_PER_GOAL * MAX_ACTIONS_PER_OUTCOME;
+
+export interface PlanningCompleteness { filled: number; total: number; ratio: number }
+export interface ExecutionProgress { value: Progress; completedTasks: number; totalTasks: number }
+export interface OutcomeMetrics { outcomeId: Id; execution: ExecutionProgress; attainment: Progress }
+export interface GoalMetrics {
+  planning: PlanningCompleteness;
+  execution: ExecutionProgress;
+  attainment: Progress;
+  pace: Pace;
+  outcomes: OutcomeMetrics[];
+}
+
+/** Active outcomes (archivedAt null) and the active actions that sit under them. */
+function activeScope(outcomes: Outcome[], actions: Action[]) {
+  const activeOutcomes = outcomes.filter(o => o.archivedAt === null);
+  const ids = new Set(activeOutcomes.map(o => o.id));
+  const activeActions = actions.filter(a => a.archivedAt === null && ids.has(a.outcomeId));
+  return { activeOutcomes, activeActions };
+}
+
+export function planningCompleteness(outcomes: Outcome[], actions: Action[]): PlanningCompleteness {
+  const { activeOutcomes, activeActions } = activeScope(outcomes, actions);
+  const filledOutcomes = Math.min(MAX_OUTCOMES_PER_GOAL, activeOutcomes.filter(o => o.title.trim() !== '').length);
+  const filledActions = Math.min(MAX_OUTCOMES_PER_GOAL * MAX_ACTIONS_PER_OUTCOME, activeActions.length);
+  const filled = filledOutcomes + filledActions;
+  return { filled, total: PLANNING_TOTAL, ratio: filled / PLANNING_TOTAL };
+}
+
+function executionOf(actions: Action[], checksByActionId: Map<Id, LocalDate[]>, today: LocalDate): ExecutionProgress {
+  let sum = 0;
+  let count = 0;
+  let completedTasks = 0;
+  let totalTasks = 0;
+  for (const a of actions) {
+    if (a.kind === 'task') {
+      totalTasks++;
+      if (a.completedAt !== null) completedTasks++;
+    }
+    const p = actionProgress(a, checksByActionId.get(a.id) ?? [], today);
+    if (p !== null && Number.isFinite(p)) { sum += p; count++; }
+  }
+  return { value: count === 0 ? null : sum / count, completedTasks, totalTasks };
+}
+
+/** Goal-level execution: mean action progress over active actions in active outcomes. */
+export function executionProgress(
+  outcomes: Outcome[],
+  actions: Action[],
+  checksByActionId: Map<Id, LocalDate[]>,
+  today: LocalDate
+): ExecutionProgress {
+  return executionOf(activeScope(outcomes, actions).activeActions, checksByActionId, today);
+}
+
+export function outcomeExecution(
+  outcome: Outcome,
+  actions: Action[],
+  checksByActionId: Map<Id, LocalDate[]>,
+  today: LocalDate
+): ExecutionProgress {
+  if (outcome.archivedAt !== null) return { value: null, completedTasks: 0, totalTasks: 0 };
+  return executionOf(actions.filter(a => a.outcomeId === outcome.id && a.archivedAt === null), checksByActionId, today);
+}
+
+/** Measure-based progress of one outcome; null when archived or without a usable measure. */
+export function outcomeAttainment(outcome: Outcome): Progress {
+  if (outcome.archivedAt !== null || !outcome.measure) return null;
+  const { target, current } = outcome.measure;
+  if (!Number.isFinite(target) || !Number.isFinite(current) || target <= 0) return null;
+  return Math.max(0, Math.min(1, current / target));
+}
+
+/** Real-world goal progress: mean outcome attainment. Action completion never contributes. */
+export function goalAttainment(outcomes: Outcome[]): Progress {
+  let sum = 0;
+  let count = 0;
+  for (const o of outcomes) {
+    const p = outcomeAttainment(o);
+    if (p !== null) { sum += p; count++; }
+  }
+  return count === 0 ? null : sum / count;
+}
+
+export function computeGoalMetrics(
+  goal: Goal,
+  outcomes: Outcome[],
+  actions: Action[],
+  checksByActionId: Map<Id, LocalDate[]>,
+  today: LocalDate
+): GoalMetrics {
+  const { activeOutcomes } = activeScope(outcomes, actions);
+  const attainment = goalAttainment(activeOutcomes);
+  return {
+    planning: planningCompleteness(outcomes, actions),
+    execution: executionProgress(outcomes, actions, checksByActionId, today),
+    attainment,
+    pace: pace(goal, attainment, today),
+    outcomes: activeOutcomes.map(o => ({
+      outcomeId: o.id,
+      execution: outcomeExecution(o, actions, checksByActionId, today),
+      attainment: outcomeAttainment(o)
+    }))
+  };
 }
 
 export function routineStreak(action: Action, checks: LocalDate[], today: LocalDate): number {
