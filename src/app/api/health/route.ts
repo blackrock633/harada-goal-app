@@ -9,7 +9,7 @@ export async function GET() {
     const db = await getDb();
     await db.execute(sql`select 1`);
     return NextResponse.json({ status: 'ok' }, { status: 200 });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ status: 'error' }, { status: 503 });
   }
 }

@@ -1,3 +1,5 @@
+'use client';
+
 import * as React from 'react';
 import { clsx } from 'clsx';
 import { Loader2 } from 'lucide-react';
@@ -13,8 +15,8 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 const getStyles = (variant: ButtonVariant, size: ButtonSize) => {
-  const base = 'inline-flex items-center justify-center font-medium rounded-[var(--radius-sm)] transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none disabled:opacity-50 disabled:pointer-events-none cursor-pointer';
-  const sizeClasses = size === 'sm' ? 'h-[32px] px-3 text-sm min-w-[44px]' : 'h-[40px] px-4 text-base min-w-[44px]';
+  const base = 'relative inline-flex items-center justify-center font-medium rounded-[var(--radius-sm)] transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none disabled:opacity-50 disabled:pointer-events-none cursor-pointer';
+  const sizeClasses = size === 'sm' ? 'h-11 sm:h-8 px-3 text-sm min-w-[44px]' : 'h-11 sm:h-10 px-4 text-base min-w-[44px]';
   
   let variantClasses = '';
   switch (variant) {
@@ -36,9 +38,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         aria-busy={loading}
         {...props}
       >
-        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-        <span className={clsx(loading && 'invisible flex')}>{children}</span>
-        {loading && <span className="absolute">{children}</span>}
+        {loading && <Loader2 className="absolute h-4 w-4 animate-spin" aria-hidden="true" />}
+        {/* opacity (not visibility) keeps the label in the accessibility tree while loading */}
+        <span className={clsx('inline-flex items-center', loading && 'opacity-0')}>{children}</span>
       </button>
     );
   }
