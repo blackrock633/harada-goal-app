@@ -37,6 +37,7 @@ Chromium emulation (360×640, 390×844); WebKit/Safari is NOT TESTED.
 | Matrix / metrics / data integrity / RLS adversarial | **VERIFIED** 5 · 11 · 21 · 81 + 1 accepted (H4) | `tests/integration` |
 | RLS branch suite | VERIFIED 63/63 | in the vitest total |
 | Real Supabase project, `\dp public.*` | NOT TESTED | none configured (user action) |
+| e2e #12 axe on real screens (real data) | **FAILED (A11Y-01), both engines** | `/review`: 1 critical (`label`). `/today`, `/goal`, `/matrix`, `/matrix/0`, `/settings`: **0 violations of any impact** |
 | e2e #11 typing before hydration | **FAILED (HYD-01), both engines** | deterministic: JS chunks held back, text typed, submit → "Required" |
 | WebKit engine | **VERIFIED** via Playwright WebKit 2359 + iPhone UA (not real iOS Safari) | 10/12, same results as Chrome |
 | Real iPhone / Android device | NOT TESTED | no simulator (`simctl` missing) or device |
@@ -49,6 +50,7 @@ Owner: **D** = data/backend orchestrator · **F** = frontend orchestrator · **Q
 
 | ID | P | Owner | Where | Repro → expected / actual | Fix | Test |
 |---|---|---|---|---|---|---|
+| A11Y-01 | P2 | F | `src/ui/features/review/ReflectionForm.tsx:111` | Reflection date field has no accessible name (axe `label`, critical): a raw `<input type="date">` in `<Field>` never receives Field's context id, so `<label htmlFor>` points at nothing | Use the `Input` primitive, or read `useField()` for id/aria | e2e #12 |
 | HYD-01 | P2 | F | `src/ui/features/matrix/KeyAreaEditor.tsx:32,100`; same pattern in `ActionEditorSheet`, `GoalOnboarding`, `GoalForm`, `GoalFields`, `ReflectionForm` | Text typed into a server-rendered form before React hydrates is visible but never reaches state, so submit sends `''` ("Required") and the field is wiped. Slow phone/network trigger; on WebKit under `next dev` it hit 8/11 journeys | Adopt the DOM value on mount (`useLayoutEffect` sync), or readOnly until mounted, or uncontrolled + FormData | e2e #11 |
 | AUTH-01 | P2 | F | `src/middleware.ts:51` | Session cookie lost mid-edit → save shows "Something went wrong… try again" instead of "Your session has ended… nothing was saved". Middleware 307-redirects the server-action POST, the browser re-POSTs it to `/signin`, and the client gets an unexpected payload. Retrying can never succeed. Data safety VERIFIED: input kept, nothing written, next load → signin | Don't redirect requests with a `next-action` header (or non-GET); `runAuthed` already returns UNAUTHENTICATED | e2e #9 (fails until fixed) |
 | AUTH-02 | P3 | F | UNAUTHENTICATED UX | The message has no "Sign in" action; no return-to after sign-in (reported by F) | Inline sign-in link with `?next=` | — |

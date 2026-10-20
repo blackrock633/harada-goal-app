@@ -3,6 +3,7 @@
  * Fresh unique user per test. Run with a config whose baseURL points at the app under test.
  */
 import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { activateGoal, addAction, addKeyArea, createGoal, openMatrix, signOut, signUp, uid, waitHydrated } from './helpers';
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -400,5 +401,27 @@ test.describe('core journeys', () => {
     await slow.getByRole('button', { name: 'Create key area' }).click();
     await expect(slow.getByRole('heading', { level: 1, name: title }), 'text typed before hydration must be saved').toBeVisible();
     await slow.close();
+  });
+  test('12. accessibility: no serious/critical axe violations on the real screens with real data', async ({ page }) => {
+    await signUp(page);
+    await createGoal(page, `A11y goal ${uid()}`, { criteria: 'Finish a half marathon under 2 hours' });
+    const id = await openMatrix(page);
+    await addKeyArea(page, id, 0, `Endurance ${uid()}`);
+    await addAction(page, 1, `Run 5k ${uid()}`);
+    await activateGoal(page, id);
+
+    const screens = ['/today', `/goal?goal=${id}`, `/matrix?goal=${id}`, `/matrix/0?goal=${id}`, `/review?goal=${id}`, '/settings'];
+    const report: string[] = [];
+    for (const path of screens) {
+      await page.goto(path);
+      await page.waitForLoadState('networkidle');
+      const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+      for (const v of violations) {
+        report.push(`${path} ${v.impact} ${v.id} ×${v.nodes.length}: ${v.nodes[0]?.target.join(' ')}`);
+      }
+    }
+    test.info().annotations.push({ type: 'axe (all impacts)', description: report.join('\n') || 'none' });
+    const blocking = report.filter((r) => / (serious|critical) /.test(r));
+    expect(blocking, blocking.join('\n')).toEqual([]);
   });
 });
