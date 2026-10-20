@@ -3,11 +3,35 @@
  * Fresh unique user per test. Run with a config whose baseURL points at the app under test.
  */
 import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { activateGoal, addAction, addKeyArea, createGoal, openMatrix, signOut, signUp, uid, waitHydrated } from './helpers';
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
+/** Resolves when the next server action (a Next `next-action` POST) has returned. */
+const actionSaved = (page: import('@playwright/test').Page) =>
+  page.waitForResponse((r) => r.request().method() === 'POST' && !!r.request().headers()['next-action']);
+
 test.describe('core journeys', () => {
+  // After every successful save, runAuthed's revalidatePath('/') makes Next refetch the current route.
+  // WebKit's driver reports that soft refresh as a navigation, so a page.goto issued at the same moment
+  // fails with "interrupted by another navigation". A user-level probe (save, then immediately tap a tab)
+  // landed on the tapped tab 3/3 on WebKit, so this is a harness race, not a user-visible defect.
+  // Retry ONLY that error; anything else still fails.
+  test.beforeEach(async ({ page }) => {
+    const goto = page.goto.bind(page);
+    page.goto = async (url, opts) => {
+      for (let attempt = 1; ; attempt++) {
+        try {
+          return await goto(url, opts);
+        } catch (e) {
+          if (attempt >= 3 || !/interrupted by another navigation/.test(String(e))) throw e;
+          await page.waitForLoadState('load');
+        }
+      }
+    };
+  });
+
   test('1. create goal and persist across reload', async ({ page }) => {
     await signUp(page);
     const title = `Run a marathon ${uid()}`;
@@ -101,14 +125,18 @@ test.describe('core journeys', () => {
     await expect(page.getByRole('heading', { name: "Today's focus" })).toBeVisible();
     const complete = page.getByRole('button', { name: `Complete: ${act}` });
     await expect(complete).toHaveAttribute('aria-pressed', 'false');
+    const completed = actionSaved(page);
     await complete.click();
     await expect(page.getByRole('button', { name: `Reopen: ${act}` })).toHaveAttribute('aria-pressed', 'true');
+    await completed; // persistence after a confirmed save; the unconfirmed case is #13 (EXEC-01)
 
     await page.reload();
     const reopen = page.getByRole('button', { name: `Reopen: ${act}` });
     await expect(reopen).toHaveAttribute('aria-pressed', 'true');
+    const reopened = actionSaved(page);
     await reopen.click();
     await expect(page.getByRole('button', { name: `Complete: ${act}` })).toHaveAttribute('aria-pressed', 'false');
+    await reopened;
     await page.reload();
     await expect(page.getByRole('button', { name: `Complete: ${act}` })).toHaveAttribute('aria-pressed', 'false');
   });
@@ -400,5 +428,52 @@ test.describe('core journeys', () => {
     await slow.getByRole('button', { name: 'Create key area' }).click();
     await expect(slow.getByRole('heading', { level: 1, name: title }), 'text typed before hydration must be saved').toBeVisible();
     await slow.close();
+  });
+  test('12. accessibility: no serious/critical axe violations on the real screens with real data', async ({ page }) => {
+    await signUp(page);
+    await createGoal(page, `A11y goal ${uid()}`, { criteria: 'Finish a half marathon under 2 hours' });
+    const id = await openMatrix(page);
+    await addKeyArea(page, id, 0, `Endurance ${uid()}`);
+    await addAction(page, 1, `Run 5k ${uid()}`);
+    await activateGoal(page, id);
+
+    const screens = ['/today', `/goal?goal=${id}`, `/matrix?goal=${id}`, `/matrix/0?goal=${id}`, `/review?goal=${id}`, '/settings'];
+    const report: string[] = [];
+    for (const path of screens) {
+      await page.goto(path);
+      await page.waitForLoadState('networkidle');
+      const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+      for (const v of violations) {
+        report.push(`${path} ${v.impact} ${v.id} ×${v.nodes.length}: ${v.nodes[0]?.target.join(' ')}`);
+      }
+    }
+    test.info().annotations.push({ type: 'axe (all impacts)', description: report.join('\n') || 'none' });
+    const blocking = report.filter((r) => / (serious|critical) /.test(r));
+    expect(blocking, blocking.join('\n')).toEqual([]);
+  });
+  test('13. completing then immediately reloading does not silently lose the completion', async ({ page }) => {
+    // EXEC-01: the toggle is optimistic. If the page unloads before the server action lands, the UI has
+    // already shown "done". The write must still persist, or the user must be warned (e.g. beforeunload
+    // while writes are pending). Silent loss after showing success is the defect.
+    await signUp(page);
+    await createGoal(page, `Unload goal ${uid()}`);
+    const id = await openMatrix(page);
+    const act = `Quick tap ${uid()}`;
+    await addKeyArea(page, id, 0, `Area ${uid()}`);
+    await addAction(page, 1, act);
+    await activateGoal(page, id);
+    await page.goto(`/matrix/0?goal=${id}`);
+    await page.getByRole('button', { name: `Add to today: ${act}` }).click();
+    await expect(page.getByRole('button', { name: `Remove from today: ${act}` })).toBeVisible();
+    await page.goto('/today');
+
+    let warned = false;
+    page.on('dialog', async (d) => { warned = d.type() === 'beforeunload'; await d.accept(); });
+    await page.getByRole('button', { name: `Complete: ${act}` }).click();
+    await expect(page.getByRole('button', { name: `Reopen: ${act}` })).toBeVisible(); // UI claims success
+    await page.reload();
+    if (!warned) {
+      await expect(page.getByRole('button', { name: `Reopen: ${act}` }), 'shown as done, so it must have been saved').toHaveAttribute('aria-pressed', 'true');
+    }
   });
 });
