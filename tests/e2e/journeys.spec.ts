@@ -3,7 +3,7 @@
  * Fresh unique user per test. Run with a config whose baseURL points at the app under test.
  */
 import { test, expect } from '@playwright/test';
-import { activateGoal, addAction, addKeyArea, createGoal, openMatrix, signOut, signUp, uid } from './helpers';
+import { activateGoal, addAction, addKeyArea, createGoal, openMatrix, signOut, signUp, uid, waitHydrated } from './helpers';
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
@@ -184,7 +184,9 @@ test.describe('core journeys', () => {
       expect(text, `${path} leaked key area title`).not.toContain(area);
       await expect(page.locator('body')).not.toContainText(secret);
     }
-    await page.goto('/today');
+    // B has no goals, so a foreign ?goal= falls back to onboarding (/goal/new), which can still be
+    // navigating; retry only if this navigation is aborted by that one. The assertion stays strict.
+    await expect(async () => { await page.goto('/today'); }).toPass({ timeout: 30_000 });
     await expect(page.locator('body')).not.toContainText(secret);
   });
 
@@ -324,5 +326,79 @@ test.describe('core journeys', () => {
     await page.goto('/goal');
     await page.waitForURL('**/signin**');
     await expect(page.locator('body')).not.toContainText(title);
+  });
+  test('9. session ends mid-edit: save is refused honestly, input kept, nothing written', async ({ page, context }) => {
+    // Dev auth has no cookie expiry (Supabase owns real expiry); losing the session cookie mid-edit is the
+    // closest local stand-in for an expired or revoked session.
+    const email = await signUp(page);
+    await createGoal(page, `Expiry goal ${uid()}`);
+    const id = await openMatrix(page);
+    await addKeyArea(page, id, 0, `Area ${uid()}`);
+    const act = `Unsaved action ${uid()}`;
+
+    await page.getByRole('button', { name: 'Add action 1 of 8' }).click();
+    const dlg = page.getByRole('dialog');
+    await dlg.getByLabel('Title').fill(act);
+    await context.clearCookies({ name: 'harada_dev_session' });
+    await dlg.getByRole('button', { name: 'Add action' }).click();
+
+    // Contract (runAuthed → UNAUTHENTICATED, no redirect, so unsaved input survives):
+    // honest error in place, input kept, no navigation, nothing written.
+    const urlBefore = page.url();
+    const alert = dlg.getByRole('alert');
+    await expect(alert).toBeVisible();
+    await expect(alert).toContainText(/session has ended/i);
+    await expect(alert).toContainText(/nothing was saved/i);
+    await expect(dlg.getByLabel('Title')).toHaveValue(act);
+    expect(page.url()).toBe(urlBefore);
+    await page.goto(`/matrix/0?goal=${id}`);
+    await expect(page).toHaveURL(/\/signin/);
+
+    // Nothing was written: sign back in as the same user and look for the action.
+    await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Password').fill('correct-horse-battery');
+    await page.getByRole('button', { name: /sign in/i }).click();
+    await page.waitForURL((u) => !u.pathname.startsWith('/signin'));
+    await page.goto(`/matrix/0?goal=${id}`);
+    await expect(page.getByRole('button', { name: 'Add action 1 of 8' })).toBeVisible();
+    await expect(page.getByText(act)).toHaveCount(0);
+  });
+
+  test('10. forged session cookie (valid user id, bad signature) is not accepted', async ({ page, context, baseURL }) => {
+    await signUp(page);
+    const secret = `Forgery target ${uid()}`;
+    await createGoal(page, secret);
+    const cookie = (await context.cookies()).find((c) => c.name === 'harada_dev_session');
+    expect(cookie, 'dev session cookie present').toBeTruthy();
+    const [userId] = cookie!.value.split('.');
+    await context.clearCookies();
+    // Same user id, signature that was never issued by the server.
+    await context.addCookies([{ name: 'harada_dev_session', value: `${userId}.${'0'.repeat(64)}`, url: baseURL! }]);
+    for (const path of ['/today', '/goal', '/matrix']) {
+      await page.goto(path);
+      await expect(page, `${path} must not open with a forged cookie`).toHaveURL(/\/signin/);
+      await expect(page.locator('body')).not.toContainText(secret);
+    }
+  });
+  test('11. text typed before hydration is saved, not wiped (slow phone / slow network)', async ({ page, context }) => {
+    await signUp(page);
+    await createGoal(page, `Hydration goal ${uid()}`);
+    const id = await openMatrix(page);
+
+    // A second tab in the same session, with the app's JS held back so the user can type into the
+    // server-rendered form before React hydrates it.
+    const slow = await context.newPage();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    await slow.route('**/_next/static/chunks/**', async (route) => { await gate; await route.continue(); });
+    await slow.goto(`/matrix/0?goal=${id}`, { waitUntil: 'domcontentloaded' });
+    const title = `Typed early ${uid()}`;
+    await slow.getByLabel('Key area title').fill(title);
+    release();
+    await waitHydrated(slow.getByRole('button', { name: 'Create key area' }));
+    // The DOM keeps showing the text either way; what matters is whether React captured it.
+    await slow.getByRole('button', { name: 'Create key area' }).click();
+    await expect(slow.getByRole('heading', { level: 1, name: title }), 'text typed before hydration must be saved').toBeVisible();
+    await slow.close();
   });
 });

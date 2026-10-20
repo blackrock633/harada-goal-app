@@ -86,11 +86,16 @@ if [ -z "${SKIP_E2E:-}" ]; then
     # 2xx, or a redirect (e.g. / -> /signin when signed out); 5xx and 4xx fail.
     case "$code" in 2??|30[1278]) SUMMARY+=("PASS  GET $path -> $code");; *) SUMMARY+=("FAIL  GET $path -> $code");; esac
   done
-  # Uses system Chrome until `npx playwright install chromium` has been run.
+  # Chrome via the system install; WebKit via Playwright's own build.
   CFG="$OUT/pw-$STAMP.config.mjs"
   cat >"$CFG" <<EOF
 export default { testDir: '$QA_ROOT/tests/e2e', workers: 1, reporter: [['list']], timeout: 90000, expect: { timeout: 10000 },
-  outputDir: '$OUT/pw-$STAMP', use: { baseURL: 'http://localhost:$PORT', channel: 'chrome' } };
+  outputDir: '$OUT/pw-$STAMP', use: { baseURL: 'http://localhost:$PORT' },
+  projects: [
+    { name: 'chrome', use: { channel: 'chrome' } },
+    // Safari's engine with an iPhone UA (needs: npx playwright install webkit). Not a real device.
+    { name: 'webkit-iphone', use: { browserName: 'webkit', deviceScaleFactor: 3, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' } },
+  ] };
 EOF
   # Run from QA_ROOT so the specs and the runner share one @playwright/test install.
   gate e2e bash -c "cd '$QA_ROOT' && npx playwright test -c '$CFG'"

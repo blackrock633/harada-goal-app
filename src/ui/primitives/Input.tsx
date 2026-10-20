@@ -3,15 +3,17 @@
 import * as React from 'react';
 import { clsx } from 'clsx';
 import { useField } from './Field';
+import { useAdoptPrehydrationValue } from './useAdoptPrehydrationValue';
 
 export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, ...props }, ref) => {
     const field = useField();
+    const refCb = useAdoptPrehydrationValue(ref, props.value, props.onChange);
     return (
       <input
-        ref={ref}
+        ref={refCb}
         id={field?.id}
         aria-invalid={field?.isInvalid}
         aria-describedby={field?.describedBy}
@@ -36,19 +38,21 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
     const field = useField();
     const [uncontrolledLength, setLength] = React.useState(() => String(props.defaultValue ?? '').length);
     const length = props.value !== undefined ? String(props.value).length : uncontrolledLength;
-    
+    const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setLength(e.target.value.length);
+      onChange?.(e);
+    };
+    const refCb = useAdoptPrehydrationValue(ref, props.value, handleChange);
+
     return (
       <div className="relative">
         <textarea
-          ref={ref}
+          ref={refCb}
           id={field?.id}
           aria-invalid={field?.isInvalid}
           aria-describedby={field?.describedBy}
           maxLength={maxLength}
-          onChange={(e) => {
-            setLength(e.target.value.length);
-            onChange?.(e);
-          }}
+          onChange={handleChange}
           className={clsx(
             'flex min-h-[80px] w-full rounded-[var(--radius-sm)] border bg-surface px-3 py-2 text-base sm:text-sm text-ink placeholder:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50',
             field?.isInvalid ? 'border-danger' : 'border-rule-input',
@@ -72,9 +76,10 @@ export type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement>;
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, ...props }, ref) => {
     const field = useField();
+    const refCb = useAdoptPrehydrationValue(ref, props.value, props.onChange);
     return (
       <select
-        ref={ref}
+        ref={refCb}
         id={field?.id}
         aria-invalid={field?.isInvalid}
         aria-describedby={field?.describedBy}
@@ -93,10 +98,11 @@ Select.displayName = 'Select';
 export const DateInput = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, ...props }, ref) => {
     const field = useField();
+    const refCb = useAdoptPrehydrationValue(ref, props.value, props.onChange);
     return (
       <input
         type="date"
-        ref={ref}
+        ref={refCb}
         id={field?.id}
         aria-invalid={field?.isInvalid}
         aria-describedby={field?.describedBy}
