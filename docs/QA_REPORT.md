@@ -31,6 +31,8 @@ Chromium emulation (360×640, 390×844); WebKit/Safari is NOT TESTED.
 | vitest (all of src + tests/integration) | **VERIFIED 490/490** | JSON reporter rerun, 4 workers. The first run lost 4 workers ("Worker exited unexpectedly"; 317 of 490 ran). Not reproduced; likely the concurrent kill of another session's hung vitest. The count guard now fails any run where tests didn't execute |
 | routes | VERIFIED | `/` → 307 (signin redirect), `/styleguide` 200, `/api/health` 200 |
 | e2e journeys 1–8 + 6b | **VERIFIED 9/9** | dev auth, fresh PGlite, Chrome 390×844 |
+| e2e #10 forged session cookie | **VERIFIED** | real user id + bad HMAC → `/today`, `/goal`, `/matrix` redirect to signin, no data shown |
+| e2e #9 session ends mid-edit | **FAILED (AUTH-01)** | wrong message; data safety VERIFIED (input kept, nothing written) |
 | e2e mobile shell | **VERIFIED 15/15** | axe, touch targets, overflow, focus, safe area at 360/390 px |
 | Matrix / metrics / data integrity / RLS adversarial | **VERIFIED** 5 · 11 · 21 · 81 + 1 accepted (H4) | `tests/integration` |
 | RLS branch suite | VERIFIED 63/63 | in the vitest total |
@@ -45,6 +47,8 @@ Owner: **D** = data/backend orchestrator · **F** = frontend orchestrator · **Q
 
 | ID | P | Owner | Where | Repro → expected / actual | Fix | Test |
 |---|---|---|---|---|---|---|
+| AUTH-01 | P2 | F | `src/middleware.ts:51` | Session cookie lost mid-edit → save shows "Something went wrong… try again" instead of "Your session has ended… nothing was saved". Middleware 307-redirects the server-action POST, the browser re-POSTs it to `/signin`, and the client gets an unexpected payload. Retrying can never succeed. Data safety VERIFIED: input kept, nothing written, next load → signin | Don't redirect requests with a `next-action` header (or non-GET); `runAuthed` already returns UNAUTHENTICATED | e2e #9 (fails until fixed) |
+| AUTH-02 | P3 | F | UNAUTHENTICATED UX | The message has no "Sign in" action; no return-to after sign-in (reported by F) | Inline sign-in link with `?next=` | — |
 | INT-02 | P1 → FIXED f703e23 | F | `src/domain/*` uses `.js` import specifiers (e.g. `./errors.js`) | `next dev`: every page that imports the domain failed with "Can't resolve './errors.js'". Vitest/tsc resolve these; webpack didn't. Found by F | webpack `resolve.extensionAlias {'.js': ['.ts','.tsx','.js']}` in `next.config.ts` (or drop the `.js` specifiers) | journeys 1–8 on 07fd5e9 load domain-backed pages |
 | INT-01 | **P1 → FIXED 07fd5e9** | F | ui/integration `477ca3f` | Branch lacks data/supabase `97c845e` (grants hardening, dev-auth allow-list, routine-only trigger) — merging it to main as-is would ship H1/H2 | Merge data/supabase into ui/integration; QA re-verifies | branch ancestry check |
 | H1 | **P2 → FIXED 97c845e (verified)** | D | `supabase/migrations/20261019120000_harada_schema.sql:271-279`, `…_daily_focus.sql:19-20` | As user B, `truncate table goals cascade` → expected permission denied / **succeeds and wipes every tenant** (TRUNCATE ignores RLS). Also TRIGGER/REFERENCES granted, the profiles column grant is ineffective, and there are unneeded INSERT/UPDATE/DELETE grants. P2 rather than P0 because PostgREST cannot TRUNCATE and the app runs only fixed SQL: no exploit path today, catastrophic if one appears. Verified on the shim only. | `revoke all … from anon, authenticated` + revoke the default privileges, then re-grant exactly | `rls-holes` ×24 |
@@ -125,7 +129,7 @@ iOS Safari or a device; the keyboard is simulated by viewport resize. Session *e
 **Verdict: NOT releasable yet. Engineering gates on main are green** (tsc 0, 490/490 tests, 9/9 journeys, 15/15 mobile
 checks, no open P0/P1). The remaining blockers are verification-environment gaps, not known defects:
 (1) the journeys against a **real Supabase project**, plus the `\dp public.*` grant check; (2) a **real phone** or at least
-WebKit/iOS Safari; (3) **session expiry** (not just sign-out); (4) the native-vs-web platform question. Plus lint
+WebKit/iOS Safari; (3) real session **expiry** under Supabase (the local proxy, #9, found AUTH-01); (4) the native-vs-web platform question. Plus lint
 (scaffold scripts) and merging the docs-only `0121743`.
 
 ## 7. Roadmap
