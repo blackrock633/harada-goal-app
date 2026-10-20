@@ -4,6 +4,7 @@ import * as React from 'react';
 import type { ActionDTO } from '@/application/dto';
 import { addActionSchema, updateActionSchema } from '@/application/schemas';
 import { LIMITS } from '@/domain/limits';
+import { newClientId } from '@/ui/errors';
 import type { MatrixMutations } from '@/ui/actions';
 import { Button, DateInput, DialogContent, DialogRoot, Field, Input, Select, Textarea } from '@/ui/primitives';
 import {
@@ -15,9 +16,10 @@ import {
   stateToSchedule,
   zodFieldErrors,
 } from './form-utils';
+import { FormError, toFailure, type FormFailure } from './FormError';
 
 export type ActionEditorMode =
-  | { type: 'add'; outcomeId: string; heading?: string }
+  | { type: 'add'; outcomeId: string; /** Action slot 0..7 being filled. */ position: number; heading?: string }
   | { type: 'edit'; action: ActionDTO };
 
 export interface ActionEditorSheetProps {
@@ -27,6 +29,8 @@ export interface ActionEditorSheetProps {
   mutations: Pick<MatrixMutations, 'addAction' | 'updateAction'>;
   /** Called after the server accepted the change (before the sheet closes). */
   onSaved?: (action: ActionDTO) => void;
+  /** Called from the CONFLICT banner; the page should refetch the latest data. */
+  onReloadLatest?: () => void;
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
@@ -36,7 +40,7 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
  * Uses dvh units so the sheet shrinks with the on-screen keyboard; the footer sits inside the
  * scrolling container (sticky), never fixed beneath the keyboard.
  */
-export function ActionEditorSheet({ open, onOpenChange, mode, mutations, onSaved }: ActionEditorSheetProps) {
+export function ActionEditorSheet({ open, onOpenChange, mode, mutations, onSaved, onReloadLatest }: ActionEditorSheetProps) {
   const pendingRef = React.useRef(false);
   const guardedChange = (next: boolean) => {
     if (!next && pendingRef.current) return; // don't dismiss mid-save
@@ -51,7 +55,9 @@ export function ActionEditorSheet({ open, onOpenChange, mode, mutations, onSaved
         className="max-h-[92dvh] w-[calc(100%-1rem)] max-w-lg overflow-x-hidden overflow-y-auto overscroll-contain p-4 sm:p-6"
       >
         <ActionForm
+          key={mode.type === 'add' ? `add:${mode.outcomeId}:${mode.position}` : `edit:${mode.action.id}`}
           mode={mode}
+          onReloadLatest={onReloadLatest}
           mutations={mutations}
           pendingRef={pendingRef}
           onCancel={() => guardedChange(false)}
@@ -71,8 +77,10 @@ function ActionForm({
   pendingRef,
   onCancel,
   onDone,
+  onReloadLatest,
 }: {
   mode: ActionEditorMode;
+  onReloadLatest?: () => void;
   mutations: ActionEditorSheetProps['mutations'];
   pendingRef: React.MutableRefObject<boolean>;
   onCancel: () => void;
@@ -85,7 +93,9 @@ function ActionForm({
   const [dueDate, setDueDate] = React.useState(initial?.dueDate ?? '');
   const [sched, setSched] = React.useState<ScheduleState>(scheduleToState(initial?.schedule));
   const [errors, setErrors] = React.useState<FieldErrors>({});
-  const [formError, setFormError] = React.useState<string | null>(null);
+  const [formError, setFormError] = React.useState<FormFailure | null>(null);
+  // One client id per logical create: reused across retries, renewed only after success.
+  const clientId = React.useRef<string | null>(null);
   const [pending, setPending] = React.useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -99,9 +109,16 @@ function ActionForm({
     };
     const parsed =
       mode.type === 'add'
-        ? addActionSchema.safeParse({ outcomeId: mode.outcomeId, kind, ...common })
+        ? addActionSchema.safeParse({
+            id: (clientId.current ??= newClientId()),
+            outcomeId: mode.outcomeId,
+            position: mode.position,
+            kind,
+            ...common,
+          })
         : updateActionSchema.safeParse({
             actionId: mode.action.id,
+            expectedUpdatedAt: mode.action.updatedAt,
             ...(kind !== mode.action.kind ? { kind } : {}),
             ...common,
           });
@@ -120,15 +137,16 @@ function ActionForm({
           ? await mutations.addAction(parsed.data as Parameters<typeof mutations.addAction>[0])
           : await mutations.updateAction(parsed.data as Parameters<typeof mutations.updateAction>[0]);
       if (res.ok) {
+        clientId.current = null;
         pendingRef.current = false;
         setPending(false);
         onDone(res.data);
         return;
       }
       setErrors(serverFieldErrors(res.error.fieldErrors));
-      setFormError(res.error.message);
+      setFormError(toFailure(res.error));
     } catch {
-      setFormError('Something went wrong. Your changes are still here; try again.');
+      setFormError({ message: 'Something went wrong. Your changes are still here; try again.', conflict: false });
     }
     pendingRef.current = false;
     setPending(false);
@@ -139,11 +157,7 @@ function ActionForm({
 
   return (
     <form onSubmit={submit} onFocus={(e) => scrollFieldIntoView(e.target)} noValidate className="min-w-0 space-y-4" aria-busy={pending}>
-      {formError && (
-        <p role="alert" className="rounded-[var(--radius-sm)] border border-danger/30 bg-danger/10 p-2 text-sm text-danger [overflow-wrap:anywhere]">
-          {formError}
-        </p>
-      )}
+      {formError && <FormError failure={formError} onReloadLatest={onReloadLatest} />}
       <Field label="Title" error={errors.title} hint={`${title.length}/${LIMITS.actionTitle}`}>
         <Input value={title} onChange={(e) => setTitle(e.target.value)} autoComplete="off" enterKeyHint="done" />
       </Field>

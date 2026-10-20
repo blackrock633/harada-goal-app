@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ChevronLeft, ChevronRight, Pencil, Plus } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { ActionDTO, GoalDetailDTO, OutcomeFieldsDTO } from '@/application/dto';
+import { errorMessage } from '@/ui/errors';
 import type { ExecutionMutations, MatrixMutations } from '@/ui/actions';
 import { describeSchedule, formatLocalDate, relativeDay } from '@/ui/format';
 import { routes } from '@/ui/routes';
@@ -25,18 +26,20 @@ export interface KeyAreaViewProps {
   onError: (message: string) => void;
   /** Called after any successful mutation so the page can refresh. */
   onChanged?: () => void;
+  /** Wired by the page (router.refresh); offered on CONFLICT. */
+  onReloadLatest?: () => void;
 }
 
 const wrap = (n: number) => ((Math.trunc(n) % AREA_COUNT) + AREA_COUNT) % AREA_COUNT;
 
-export function KeyAreaView({ goal, position, today, matrix, execution, onError, onChanged }: KeyAreaViewProps) {
+export function KeyAreaView({ goal, position, today, matrix, execution, onError, onChanged, onReloadLatest }: KeyAreaViewProps) {
   const pos = wrap(Number.isFinite(position) ? position : 0);
   const model = React.useMemo(() => buildMatrix(goal), [goal]);
   const area = model.areas[pos]!;
   const outcome = area.outcome;
 
   const [overrides, setOverrides] = React.useState<Record<string, ActionDTO>>({});
-  const [outcomeOverride, setOutcomeOverride] = React.useState<Pick<OutcomeFieldsDTO, 'id' | 'title' | 'description'> | null>(null);
+  const [outcomeOverride, setOutcomeOverride] = React.useState<Pick<OutcomeFieldsDTO, 'id' | 'title' | 'description' | 'updatedAt'> | null>(null);
   const inFlight = React.useRef(new Set<string>());
   const [busy, setBusy] = React.useState<Set<string>>(new Set());
   const [editing, setEditing] = React.useState(false);
@@ -96,7 +99,7 @@ export function KeyAreaView({ goal, position, today, matrix, execution, onError,
         onChanged?.();
       } else {
         restore();
-        onError(res.error.message);
+        onError(errorMessage(res.error));
       }
     } catch {
       restore();
@@ -171,7 +174,8 @@ export function KeyAreaView({ goal, position, today, matrix, execution, onError,
           <p className="mb-3 text-sm text-ink-muted">Name one outcome that moves the goal forward. You can fill the other key areas later.</p>
           <KeyAreaEditor
             key={resetKey}
-            mode={{ type: 'create', goalId: goal.id }}
+            mode={{ type: 'create', goalId: goal.id, position: pos }}
+            onReloadLatest={onReloadLatest}
             mutations={matrix}
             onDirtyChange={setAreaDirty}
             onDone={() => {
@@ -186,7 +190,8 @@ export function KeyAreaView({ goal, position, today, matrix, execution, onError,
             {editing ? (
               <KeyAreaEditor
                 key={resetKey}
-                mode={{ type: 'edit', outcome: { id: outcome.id, title: title ?? '', description } }}
+                mode={{ type: 'edit', outcome: { id: outcome.id, title: title ?? '', description, updatedAt: outcomeOverride?.updatedAt ?? outcome.updatedAt } }}
+                onReloadLatest={onReloadLatest}
                 mutations={matrix}
                 onDirtyChange={setAreaDirty}
                 onCancel={() => {
@@ -195,7 +200,7 @@ export function KeyAreaView({ goal, position, today, matrix, execution, onError,
                   setBlocked(false);
                 }}
                 onDone={(o) => {
-                  setOutcomeOverride({ id: o.id, title: o.title, description: o.description });
+                  setOutcomeOverride({ id: o.id, title: o.title, description: o.description, updatedAt: o.updatedAt });
                   setEditing(false);
                   setAreaDirty(false);
                   onChanged?.();
@@ -209,6 +214,11 @@ export function KeyAreaView({ goal, position, today, matrix, execution, onError,
                   <p className="mt-2 text-xs tabular-nums text-ink-muted">
                     {area.actionCount} of {SLOT_COUNT} action slots planned · {doneLabel(area.doneCount, area.actionCount)}
                   </p>
+                  {outcome.measure && (
+                    <p className="mt-1 text-xs tabular-nums text-ink-muted">
+                      Measure: {outcome.measure.current} / {outcome.measure.target} {outcome.measure.unit}
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -231,7 +241,7 @@ export function KeyAreaView({ goal, position, today, matrix, execution, onError,
                     <button
                       type="button"
                       onClick={() =>
-                        setSheet({ open: true, mode: { type: 'add', outcomeId: outcome.id, heading: `${title}: action ${slot.position + 1} of ${SLOT_COUNT}` } })
+                        setSheet({ open: true, mode: { type: 'add', outcomeId: outcome.id, position: slot.position, heading: `${title}: action ${slot.position + 1} of ${SLOT_COUNT}` } })
                       }
                       aria-label={`Add action ${slot.position + 1} of ${SLOT_COUNT}`}
                       className="flex min-h-[48px] w-full items-center gap-2 rounded-[var(--radius-sm)] border border-dashed border-rule-strong px-3 text-sm text-ink-muted hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -280,7 +290,12 @@ export function KeyAreaView({ goal, position, today, matrix, execution, onError,
           onOpenChange={(open) => setSheet((s) => (s ? { ...s, open } : s))}
           mode={sheet.mode}
           mutations={matrix}
-          onSaved={() => onChanged?.()}
+          onReloadLatest={onReloadLatest}
+          onSaved={(saved) => {
+            // Keep the fresh updatedAt so a second edit before the refresh isn't stale.
+            if (sheet.mode.type === 'edit' && saved?.id) setOverrides((o) => ({ ...o, [saved.id]: saved }));
+            onChanged?.();
+          }}
         />
       )}
     </div>

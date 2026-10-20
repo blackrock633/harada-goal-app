@@ -42,26 +42,40 @@ describe('buildMatrix', () => {
     expect(m.areas[2]!.doneCount).toBe(1);
   });
 
-  it('does not crash on duplicate, null or out-of-range positions', () => {
+  it('reads goal.matrix.outcomes / outcome.slots by index, with gaps', () => {
     const goal = mkGoal([
-      mkOutcome(0, 'A', [
-        mkAction({ n: 1, position: 3, title: 'first' }),
-        mkAction({ n: 2, position: 3, title: 'dupe' }),
-        mkAction({ n: 3, position: 9 }),
-        mkAction({ n: 4, position: -1 }),
-        mkAction({ n: 5, position: null }),
-        mkAction({ n: 6, position: 1.5 }),
-      ]),
-      mkOutcome(0, 'A-dupe'),
-      mkOutcome(8, 'out of range'),
-      mkOutcome(3, 'null pos'),
+      mkOutcome(1, 'B', [mkAction({ n: 1, position: 6, title: 'late' }), mkAction({ n: 2, position: 2, title: 'mid' })]),
+      mkOutcome(6, 'G', [mkAction({ n: 3, position: 0, title: 'x', completedAt: '2026-02-01T00:00:00.000Z' })]),
     ]);
-    goal.outcomes[3]!.position = null;
+    // The dense lists are deliberately scrambled: only the positioned shape matters.
+    goal.outcomes.reverse();
+    goal.outcomes.forEach((o) => o.actions.reverse());
     const m = buildMatrix(goal);
-    expect(m.areas[0]!.outcome?.title).toBe('A');
-    expect(m.areas[0]!.slots[3]!.action?.title).toBe('first');
-    expect(m.filledActions).toBe(1);
-    expect(m.filledAreas).toBe(1);
+    expect(m.areas[0]!.outcome).toBeNull();
+    expect(m.areas[1]!.outcome?.title).toBe('B');
+    expect(m.areas[6]!.outcome?.title).toBe('G');
+    expect(m.areas[1]!.slots[6]!.action?.title).toBe('late');
+    expect(m.areas[1]!.slots[2]!.action?.title).toBe('mid');
+    expect(m.areas[1]!.slots[0]!.action).toBeNull();
+    expect(m.filledAreas).toBe(2);
+    expect(m.filledActions).toBe(3);
+    expect(m.completedActions).toBe(1);
+    expect(m.filledPositions).toBe(5);
+  });
+
+  it('is defensive about missing or short arrays', () => {
+    const goal = mkGoal([mkOutcome(0, 'A', [mkAction({ n: 1, position: 1 })]), mkOutcome(2, 'C')]);
+    goal.matrix.outcomes = goal.matrix.outcomes.slice(0, 1); // short: area 2 vanishes
+    goal.matrix.outcomes[0]!.slots = [null, goal.matrix.outcomes[0]!.slots[1]!]; // short slots
+    const m = buildMatrix(goal);
+    expect(m.areas).toHaveLength(8);
+    expect(m.areas[0]!.slots).toHaveLength(8);
+    expect(m.areas[0]!.slots[1]!.action).not.toBeNull();
+    expect(m.areas[2]!.outcome).toBeNull();
+    expect(m.filledPositions).toBe(2);
+    const bare = mkGoal([]);
+    delete (bare as { matrix?: unknown }).matrix;
+    expect(buildMatrix(bare).filledPositions).toBe(0);
   });
 });
 

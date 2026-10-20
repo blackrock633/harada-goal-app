@@ -30,6 +30,9 @@ export function mkAction(over: Partial<ActionDTO> & { n: number }): ActionDTO {
 
 export function mkOutcome(position: number, title: string, actions: ActionDTO[] = []): OutcomeDTO {
   const id = uid(100 + position);
+  const placed = actions.map((a) => ({ ...a, outcomeId: id }));
+  const slots: (ActionDTO | null)[] = Array.from({ length: 8 }, () => null);
+  for (const a of placed) if (a.position !== null && a.position >= 0 && a.position < 8) slots[a.position] = a;
   return {
     id,
     goalId: uid(1),
@@ -40,16 +43,21 @@ export function mkOutcome(position: number, title: string, actions: ActionDTO[] 
     archivedAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
-    progress: null,
-    actions: actions.map((a) => ({ ...a, outcomeId: id })),
+    execution: null,
+    attainment: null,
+    actions: placed,
+    slots,
   };
 }
 
 export function mkGoal(outcomes: OutcomeDTO[], title = 'Run a marathon'): GoalDetailDTO {
+  const cells: (OutcomeDTO | null)[] = Array.from({ length: 8 }, () => null);
+  for (const o of outcomes) if (o.position !== null && o.position >= 0 && o.position < 8) cells[o.position] = o;
   return {
     id: uid(1),
     title,
     vision: '',
+    successCriteria: '',
     targetDate: null,
     status: 'active',
     purpose: { selfTangible: '', selfIntangible: '', othersTangible: '', othersIntangible: '' },
@@ -58,9 +66,17 @@ export function mkGoal(outcomes: OutcomeDTO[], title = 'Run a marathon'): GoalDe
     archivedAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
-    progress: null,
+    metrics: {
+      planning: { filled: 0, total: 72, ratio: 0 },
+      execution: null,
+      completedTasks: 0,
+      totalTasks: 0,
+      routineCount: 0,
+      attainment: null,
+    },
     pace: 'unknown',
     outcomes,
+    matrix: { outcomes: cells },
     archivedOutcomes: [],
     archivedActions: [],
   };

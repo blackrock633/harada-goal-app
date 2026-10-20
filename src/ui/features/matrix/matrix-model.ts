@@ -59,32 +59,28 @@ export interface MatrixModel {
   totalPositions: number;
 }
 
-const validPos = (p: unknown, max: number): p is number =>
-  typeof p === 'number' && Number.isInteger(p) && p >= 0 && p < max;
-
+/**
+ * Reads the server's canonical positioned shape: `goal.matrix.outcomes[i]` is the key area at
+ * position i (or null) and `outcome.slots[j]` the action at position j (or null). Gaps are
+ * normal. Missing or short arrays are treated as empty cells; extra entries are ignored.
+ */
 export function buildMatrix(goal: GoalDetailDTO): MatrixModel {
-  const areas: MatrixArea[] = Array.from({ length: AREA_COUNT }, (_, position) => ({
-    position,
-    outcome: null,
-    slots: Array.from({ length: SLOT_COUNT }, (_, p) => ({ position: p, action: null })),
-    actionCount: 0,
-    doneCount: 0,
-  }));
-  // Bad data never crashes: out-of-range/null positions are dropped, first one wins on duplicates.
-  for (const outcome of goal.outcomes) {
-    if (!validPos(outcome.position, AREA_COUNT)) continue;
-    const area = areas[outcome.position]!;
-    if (area.outcome) continue;
-    area.outcome = outcome;
-    for (const action of outcome.actions) {
-      if (!validPos(action.position, SLOT_COUNT)) continue;
-      const slot = area.slots[action.position]!;
-      if (slot.action) continue;
-      slot.action = action;
-      area.actionCount += 1;
-      if (action.kind === 'task' && action.completedAt) area.doneCount += 1;
-    }
-  }
+  const outcomes = goal.matrix?.outcomes ?? [];
+  const areas: MatrixArea[] = Array.from({ length: AREA_COUNT }, (_, position) => {
+    const outcome = outcomes[position] ?? null;
+    const slots: MatrixSlot[] = Array.from({ length: SLOT_COUNT }, (_, p) => ({
+      position: p,
+      action: outcome?.slots?.[p] ?? null,
+    }));
+    const placed = slots.filter((s) => s.action);
+    return {
+      position,
+      outcome,
+      slots,
+      actionCount: placed.length,
+      doneCount: placed.filter((s) => s.action!.kind === 'task' && s.action!.completedAt).length,
+    };
+  });
   const filledAreas = areas.filter((a) => a.outcome).length;
   const filledActions = areas.reduce((n, a) => n + a.actionCount, 0);
   const completedActions = areas.reduce((n, a) => n + a.doneCount, 0);

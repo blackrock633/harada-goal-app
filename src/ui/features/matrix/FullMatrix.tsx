@@ -21,6 +21,8 @@ export interface FullMatrixProps {
   goal: GoalDetailDTO;
   mutations: Pick<MatrixMutations, 'addAction' | 'updateAction'>;
   onActionSaved?: (action: ActionDTO) => void;
+  /** Wired by the page (router.refresh); offered on CONFLICT. */
+  onReloadLatest?: () => void;
   /** Visibility (e.g. "hidden lg:block") is the page's responsibility. */
   className?: string;
 }
@@ -33,7 +35,7 @@ const key = (r: number, c: number) => `${r}-${c}`;
  * Roving tabindex; arrows/Home/End move, Enter/Space activates (links navigate, action cells
  * open the editor sheet).
  */
-export function FullMatrix({ goal, mutations, onActionSaved, className }: FullMatrixProps) {
+export function FullMatrix({ goal, mutations, onActionSaved, onReloadLatest, className }: FullMatrixProps) {
   const m = React.useMemo(() => buildMatrix(goal), [goal]);
   const [focus, setFocus] = React.useState<{ row: number; col: number }>(GOAL_COORDS);
   const [activeArea, setActiveArea] = React.useState<number | null>(null);
@@ -70,7 +72,7 @@ export function FullMatrix({ goal, mutations, onActionSaved, className }: FullMa
     setEditor(
       a
         ? { type: 'edit', action: a }
-        : { type: 'add', outcomeId: area.outcome.id, heading: `Key area ${area.position + 1}: ${area.outcome.title}` },
+        : { type: 'add', outcomeId: area.outcome.id, position, heading: `Key area ${area.position + 1}: ${area.outcome.title}` },
     );
     setOpen(true);
   }
@@ -194,6 +196,7 @@ export function FullMatrix({ goal, mutations, onActionSaved, className }: FullMa
           mode={editor}
           mutations={mutations}
           onSaved={onActionSaved}
+          onReloadLatest={onReloadLatest}
         />
       )}
     </div>

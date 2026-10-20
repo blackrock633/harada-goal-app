@@ -58,7 +58,7 @@ describe('KeyAreaView', () => {
     render(<KeyAreaView goal={sampleGoal()} position={2} today={TODAY} matrix={mat()} execution={e} onError={onError} />);
     const circle = screen.getByRole('button', { name: 'Buy shoes' });
     await user.click(circle);
-    await waitFor(() => expect(onError).toHaveBeenCalledWith('Server exploded'));
+    await waitFor(() => expect(onError).toHaveBeenCalledWith('Something went wrong and nothing was saved. Please try again.'));
     expect(circle).toHaveAttribute('aria-pressed', 'false');
     expect(circle).toBeEnabled();
   });
@@ -110,6 +110,42 @@ describe('KeyAreaView', () => {
     await user.click(screen.getByRole('button', { name: 'Add action 1 of 8' }));
     await user.type(await screen.findByLabelText('Title'), 'First step');
     await user.click(screen.getByRole('button', { name: 'Add action' }));
-    await waitFor(() => expect(m.addAction).toHaveBeenCalledWith(expect.objectContaining({ outcomeId: uid(100), title: 'First step', kind: 'task' })));
+    await waitFor(() => expect(m.addAction).toHaveBeenCalledWith(expect.objectContaining({ outcomeId: uid(100), position: 0, title: 'First step', kind: 'task' })));
+  });
+
+  it('passes the slot position when adding an action in a later empty slot', async () => {
+    const user = userEvent.setup();
+    const m = mat();
+    m.addAction.mockResolvedValue({ ok: true, data: {} });
+    render(<KeyAreaView goal={mkGoal([mkOutcome(0, 'Solo')])} position={0} today={TODAY} matrix={m} execution={exec()} onError={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: 'Add action 4 of 8' }));
+    await user.type(await screen.findByLabelText('Title'), 'Step');
+    await user.click(screen.getByRole('button', { name: 'Add action' }));
+    await waitFor(() => expect(m.addAction).toHaveBeenCalledWith(expect.objectContaining({ position: 3 })));
+  });
+
+  it('passes the area position when creating a key area, and Reload latest on CONFLICT', async () => {
+    const user = userEvent.setup();
+    const m = mat();
+    const onReloadLatest = vi.fn();
+    m.addOutcome.mockResolvedValue({ ok: false, error: { code: 'CONFLICT', message: 'Slot taken' } });
+    render(<KeyAreaView goal={mkGoal([])} position={5} today={TODAY} matrix={m} execution={exec()} onError={vi.fn()} onReloadLatest={onReloadLatest} />);
+    await user.type(screen.getByLabelText('Key area title'), 'Sleep');
+    await user.click(screen.getByRole('button', { name: 'Create key area' }));
+    await user.click(await screen.findByRole('button', { name: 'Reload latest' }));
+    expect(m.addOutcome).toHaveBeenCalledWith(expect.objectContaining({ position: 5, title: 'Sleep' }));
+    expect(screen.getByLabelText('Key area title')).toHaveValue('Sleep');
+    expect(onReloadLatest).toHaveBeenCalled();
+  });
+
+  it('passes expectedUpdatedAt when editing an action', async () => {
+    const user = userEvent.setup();
+    const m = mat();
+    m.updateAction.mockResolvedValue({ ok: true, data: {} });
+    render(<KeyAreaView goal={sampleGoal()} position={2} today={TODAY} matrix={m} execution={exec()} onError={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: /Edit action 5 of 8/ }));
+    await user.type(await screen.findByLabelText('Notes'), 'n');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(m.updateAction).toHaveBeenCalledWith(expect.objectContaining({ expectedUpdatedAt: '2026-01-01T00:00:00.000Z' })));
   });
 });
