@@ -5,6 +5,7 @@ import type { GoalFieldsDTO } from '@/application/dto';
 import type { GoalMutations } from '@/ui/actions';
 import { Button } from '@/ui/primitives';
 import { errorMessage } from '@/ui/errors';
+import { trackWrite } from '@/ui/pending-writes';
 
 export function ActivateGoalButton({
   goalId,
@@ -22,7 +23,7 @@ export function ActivateGoalButton({
     setPending(true);
     setError('');
     try {
-      const res = await activateGoal({ goalId });
+      const res = await trackWrite(activateGoal({ goalId }));
       if (res.ok) onActivated?.(res.data);
       else setError(errorMessage(res.error));
     } catch {

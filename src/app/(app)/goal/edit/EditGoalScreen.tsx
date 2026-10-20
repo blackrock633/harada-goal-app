@@ -6,6 +6,9 @@ import { createGoalAction, updateGoalAction } from '@/app/actions/goals';
 import { useToast } from '@/ui/primitives';
 import { GoalForm } from '@/ui/features/goal';
 import { routes } from '@/ui/routes';
+import { guardMutations } from '@/ui/pending-writes';
+
+const mutations = guardMutations({ createGoal: createGoalAction, updateGoal: updateGoalAction });
 
 export function EditGoalScreen({ goal, today }: { goal: GoalFieldsDTO; today: string }) {
   const router = useRouter();
@@ -15,7 +18,7 @@ export function EditGoalScreen({ goal, today }: { goal: GoalFieldsDTO; today: st
       mode="edit"
       goal={goal}
       today={today}
-      mutations={{ createGoal: createGoalAction, updateGoal: updateGoalAction }}
+      mutations={mutations}
       cancelHref={routes.goal(goal.id)}
       onReloadLatest={() => router.refresh()}
       onSaved={(saved) => {

@@ -17,20 +17,22 @@ import {
   uncheckRoutineAction,
 } from '@/app/actions/execution';
 import { useToast } from '@/ui/primitives';
+import { guardMutations } from '@/ui/pending-writes';
 import { KeyAreaView } from '@/ui/features/matrix';
 
-const matrix = {
+const matrix = guardMutations({
   addOutcome: addOutcomeAction,
   updateOutcome: updateOutcomeAction,
   addAction: addActionAction,
   updateAction: updateActionAction,
-};
-const execution = {
+});
+const execution = guardMutations({
   completeAction: completeActionAction,
   reopenAction: reopenActionAction,
   checkRoutine: checkRoutineAction,
   uncheckRoutine: uncheckRoutineAction,
-};
+});
+const focus = guardMutations({ addToToday: addToTodayAction, removeFromToday: removeFromTodayAction });
 
 export function KeyAreaScreen({ goal, position, today }: { goal: GoalDetailDTO; position: number; today: string }) {
   const router = useRouter();
@@ -42,7 +44,7 @@ export function KeyAreaScreen({ goal, position, today }: { goal: GoalDetailDTO; 
       today={today}
       matrix={matrix}
       execution={execution}
-      focus={{ addToToday: addToTodayAction, removeFromToday: removeFromTodayAction }}
+      focus={focus}
       onError={(message) => toast({ type: 'error', title: "Couldn't save", description: message })}
       onReloadLatest={() => router.refresh()}
     />

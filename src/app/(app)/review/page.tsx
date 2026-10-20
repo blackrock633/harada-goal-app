@@ -3,9 +3,9 @@ import * as q from '@/application/queries';
 import { getDeps } from '@/infrastructure/container';
 import { requireCtx } from '@/app/lib/session';
 import { resolveFocusedGoal, unwrap } from '@/app/lib/focus';
-import { addReflectionAction } from '@/app/actions/review';
 import { Screen, ScreenHeader } from '@/ui/layout';
-import { ReflectionForm, ReviewView } from '@/ui/features/review';
+import { ReviewView } from '@/ui/features/review';
+import { ReflectionFormScreen } from './ReflectionFormScreen';
 
 export const metadata: Metadata = { title: 'Review' };
 
@@ -23,7 +23,7 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
     <Screen width="reading">
       <ScreenHeader eyebrow="Review" title={goal.title} />
       <ReviewView
-        reflectionForm={<ReflectionForm goalId={goal.id} today={ctx.today} addReflection={addReflectionAction} />}
+        reflectionForm={<ReflectionFormScreen goalId={goal.id} today={ctx.today} />}
         completedThisWeek={summary?.completedThisWeek ?? 0}
         outcomes={goal.outcomes}
         reflections={reflections}

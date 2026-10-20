@@ -10,19 +10,20 @@ import {
   uncheckRoutineAction,
 } from '@/app/actions/execution';
 import { useToast } from '@/ui/primitives';
+import { guardMutations } from '@/ui/pending-writes';
 import { TodayView } from '@/ui/features/today';
 
-const mutations = {
+const mutations = guardMutations({
   completeAction: completeActionAction,
   reopenAction: reopenActionAction,
   checkRoutine: checkRoutineAction,
   uncheckRoutine: uncheckRoutineAction,
-};
+});
 
-const focusMutations = {
+const focusMutations = guardMutations({
   addToToday: addToTodayAction,
   removeFromToday: removeFromTodayAction,
-};
+});
 
 export function TodayScreen({ data }: { data: TodayDTO }) {
   const { toast } = useToast();

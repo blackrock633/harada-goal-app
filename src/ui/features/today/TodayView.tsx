@@ -423,6 +423,11 @@ function Row({ item, today, checked, pending, onToggle, trailing }: RowProps) {
           {item.goalTitle} · {item.outcomeTitle}
         </span>
         <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          {pending && (
+            <span role="status" className="font-medium text-ink">
+              Saving…
+            </span>
+          )}
           {item.overdue && !checked && <span className="font-semibold text-danger">Overdue</span>}
           {action.dueDate && !routine && (
             <span className="text-ink-muted">Due {relativeDay(action.dueDate, today)}</span>
