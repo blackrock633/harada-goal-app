@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 
 import { MatrixOverview } from '@/features/matrix';
-import { RefreshScreen } from '@/screens/RefreshScreen';
 import { ErrorScreen, LoadingScreen } from '@/screens/queryState';
 import { useGoalScreen } from '@/screens/useGoalScreen';
 import { EmptyState, Screen } from '@/ui';
@@ -24,13 +23,13 @@ export default function MatrixScreen() {
   if (state.loading || !detail) return <LoadingScreen />;
 
   return (
-    <RefreshScreen refreshing={state.refreshing} onRefresh={state.refetch}>
+    <Screen refreshing={state.refreshing} onRefresh={state.refetch}>
       <MatrixOverview
         goal={detail}
         onOpenArea={(position) =>
           router.push({ pathname: '/matrix/[position]', params: { position: String(position), goal: detail.id } })
         }
       />
-    </RefreshScreen>
+    </Screen>
   );
 }

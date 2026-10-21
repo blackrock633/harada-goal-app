@@ -2,14 +2,15 @@ import { router } from 'expo-router';
 
 import { useMutations, useReadContext } from '@/data/hooks';
 import { GoalOnboarding } from '@/features/goal';
-import { RefreshScreen } from '@/screens/RefreshScreen';
 import { TEMPLATE_SUMMARIES } from '@/screens/templates';
+
+import { Screen } from '@/ui';
 
 export default function NewGoalScreen() {
   const mutations = useMutations();
   const ctx = useReadContext();
   return (
-    <RefreshScreen>
+    <Screen>
       <GoalOnboarding
         mutations={mutations}
         templates={TEMPLATE_SUMMARIES}
@@ -18,6 +19,6 @@ export default function NewGoalScreen() {
         onOpenMatrix={(goal) => router.replace({ pathname: '/matrix', params: { goal } })}
         onGoToToday={() => router.replace('/today')}
       />
-    </RefreshScreen>
+    </Screen>
   );
 }

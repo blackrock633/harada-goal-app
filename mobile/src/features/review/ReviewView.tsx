@@ -8,6 +8,9 @@ import { formatLocalDate } from '../today/format';
 import { ReflectionCard } from './ReflectionCard';
 
 export type ReviewViewProps = {
+  /** Pull-to-refresh, wired by the route to the query refetch. */
+  refreshing?: boolean;
+  onRefresh?: () => void;
   /** Slot for <ReflectionForm />. */
   reflectionForm: ReactNode;
   /** GoalSummaryDTO.completedThisWeek. */
@@ -46,11 +49,19 @@ export function buildTimeline(reflections: ReflectionDTO[], events: GoalEventDTO
   return groups;
 }
 
-export function ReviewView({ reflectionForm, completedThisWeek, outcomes, reflections, events }: ReviewViewProps) {
+export function ReviewView({
+  reflectionForm,
+  completedThisWeek,
+  outcomes,
+  reflections,
+  events,
+  refreshing,
+  onRefresh,
+}: ReviewViewProps) {
   const { colors, space } = useTheme();
   const groups = buildTimeline(reflections, events);
   return (
-    <Screen>
+    <Screen refreshing={refreshing} onRefresh={onRefresh}>
       <View style={{ gap: space[3] }}>
         <Text variant="heading">Reflect</Text>
         {reflectionForm}

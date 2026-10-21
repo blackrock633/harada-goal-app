@@ -15,6 +15,9 @@ export type TodayViewProps = {
   data: TodayDTO;
   mutations: ExecutionMutations;
   focusMutations: FocusMutations;
+  /** Pull-to-refresh, wired by the route to the query refetch. */
+  refreshing?: boolean;
+  onRefresh?: () => void;
   onError?: (message: string) => void;
   /** Row body press: open the key area that owns the action. */
   onOpenAction?: (goalId: string, outcomePosition: number) => void;
@@ -77,6 +80,8 @@ export function TodayView({
   data,
   mutations,
   focusMutations,
+  refreshing,
+  onRefresh,
   onError,
   onOpenAction,
   onOpenGoal,
@@ -193,7 +198,7 @@ export function TodayView({
   const allFocusDone = focus.every((i) => isDone(i.action));
 
   return (
-    <Screen>
+    <Screen refreshing={refreshing} onRefresh={onRefresh}>
       <View style={{ gap: space[1] }}>
         <Text variant="title">{formatLocalDate(data.today, 'long')}</Text>
         {hasRows ? (

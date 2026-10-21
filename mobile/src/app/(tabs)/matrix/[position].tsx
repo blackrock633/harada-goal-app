@@ -3,7 +3,6 @@ import { useState } from 'react';
 
 import { useMutations } from '@/data/hooks';
 import { KeyAreaView } from '@/features/matrix';
-import { RefreshScreen } from '@/screens/RefreshScreen';
 import { ErrorScreen, LoadingScreen } from '@/screens/queryState';
 import { useGoalScreen } from '@/screens/useGoalScreen';
 import { EmptyState, ErrorState, Screen, Text } from '@/ui';
@@ -51,7 +50,7 @@ function KeyArea({ index }: { index: number }) {
   if (state.loading || !detail || !today) return <LoadingScreen />;
 
   return (
-    <RefreshScreen refreshing={state.refreshing} onRefresh={state.refetch}>
+    <Screen refreshing={state.refreshing} onRefresh={state.refetch}>
       {title}
       {banner ? (
         <Text tone="danger" accessibilityRole="alert">
@@ -71,6 +70,6 @@ function KeyArea({ index }: { index: number }) {
         onChanged={() => setBanner(null)}
         onReloadLatest={refetchDetail}
       />
-    </RefreshScreen>
+    </Screen>
   );
 }

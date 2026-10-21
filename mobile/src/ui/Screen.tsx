@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/theme';
@@ -10,6 +10,9 @@ export type ScreenProps = {
   footer?: ReactNode;
   /** Offset for headers that overlap the content, if any. */
   keyboardVerticalOffset?: number;
+  /** Pull-to-refresh: shown only when `onRefresh` is given. */
+  refreshing?: boolean;
+  onRefresh?: () => void;
 };
 
 /**
@@ -21,7 +24,7 @@ export type ScreenProps = {
  * button from being swallowed by keyboard dismissal. This needs no native module, so it also
  * works in Expo Go.
  */
-export function Screen({ children, footer, keyboardVerticalOffset = 0 }: ScreenProps) {
+export function Screen({ children, footer, keyboardVerticalOffset = 0, refreshing = false, onRefresh }: ScreenProps) {
   const { colors, space } = useTheme();
   const insets = useSafeAreaInsets();
   return (
@@ -36,6 +39,9 @@ export function Screen({ children, footer, keyboardVerticalOffset = 0 }: ScreenP
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        refreshControl={
+          onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} /> : undefined
+        }
         contentContainerStyle={{
           paddingHorizontal: space[4] + Math.max(insets.left, insets.right),
           paddingTop: space[4],

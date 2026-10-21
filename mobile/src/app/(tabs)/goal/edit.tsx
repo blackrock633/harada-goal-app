@@ -2,7 +2,6 @@ import { router } from 'expo-router';
 
 import { useMutations } from '@/data/hooks';
 import { GoalForm } from '@/features/goal';
-import { RefreshScreen } from '@/screens/RefreshScreen';
 import { ErrorScreen, LoadingScreen } from '@/screens/queryState';
 import { useGoalScreen } from '@/screens/useGoalScreen';
 import { EmptyState, Screen } from '@/ui';
@@ -27,7 +26,7 @@ export default function EditGoalScreen() {
 
   const goBack = () => (router.canGoBack() ? router.back() : router.replace({ pathname: '/goal', params: { goal: detail.id } }));
   return (
-    <RefreshScreen>
+    <Screen>
       <GoalForm
         // Remount with fresh fields after "Reload latest".
         key={detail.updatedAt}
@@ -39,6 +38,6 @@ export default function EditGoalScreen() {
         onSaved={goBack}
         onCancel={goBack}
       />
-    </RefreshScreen>
+    </Screen>
   );
 }

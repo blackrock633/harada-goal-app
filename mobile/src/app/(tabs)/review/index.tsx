@@ -34,6 +34,8 @@ export default function ReviewScreen() {
       outcomes={detail.outcomes}
       reflections={review.data.reflections}
       events={review.data.events}
+      refreshing={state.refreshing}
+      onRefresh={state.refetch}
     />
   );
 }

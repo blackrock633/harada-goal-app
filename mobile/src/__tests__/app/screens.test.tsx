@@ -2,7 +2,7 @@ import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-li
 
 import { queryClient } from '@/data/query-client';
 import { createFakeSupabase } from '@/data/test-support/fake-supabase';
-import { database, ID } from '@/data/test-support/fixtures';
+import { database, goalRow, ID } from '@/data/test-support/fixtures';
 
 const APP = './src/app';
 
@@ -78,6 +78,27 @@ describe('Matrix', () => {
     await renderRouter(APP, { initialUrl: `/matrix/0?goal=${ID.goalActive}` });
     expect(await screen.findByText('Key area 1 of 8')).toBeOnTheScreen();
     for (let i = 0; i < 8; i++) expect(screen.getByTestId(`slot-0-${i}`)).toBeOnTheScreen();
+  });
+});
+
+describe('goal edit (DATA-01 regression on the real screen)', () => {
+  it('editing one purpose quadrant keeps the other three intact in what is saved', async () => {
+    const fake = createFakeSupabase(database(), {
+      update_goal: { data: goalRow({ id: ID.goalActive, purpose_self_tangible: 'A new flat' }), error: null, status: 200 },
+    });
+    mockClient = { from: (fake.client as unknown as { from: unknown }).from, rpc: fake.rpc, functions: { invoke } };
+    await renderRouter(APP, { initialUrl: `/goal/edit?goal=${ID.goalActive}` });
+    const field = await screen.findByLabelText('For me, something concrete');
+    await fireEvent.changeText(field, 'A new flat');
+    await fireEvent.press(screen.getByRole('button', { name: 'Save goal' }));
+    await waitFor(() => expect(fake.rpc).toHaveBeenCalledWith('update_goal', expect.anything()));
+    const [, args] = fake.rpc.mock.calls.find(([name]) => name === 'update_goal')!;
+    expect((args as { p_input: { purpose: unknown } }).p_input.purpose).toEqual({
+      selfTangible: 'A new flat',
+      selfIntangible: 'b',
+      othersTangible: 'c',
+      othersIntangible: 'd',
+    });
   });
 });
 

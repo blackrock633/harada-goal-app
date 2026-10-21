@@ -17,6 +17,8 @@ export default function TodayScreen() {
           data={today.data}
           mutations={mutations}
           focusMutations={mutations}
+          refreshing={state.refreshing}
+          onRefresh={state.refetch}
           // TodayView shows failed-change messages in its own inline banner.
           onOpenAction={(goal, position) =>
             router.push({ pathname: '/matrix/[position]', params: { position: String(position), goal } })

@@ -2,9 +2,10 @@ import { Redirect, router } from 'expo-router';
 
 import { useMutations } from '@/data/hooks';
 import { GoalOverview } from '@/features/goal';
-import { RefreshScreen } from '@/screens/RefreshScreen';
 import { ErrorScreen, LoadingScreen } from '@/screens/queryState';
 import { useGoalScreen } from '@/screens/useGoalScreen';
+
+import { Screen } from '@/ui';
 
 export default function GoalScreen() {
   const { state, detail, today, noGoals } = useGoalScreen();
@@ -16,7 +17,7 @@ export default function GoalScreen() {
 
   const goal = detail.id;
   return (
-    <RefreshScreen refreshing={state.refreshing} onRefresh={state.refetch}>
+    <Screen refreshing={state.refreshing} onRefresh={state.refetch}>
       <GoalOverview
         goal={detail}
         today={today}
@@ -28,6 +29,6 @@ export default function GoalScreen() {
           router.push({ pathname: '/matrix/[position]', params: { position: String(position), goal } })
         }
       />
-    </RefreshScreen>
+    </Screen>
   );
 }
