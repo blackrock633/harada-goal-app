@@ -55,10 +55,27 @@ and the **expo-updates / store-build** path (a release build, not just Expo Go).
 
 ## 4. Staging Supabase (user will provide)
 
+Ready to run: `npx vitest run tests/staging` (env: `STAGING_DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and the anon/publishable key). It checks:
+- the live grants equal the hardened allow-list, with no anon access, column-limited profile updates, and RLS on every table;
+- isolation through real Auth and PostgREST: anon sees nothing, and B cannot read, update, delete, attach to, or forge-own A's goal.
+
+If the project requires email confirmation, the suite reports BLOCKED and does not pass.
+
+
 Put these in a **local, uncommitted** `.env.local`: `NEXT_PUBLIC_SUPABASE_URL` (or the Expo `EXPO_PUBLIC_*`
 equivalents), the anon/publishable key, and, for QA's grant checks only, a `DATABASE_URL` for a non-production
 project. QA will then run: the migrations check, `\dp public.*`, `rls-adversarial` against real PostgREST, and the
 journeys with real GoTrue sign-up, refresh and expiry. Never point QA at production data.
+
+## 4b. If the data path is `/api/v1` (proposed by the frontend; decision pending with the backend)
+
+The native app (`mobile/`, Expo SDK 58, Expo Router) would call the existing use cases over HTTP with a Supabase
+bearer token, and RLS stays as defense in depth. QA can then test the API **without a simulator**, using Vitest + fetch
+against `next dev`:
+- **auth:** missing, expired, or forged bearer token → 401, and never data;
+- **isolation:** user B's token on user A's ids → 404/NOT_FOUND for every route;
+- **contracts:** Zod-validated request and response shapes, idempotent creates (same `id` twice → one row), and stale `expectedUpdatedAt` → 409 CONFLICT;
+- **errors:** DB down → 503 UNAVAILABLE with no stack traces; no CORS wildcard with credentials.
 
 ## 5. Order of work
 
