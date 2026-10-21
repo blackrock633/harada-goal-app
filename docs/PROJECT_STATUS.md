@@ -239,7 +239,7 @@ See the QA_REPORT §7 roadmap. Candidates:
 | QA suite updates for D-017 | Done by QA (qa/system bb91e6f); staging suite written (0be12fc, skips without creds) | vitest at 4d26535: 548 passed, 15 skipped, 0 failed |
 | QA SEC-01: write-path flag outlived the RPC within a transaction (P2, own rows only) | Fixed in edab51d (flag spans one RPC; generic conflict errors; input caps) | regression test in `rpc.rls.test.ts` |
 | GraphQL surface | Open: user must disable `pg_graphql` (dashboard), see SUPABASE_SETUP | QA staging check fails until done (intended) |
-| Risk: domain rules duplicated in TS and SQL | Open | Mitigation: one write path per client; RPC tests mirror the TS rules |
+| Risk: domain rules duplicated in TS and SQL | Mitigated by a drift guard: `rpc-parity.rls.test.ts` runs one 68-step script (29 ops, 24 expected failures) through both paths and compares every outcome and the final rows/events. On first run it found 3 real bugs, all fixed 2026-10-21: web `updateGoal` blanked omitted purpose quadrants (schema defaults); web `updateAction` crashed (INTERNAL) on `schedule: null` for a routine; RPC `restore_action` skipped the archived-key-area check for live actions | still two implementations until the web app writes through the RPCs |
 
 ## 15. Decisions or input needed (user)
 

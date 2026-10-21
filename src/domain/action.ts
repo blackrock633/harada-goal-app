@@ -107,8 +107,11 @@ export function updateAction(
   }
 
   if (newKind === 'routine') {
+    if (patch.schedule === null) {
+      throw new DomainError('VALIDATION', 'Routine requires a schedule', 'schedule');
+    }
     if (patch.schedule !== undefined) {
-      const s = normalizeSchedule(patch.schedule!);
+      const s = normalizeSchedule(patch.schedule);
       // compare schedule deep
       if (JSON.stringify(next.schedule) !== JSON.stringify(s)) {
         next.schedule = s;
