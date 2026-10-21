@@ -1,7 +1,7 @@
 # Project Status Report
 
 **Project:** Harada Goal App
-**Last updated:** 2026-10-20 (data/backend orchestrator, from main `5f02816`)
+**Last updated:** 2026-10-20, evening (data/backend orchestrator; data/supabase at the native write/read path)
 **Overall status:** Active. Engineering gates are mostly green; the release is blocked on verification environments.
 **Development stage:** MVP / release candidate for R1. Not deployed and not yet run against a real Supabase project.
 
@@ -12,7 +12,8 @@
 
 ## 1. Executive summary
 
-- **What the app is:** a phone-first web app for the Harada Method.
+- **Platform change (user decision, 2026-10-20):** the client is being rebuilt as a native **Expo/React Native** app (`mobile/`, frontend session). The device talks to Supabase directly: reads under RLS, writes only through Postgres RPCs (D-017). The Next.js web app still exists and still works.
+- **What the app is:** a Harada Method app for phones.
   - One goal with its purpose, and 8 key areas (outcomes) of 8 actions each (the 1 + 8 + 64 matrix).
   - Daily execution: complete tasks, check routines, pick up to 5 "today's focus" actions.
   - Reflections and progress tracking.
@@ -27,7 +28,7 @@
   - **Supabase:** never run against a real Supabase project; none is configured.
   - **Devices:** never run on a real phone or in real iOS Safari.
   - **WebKit:** journeys are still unstable in WebKit (Safari's engine) on the latest code.
-- **Immediate priority:** a clean QA e2e run on current main (Chrome and WebKit). Then the user creates a Supabase project so the same journeys can run against hosted Auth and Postgres.
+- **Immediate priority:** the user provides the Supabase staging project (they said they will); then `db push`, deploy `delete-account`, and run QA's RLS/RPC suites and the native journeys against it. The web e2e run on main remains open for the web app.
 
 ## 2. Project objectives
 
@@ -44,7 +45,7 @@
   - No service-role key on any client. Never destructively migrate user data.
   - Matrix initialisation is atomic and idempotent; empty positions are absent rows.
   - Planning completeness, action completion and goal attainment are kept separate.
-- **Platform:** Next.js phone-first **web** app. The brief assumed Expo/React Native. The repo's Next.js stack was kept and Supabase adopted (D-013). No native app exists. QA lists "native vs web" as unconfirmed with the user (§15).
+- **Platform:** decided 2026-10-20: native Expo/React Native (`mobile/`), confirmed by the user directly. The Next.js web app remains. Data path: D-017.
 
 ## 3. Current state
 
@@ -228,10 +229,21 @@ See the QA_REPORT §7 roadmap. Candidates:
 4. **A preview deployment** (the build already passes), then test on a real phone (journeys 1–4 manually).
 5. **AUTH-02, then M-08b.**
 
+### Native data path (D-017), data/backend status 2026-10-20
+
+| Item | Status | Evidence |
+|---|---|---|
+| 30 write RPCs + guard trigger (`20261020120000_rpc_write_path.sql`) | VERIFIED on PGlite + shim; NOT TESTED on Supabase | `rpc.rls.test.ts` 43/43: guard, catalog, every RPC, user B with A's ids → NOT_FOUND and nothing changed |
+| Shared read model + row mappers (`read-model.ts`, `rows.ts`) | VERIFIED on PGlite | `native-read.rls.test.ts` 2/2: rows → DTOs equal the web server's `getGoalDetail`/`getToday` |
+| `delete-account` Edge Function | Handler VERIFIED with mocked Auth (5/5); Deno wiring NOT TESTED (no Deno locally) | `delete-account-function.test.ts` |
+| QA suite updates for D-017 | Open (QA): 2 expectations in `rls-adversarial.test.ts` flip by design (RPC execute grants; H4 now fixed for clients) | full vitest 544/546 with only those 2 failing |
+| Risk: domain rules duplicated in TS and SQL | Open | Mitigation: one write path per client; RPC tests mirror the TS rules |
+
 ## 15. Decisions or input needed (user)
 
 - **Supabase project:** create one and provide the project ref and keys via env, never in chat or git. Steps 3–4 are blocked without it.
-- **Platform:** confirm that a phone-first web app (installable PWA later) meets "real mobile device". The alternative is a native Expo app reusing the same Supabase schema and RLS, which would be a new workstream.
+- ~~Platform~~: decided, native Expo (2026-10-20).
+- **Web app's future:** keep the Next.js web app alongside the native app, or retire it. If kept, it should eventually write through the same RPCs so domain rules live in one place (D-017 consequence).
 - **Hosting target** for the Next.js app (e.g. Vercel), needed for a device test over HTTPS.
 
 ## 16. Recent changes (2026-10-19 → 2026-10-20)
