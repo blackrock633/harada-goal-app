@@ -83,3 +83,23 @@ appears twice. The cap is enforced by `unique (owner_id, date, slot)` with slots
 **History:** first recorded as "derived only, no planning table", with "users need to pick actions for a
 date independently of due dates" as the condition to revisit. QA U-10 (Harada's daily plan) met that
 condition the same day, so the table was added instead of overloading `due_date`.
+
+## D-017 — Native client: direct reads, writes only through Postgres RPCs · 2026-10-20 · accepted
+**Context:** The user chose to rebuild the client as Expo/React Native and chose "database functions" for
+writes (asked directly, with the alternatives: keep the Next.js server as an API, or direct table writes).
+A device talking to Supabase directly makes RLS and grants the authorization boundary.
+**Decision:** The device reads tables with supabase-js under RLS. Every write is a `public.<name>(p_input jsonb)`
+RPC (migration `20261020120000_rpc_write_path.sql`), one per use case. Each RPC is `SECURITY INVOKER` with
+`search_path = ''`, so it runs as `authenticated` and the RLS policies apply natively. A statement-level guard
+trigger on every table rejects INSERT/UPDATE/DELETE by `anon`/`authenticated` (42501) unless the transaction-local
+setting `harada.write_path` is `on`. Only `harada_private.begin_write()` (called first by every RPC) and the
+trusted Next.js `UnitOfWork` set it. Clients cannot: PostgREST sets only `request.*` settings and exposes only
+`public` functions, and pg_graphql writes hit the same trigger.
+**Alternatives:** SECURITY DEFINER functions owned by a dedicated NOLOGIN role, with write grants revoked from
+`authenticated`. That is a privilege boundary rather than a trigger boundary, but it needs role-admin and
+`auth`-schema grant rights that `postgres` may not hold on hosted Supabase (PG15/17), and that can't be
+verified before the staging project exists. Revisit once staging confirms those rights.
+**Consequences:** Domain rules now exist in TypeScript (`src/domain`, used by the web app) and in SQL (the
+RPCs). The SQL suite `rpc.rls.test.ts` mirrors the TS behaviour; drift is a risk until the web app also writes
+through the RPCs. The event log (`goal_events`) is written only by trusted code, which also closes QA H4 for
+clients. Account deletion needs the service-role key, so it will be a Supabase Edge Function, not an RPC.

@@ -27,7 +27,9 @@ export function createUnitOfWork(db: Database): UnitOfWork {
       try {
         return await db.transaction(async (tx) => {
           await tx.execute(
-            sql`select set_config('role', 'authenticated', true), set_config('request.jwt.claims', ${claims}, true)`,
+            // harada.write_path: this trusted server path may write tables directly (D-017); clients must use RPCs.
+            sql`select set_config('role', 'authenticated', true), set_config('request.jwt.claims', ${claims}, true),
+                       set_config('harada.write_path', 'on', true)`,
           );
           const repos: Repos = {
             profiles: new ProfileRepoImpl(tx),

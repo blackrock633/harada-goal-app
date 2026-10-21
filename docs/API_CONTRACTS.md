@@ -160,3 +160,66 @@ refreshes them on each request. Server code obtains the user only through `AuthG
 (`supabase.auth.getUser()`, verified by the Auth server) → `getCtx()` / `requireCtx()` in
 `src/app/lib/session.ts`. Middleware redirects are a convenience, not the authorization boundary. Local dev
 without Supabase uses `AUTH_PROVIDER=dev` (signed `harada_dev_session` cookie; refuses to run in production).
+
+## 7. Native client (Supabase direct, D-017)
+
+**Reads:** `supabase.from(table).select(columns)` with the user's session. RLS returns only the caller's rows.
+Exposed columns for `authenticated` (all columns, snake_case, as in DATABASE.md):
+
+| Table | Columns |
+|---|---|
+| profiles | id, display_name, time_zone, created_at, updated_at |
+| goals | id, owner_id, title, vision, success_criteria, target_date, status, status_before_archive, purpose_self_tangible, purpose_self_intangible, purpose_others_tangible, purpose_others_intangible, activated_on, achieved_at, archived_at, created_at, updated_at |
+| outcomes | id, goal_id, title, description, measure_target, measure_current, measure_unit, position, archived_at, created_at, updated_at |
+| actions | id, goal_id, outcome_id, title, notes, kind, position, due_date, completed_at, schedule_type, schedule_days, schedule_times_per_week, start_date, archived_at, created_at, updated_at |
+| routine_checks | id, action_id, date, created_at |
+| daily_focus | id, owner_id, action_id, date, slot, created_at |
+| reflections | id, goal_id, date, kind, went_well, didnt_go_well, next_change, created_at, updated_at |
+| goal_events | id, goal_id, type, subject_id, summary, data, occurred_at |
+
+`measure_*` are `numeric` and arrive as JSON numbers. Dates are `YYYY-MM-DD`; instants are ISO strings.
+
+**Writes:** `supabase.rpc(name, { p_input })` only; direct table writes fail with 42501. `p_input` is exactly
+the object the matching Zod schema in `src/application/schemas.ts` accepts (camelCase). Validate on the device
+with that schema first, then send it unchanged. Creates take a client uuid `id` (a replay returns the existing
+row); updates take `expectedUpdatedAt` (send back the `updated_at` string you read; compared to the millisecond).
+
+| RPC | Input schema | Returns |
+|---|---|---|
+| create_goal | createGoalSchema, plus optional `templateId` and nested `outcomes[{id?, title, description?, measure?, position?, actions?[addAction fields without outcomeId]}]` (atomic matrix initialisation; templates are instantiated on the device) | goals row |
+| update_goal | updateGoalSchema | goals row |
+| activate_goal, mark_goal_achieved, reopen_goal, archive_goal, restore_goal | goalIdSchema | goals row |
+| delete_goal | deleteGoalPermanentlySchema | void |
+| add_outcome / update_outcome / update_measure_current | addOutcomeSchema / updateOutcomeSchema / updateMeasureCurrentSchema | outcomes row |
+| archive_outcome, restore_outcome | outcomeIdSchema | outcomes row |
+| reorder_outcomes | reorderOutcomesSchema | active outcomes, by position |
+| add_action / update_action | addActionSchema / updateActionSchema | actions row |
+| complete_action, reopen_action, archive_action, restore_action | actionIdSchema | actions row |
+| check_routine, uncheck_routine | routineCheckSchema | actions row |
+| move_action | moveActionSchema | actions row |
+| reorder_actions | reorderActionsSchema | active actions of the outcome, by position |
+| add_to_today | focusSchema (date defaults to the user's today) | daily_focus row |
+| remove_from_today | focusSchema | void |
+| add_reflection / update_reflection | addReflectionSchema / updateReflectionSchema | reflections row |
+| delete_reflection | reflectionIdSchema | void |
+| update_profile | updateProfileSchema | profiles row |
+
+"Today" is computed in the database from `profiles.time_zone`. Account deletion is not an RPC (it needs the
+service-role key; a Supabase Edge Function is planned).
+
+**Errors** (`PostgrestError.code` → `AppError.code`; `message` is user-facing; `hint` is the field name or ''):
+
+| code | AppError | Notes |
+|---|---|---|
+| HG400 | VALIDATION | `fieldErrors = { [hint]: [message] }` when hint is non-empty |
+| HG401 | UNAUTHENTICATED | no session |
+| HG404 | NOT_FOUND | missing **or another user's** row (indistinguishable by design) |
+| HG409 | CONFLICT | stale `expectedUpdatedAt`, slot taken, reorder list out of date |
+| HG422 | INVALID_STATE | e.g. archived goal, routine "completed" |
+| HG429 | LIMIT_REACHED | 8 key areas, 8 actions, 5 focus picks per day |
+| 23505, 23P01 | CONFLICT | id reused by another row, concurrent slot race |
+| 23514, 22P02 | VALIDATION | constraint/shape failures not caught earlier |
+| 42501 | NOT_FOUND | permission or RLS refusal |
+| PGRST301/PGRST303, HTTP 401 | UNAUTHENTICATED | expired or invalid JWT |
+| network failure, HTTP ≥ 500 | UNAVAILABLE | |
+| anything else | INTERNAL | |

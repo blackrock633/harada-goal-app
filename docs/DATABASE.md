@@ -127,6 +127,15 @@ RLS is enabled on **every** table (a test fails if a new table lacks RLS or poli
 - Repositories still scope by owner (defence in depth). A row owned by someone else reads as `NOT_FOUND`.
 - The service-role key is used only server-side for account deletion. It never ships to a client.
 
+### Write path (D-017)
+- Clients write **only** through the RPCs in migration `20261020120000_rpc_write_path.sql` (API_CONTRACTS §7).
+- Trigger `<table>_write_path` (statement level, every table; UPDATE only on profiles) raises 42501 for `anon` /
+  `authenticated` unless `harada.write_path = 'on'` in the current transaction. `harada_private.begin_write()`
+  and the server `UnitOfWork` set it; nothing a client can call does.
+- RPCs are `SECURITY INVOKER`, `search_path = ''`, executable by `authenticated` only. Internal helpers live in
+  schema `harada_private` (not exposed by PostgREST).
+- Tests: `src/infrastructure/db/rpc.rls.test.ts` (guard, catalog, every RPC, user B with user A's ids).
+
 ## Migrations
 
 - Versioned, forward-only SQL in `supabase/migrations/<YYYYMMDDHHMMSS>_<name>.sql`.
