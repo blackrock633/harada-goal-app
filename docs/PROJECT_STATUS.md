@@ -236,7 +236,9 @@ See the QA_REPORT §7 roadmap. Candidates:
 | 30 write RPCs + guard trigger (`20261020120000_rpc_write_path.sql`) | VERIFIED on PGlite + shim; NOT TESTED on Supabase | `rpc.rls.test.ts` 43/43: guard, catalog, every RPC, user B with A's ids → NOT_FOUND and nothing changed |
 | Shared read model + row mappers (`read-model.ts`, `rows.ts`) | VERIFIED on PGlite | `native-read.rls.test.ts` 2/2: rows → DTOs equal the web server's `getGoalDetail`/`getToday` |
 | `delete-account` Edge Function | Handler VERIFIED with mocked Auth (5/5); Deno wiring NOT TESTED (no Deno locally) | `delete-account-function.test.ts` |
-| QA suite updates for D-017 | Open (QA): 2 expectations in `rls-adversarial.test.ts` flip by design (RPC execute grants; H4 now fixed for clients) | full vitest 544/546 with only those 2 failing |
+| QA suite updates for D-017 | Done by QA (qa/system bb91e6f); staging suite written (0be12fc, skips without creds) | vitest at 4d26535: 548 passed, 15 skipped, 0 failed |
+| QA SEC-01: write-path flag outlived the RPC within a transaction (P2, own rows only) | Fixed in edab51d (flag spans one RPC; generic conflict errors; input caps) | regression test in `rpc.rls.test.ts` |
+| GraphQL surface | Open: user must disable `pg_graphql` (dashboard), see SUPABASE_SETUP | QA staging check fails until done (intended) |
 | Risk: domain rules duplicated in TS and SQL | Open | Mitigation: one write path per client; RPC tests mirror the TS rules |
 
 ## 15. Decisions or input needed (user)
