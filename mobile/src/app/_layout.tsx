@@ -3,20 +3,45 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
+import { SessionProvider, useSession } from '@/auth/session';
 import { useAppFonts, useTheme } from '@/theme';
+import { ErrorState, Screen } from '@/ui';
 
 // Keep the native splash screen up until Fraunces + Inter are loaded.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  return (
+    <SessionProvider>
+      <RootNavigator />
+    </SessionProvider>
+  );
+}
+
+function RootNavigator() {
   const { ready } = useAppFonts();
   const { colors, scheme } = useTheme();
+  const session = useSession();
+  // Keep the splash up until fonts AND the stored session are known, so guards never evaluate
+  // against a not-yet-loaded session (which would flash the sign-in screen).
+  const settled = ready && session.status !== 'loading';
 
   useEffect(() => {
-    if (ready) SplashScreen.hide();
-  }, [ready]);
+    if (settled) SplashScreen.hide();
+  }, [settled]);
 
-  if (!ready) return null;
+  if (!settled) return null;
+  if (session.status === 'misconfigured') {
+    return (
+      <Screen>
+        <ErrorState
+          title="Harada isn't configured"
+          message="This build has no Supabase project configured, so it can't sign you in. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY and rebuild."
+        />
+      </Screen>
+    );
+  }
+  const signedIn = session.status === 'signedIn';
 
   const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
   const navTheme = {
@@ -35,9 +60,13 @@ export default function RootLayout() {
     <ThemeProvider value={navTheme}>
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.paper } }}>
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen
+        {/* Client-side routing only; RLS and the RPCs are the real access control. */}
+        <Stack.Protected guard={!signedIn}>
+          <Stack.Screen name="(auth)" />
+        </Stack.Protected>
+        <Stack.Protected guard={signedIn}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen
           name="settings"
           options={{
             presentation: 'modal',
@@ -48,6 +77,7 @@ export default function RootLayout() {
             headerTintColor: colors.ink,
           }}
         />
+        </Stack.Protected>
       </Stack>
     </ThemeProvider>
   );

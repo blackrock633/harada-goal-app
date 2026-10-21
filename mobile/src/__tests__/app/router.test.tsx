@@ -2,7 +2,18 @@ import { renderRouter, screen, testRouter } from 'expo-router/testing-library';
 
 const APP = './src/app';
 
-describe('app routes', () => {
+// The session decides which route groups exist (Stack.Protected). Drive it directly.
+let mockSession: { status: string; session?: unknown } = { status: 'signedIn', session: {} };
+jest.mock('@/auth/session', () => ({
+  SessionProvider: ({ children }: { children: React.ReactNode }) => children,
+  useSession: () => mockSession,
+}));
+
+beforeEach(() => {
+  mockSession = { status: 'signedIn', session: {} };
+});
+
+describe('app routes (signed in)', () => {
   it.each([
     ['/today', 'Nothing for today yet'],
     ['/goal', 'No goal yet'],
@@ -29,6 +40,7 @@ describe('app routes', () => {
   });
 
   it('renders the auth screens with the real form layout', async () => {
+    mockSession = { status: 'signedOut' };
     await renderRouter(APP, { initialUrl: '/signin' });
     expect(screen.getByLabelText('Email')).toBeOnTheScreen();
     expect(screen.getByLabelText('Password')).toBeOnTheScreen();
@@ -54,5 +66,32 @@ describe('app routes', () => {
     await testRouter.push('/settings');
     expect(screen).toHavePathname('/settings');
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeOnTheScreen();
+  });
+});
+
+describe('session gating', () => {
+  it('keeps signed-out users out of the tabs', async () => {
+    mockSession = { status: 'signedOut' };
+    await renderRouter(APP, { initialUrl: '/today' });
+    expect(screen).not.toHavePathname('/today');
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeOnTheScreen();
+  });
+
+  it('sends signed-out users from / to sign in', async () => {
+    mockSession = { status: 'signedOut' };
+    await renderRouter(APP, { initialUrl: '/' });
+    expect(screen).toHavePathname('/signin');
+  });
+
+  it('keeps signed-in users out of the auth screens', async () => {
+    await renderRouter(APP, { initialUrl: '/signin' });
+    expect(screen).not.toHavePathname('/signin');
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+  });
+
+  it('shows a configuration error instead of running without auth', async () => {
+    mockSession = { status: 'misconfigured' };
+    await renderRouter(APP, { initialUrl: '/' });
+    expect(screen.getByText("Harada isn't configured")).toBeOnTheScreen();
   });
 });
