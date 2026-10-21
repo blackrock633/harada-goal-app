@@ -1,228 +1,34 @@
 /**
- * Shared read-side assembly: domain entities -> DTOs, with batched loading (no N+1).
+ * Read-side loading for the server: batched repository reads (no N+1) fed into the pure read model.
  * Used by queries and by commands that return a refreshed GoalDetailDTO / OutcomeDTO / ActionDTO.
  */
-import type { Action, DailyFocus, Goal, Id, LocalDate, Outcome, Reflection, GoalEvent } from '@/domain/types';
-import { addDays, isoWeekEnd, isoWeekStart, localDateInZone } from '@/domain';
-import {
-  computeGoalMetrics,
-  routineStreak,
-  actionProgress,
-  isDueToday,
-  type GoalMetrics,
-} from '@/domain';
-import { MAX_ACTIONS_PER_OUTCOME, MAX_OUTCOMES_PER_GOAL } from '@/domain/limits';
+import type { Action, Goal, Id, LocalDate } from '../../domain/types.js';
+import { MAX_ACTIONS_PER_OUTCOME } from '../../domain/limits.js';
 import type { Repos } from '../ports';
-import type {
-  ActionDTO,
-  ActionFieldsDTO,
-  GoalDetailDTO,
-  GoalEventDTO,
-  GoalFieldsDTO,
-  GoalMetricsDTO,
-  GoalSummaryDTO,
-  OutcomeDTO,
-  OutcomeFieldsDTO,
-  ReflectionDTO,
-} from '../dto';
+import type { ActionDTO, GoalDetailDTO, GoalSummaryDTO, OutcomeDTO } from '../dto';
+import {
+  actionDTO,
+  buildGoalDetail,
+  buildGraph,
+  buildSummaryDTOs,
+  checksFrom,
+  outcomeFieldsDTO,
+  type Graph,
+} from '../read-model';
 
-export const RECENT_CHECK_DAYS = 35;
-
-export const iso = (d: Date) => d.toISOString();
-
-export function goalFieldsDTO(g: Goal): GoalFieldsDTO {
-  return {
-    id: g.id,
-    title: g.title,
-    vision: g.vision,
-    successCriteria: g.successCriteria,
-    targetDate: g.targetDate,
-    status: g.status,
-    purpose: { ...g.purpose },
-    activatedOn: g.activatedOn,
-    achievedAt: g.achievedAt ? iso(g.achievedAt) : null,
-    archivedAt: g.archivedAt ? iso(g.archivedAt) : null,
-    createdAt: iso(g.createdAt),
-    updatedAt: iso(g.updatedAt),
-  };
-}
-
-export function outcomeFieldsDTO(o: Outcome): OutcomeFieldsDTO {
-  return {
-    id: o.id,
-    goalId: o.goalId,
-    title: o.title,
-    description: o.description,
-    measure: o.measure ? { ...o.measure } : null,
-    position: o.position,
-    archivedAt: o.archivedAt ? iso(o.archivedAt) : null,
-    createdAt: iso(o.createdAt),
-    updatedAt: iso(o.updatedAt),
-  };
-}
-
-export function actionFieldsDTO(a: Action): ActionFieldsDTO {
-  return {
-    id: a.id,
-    goalId: a.goalId,
-    outcomeId: a.outcomeId,
-    title: a.title,
-    notes: a.notes,
-    kind: a.kind,
-    position: a.position,
-    dueDate: a.dueDate,
-    completedAt: a.completedAt ? iso(a.completedAt) : null,
-    schedule: a.schedule ? ({ ...a.schedule } as Action['schedule']) : null,
-    startDate: a.startDate,
-    archivedAt: a.archivedAt ? iso(a.archivedAt) : null,
-    createdAt: iso(a.createdAt),
-    updatedAt: iso(a.updatedAt),
-  };
-}
-
-export function actionDTO(a: Action, checks: LocalDate[], today: LocalDate, focusedToday = false): ActionDTO {
-  const windowStart = addDays(today, -(RECENT_CHECK_DAYS - 1));
-  const recent = checks.filter((d) => d >= windowStart && d <= today).sort();
-  return {
-    ...actionFieldsDTO(a),
-    progress: actionProgress(a, checks, today),
-    dueToday: isDueToday(a, checks, today),
-    checkedToday: a.kind === 'routine' && checks.includes(today),
-    streak: routineStreak(a, checks, today),
-    focusedToday,
-    recentChecks: recent,
-  };
-}
-
-export function reflectionDTO(r: Reflection): ReflectionDTO {
-  return {
-    id: r.id,
-    goalId: r.goalId,
-    date: r.date,
-    kind: r.kind,
-    wentWell: r.wentWell,
-    didntGoWell: r.didntGoWell,
-    nextChange: r.nextChange,
-    createdAt: iso(r.createdAt),
-    updatedAt: iso(r.updatedAt),
-  };
-}
-
-export function eventDTO(e: GoalEvent): GoalEventDTO {
-  return {
-    id: e.id,
-    goalId: e.goalId,
-    type: e.type,
-    subjectId: e.subjectId,
-    summary: e.summary,
-    data: e.data,
-    occurredAt: iso(e.occurredAt),
-  };
-}
-
-export interface Graph {
-  outcomes: Outcome[];
-  actions: Action[];
-  checks: Map<Id, LocalDate[]>;
-  /** Action ids in the owner's focus list for today. */
-  focused: Set<Id>;
-  /** Today's focus rows in slot order. */
-  focusRows: DailyFocus[];
-}
+export * from '../read-model';
 
 /** 2 batched queries for structure + 1 for recent checks of active actions. */
 export async function loadGraph(repos: Repos, ownerId: Id, goalIds: Id[], today: LocalDate): Promise<Graph> {
   const focusRows = await repos.focus.listForDate(ownerId, today);
-  const focused = new Set(focusRows.map((f) => f.actionId));
-  if (goalIds.length === 0) return { outcomes: [], actions: [], checks: new Map(), focused, focusRows };
+  if (goalIds.length === 0) return buildGraph([], [], [], focusRows, today);
   const [outcomes, actions] = await Promise.all([
     repos.outcomes.listByGoals(goalIds),
     repos.actions.listByGoals(goalIds),
   ]);
   const routineIds = actions.filter((a) => a.archivedAt === null && a.kind === 'routine').map((a) => a.id);
-  const rows = routineIds.length
-    ? await repos.checks.listForActions(routineIds, addDays(today, -(RECENT_CHECK_DAYS - 1)), today)
-    : [];
-  const checks = new Map<Id, LocalDate[]>();
-  for (const c of rows) {
-    const list = checks.get(c.actionId);
-    if (list) list.push(c.date);
-    else checks.set(c.actionId, [c.date]);
-  }
-  return { outcomes, actions, checks, focused, focusRows };
-}
-
-export function forGoal(graph: Graph, goalId: Id): Graph {
-  return {
-    outcomes: graph.outcomes.filter((o) => o.goalId === goalId),
-    actions: graph.actions.filter((a) => a.goalId === goalId),
-    checks: graph.checks,
-    focused: graph.focused,
-    focusRows: graph.focusRows,
-  };
-}
-
-const byPosition = <T extends { position: number | null }>(a: T, b: T) =>
-  (a.position ?? 99) - (b.position ?? 99);
-
-export function metricsDTO(m: GoalMetrics): GoalMetricsDTO {
-  return {
-    planning: { ...m.planning },
-    taskCompletion: m.tasks.ratio,
-    completedTasks: m.tasks.completed,
-    totalTasks: m.tasks.total,
-    routineAdherence: m.routines.adherence,
-    routineCount: m.routines.count,
-    attainment: m.attainment,
-  };
-}
-
-function outcomeDTO(
-  o: Outcome,
-  actions: Action[],
-  checks: Map<Id, LocalDate[]>,
-  today: LocalDate,
-  m: GoalMetrics,
-  focused: Set<Id>,
-): OutcomeDTO {
-  const mine = actions
-    .filter((a) => a.outcomeId === o.id && a.archivedAt === null)
-    .sort(byPosition)
-    .map((a) => actionDTO(a, checks.get(a.id) ?? [], today, focused.has(a.id)));
-  const slots: (ActionDTO | null)[] = Array.from({ length: MAX_ACTIONS_PER_OUTCOME }, () => null);
-  for (const a of mine) if (a.position !== null && a.position >= 0 && a.position < slots.length) slots[a.position] = a;
-  const om = m.outcomes.find((x) => x.outcomeId === o.id);
-  return {
-    ...outcomeFieldsDTO(o),
-    taskCompletion: om?.tasks.ratio ?? null,
-    completedTasks: om?.tasks.completed ?? 0,
-    totalTasks: om?.tasks.total ?? 0,
-    routineAdherence: om?.routines.adherence ?? null,
-    routineCount: om?.routines.count ?? 0,
-    attainment: om?.attainment ?? null,
-    actions: mine,
-    slots,
-  };
-}
-
-export function buildGoalDetail(goal: Goal, g: Graph, today: LocalDate): GoalDetailDTO {
-  const m = computeGoalMetrics(goal, g.outcomes, g.actions, g.checks, today);
-  const active = g.outcomes.filter((o) => o.archivedAt === null).sort(byPosition);
-  const outcomes = active.map((o) => outcomeDTO(o, g.actions, g.checks, today, m, g.focused));
-  const matrix: (OutcomeDTO | null)[] = Array.from({ length: MAX_OUTCOMES_PER_GOAL }, () => null);
-  for (const o of outcomes) if (o.position !== null && o.position >= 0 && o.position < matrix.length) matrix[o.position] = o;
-  const titleById = new Map(g.outcomes.map((o) => [o.id, o.title]));
-  return {
-    ...goalFieldsDTO(goal),
-    metrics: metricsDTO(m),
-    pace: m.pace,
-    outcomes,
-    matrix: { outcomes: matrix },
-    archivedOutcomes: g.outcomes.filter((o) => o.archivedAt !== null).map(outcomeFieldsDTO),
-    archivedActions: g.actions
-      .filter((a) => a.archivedAt !== null)
-      .map((a) => ({ ...actionFieldsDTO(a), outcomeTitle: titleById.get(a.outcomeId) ?? '' })),
-  };
+  const rows = routineIds.length ? await repos.checks.listForActions(routineIds, checksFrom(today), today) : [];
+  return buildGraph(outcomes, actions, rows, focusRows, today);
 }
 
 export async function loadGoalDetail(repos: Repos, ownerId: Id, goal: Goal, today: LocalDate): Promise<GoalDetailDTO> {
@@ -258,7 +64,7 @@ export async function loadOutcomeDTO(
 export async function loadActionDTO(repos: Repos, ownerId: Id, action: Action, today: LocalDate): Promise<ActionDTO> {
   const [rows, focus] = await Promise.all([
     action.kind === 'routine'
-      ? repos.checks.listForActions([action.id], addDays(today, -(RECENT_CHECK_DAYS - 1)), today)
+      ? repos.checks.listForActions([action.id], checksFrom(today), today)
       : Promise.resolve([]),
     repos.focus.listForDate(ownerId, today),
   ]);
@@ -280,38 +86,5 @@ export async function buildSummaries(
     graph ?? loadGraph(repos, ownerId, ids, today),
     repos.reflections.latestDateByGoals(ids),
   ]);
-  const weekStart = isoWeekStart(today);
-  const weekEnd = isoWeekEnd(today);
-  return goals.map((goal) => {
-    const sub = forGoal(g, goal.id);
-    const m = computeGoalMetrics(goal, sub.outcomes, sub.actions, sub.checks, today);
-    const activeOutcomeIds = new Set(sub.outcomes.filter((o) => o.archivedAt === null).map((o) => o.id));
-    const live = sub.actions.filter((a) => a.archivedAt === null && activeOutcomeIds.has(a.outcomeId));
-    const openTasks = live.filter((a) => a.kind === 'task' && a.completedAt === null);
-    const dueTasks = openTasks.filter((a) => a.dueDate !== null && a.dueDate <= today).length;
-    const dueRoutines = live.filter(
-      (a) => a.kind === 'routine' && isDueToday(a, sub.checks.get(a.id) ?? [], today) && !(sub.checks.get(a.id) ?? []).includes(today),
-    ).length;
-    const completedThisWeek = sub.actions.filter((a) => {
-      if (a.archivedAt !== null || a.kind !== 'task' || a.completedAt === null) return false;
-      const d = localDateInZone(a.completedAt, timeZone);
-      return d >= weekStart && d <= weekEnd;
-    }).length;
-    return {
-      id: goal.id,
-      title: goal.title,
-      status: goal.status,
-      targetDate: goal.targetDate,
-      activatedOn: goal.activatedOn,
-      updatedAt: iso(goal.updatedAt),
-      metrics: metricsDTO(m),
-      pace: m.pace,
-      outcomeCount: activeOutcomeIds.size,
-      actionCount: live.length,
-      openTaskCount: openTasks.length,
-      dueTodayCount: dueTasks + dueRoutines,
-      lastReflectedOn: lastReflected[goal.id] ?? null,
-      completedThisWeek,
-    };
-  });
+  return buildSummaryDTOs(goals, g, lastReflected, today, timeZone);
 }

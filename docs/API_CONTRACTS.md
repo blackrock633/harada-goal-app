@@ -179,6 +179,13 @@ Exposed columns for `authenticated` (all columns, snake_case, as in DATABASE.md)
 
 `measure_*` are `numeric` and arrive as JSON numbers. Dates are `YYYY-MM-DD`; instants are ISO strings.
 
+**Shared read model (no re-implementation on the device):** select with `SELECT_COLUMNS[table]` from
+`src/application/rows.ts`, map with its `*FromRow` functions, then build DTOs with `src/application/read-model.ts`:
+`buildGraph(outcomes, actions, checks (from checksFrom(today)), focus rows for today, today)` →
+`buildGoalDetail(goal, graph, today)` / `buildTodayDTO(goals, graph, lastReflectedByGoal, today, timeZone)` /
+`buildSummaryDTOs(...)`. Both files are pure with relative imports only. `native-read.rls.test.ts` proves the
+result equals the web server's `getGoalDetail` / `getToday`.
+
 **Writes:** `supabase.rpc(name, { p_input })` only; direct table writes fail with 42501. `p_input` is exactly
 the object the matching Zod schema in `src/application/schemas.ts` accepts (camelCase). Validate on the device
 with that schema first, then send it unchanged. Creates take a client uuid `id` (a replay returns the existing
