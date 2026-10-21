@@ -12,6 +12,15 @@ npx supabase db push            # applies supabase/migrations/*.sql in order
 
 Never apply `supabase/tests/auth-shim.sql` to a Supabase project. It is a local test shim only.
 
+Then deploy the account-deletion Edge Function (the native app calls it; it holds the service-role key server-side):
+
+```bash
+npx supabase functions deploy delete-account   # keep "Verify JWT" on (the default)
+```
+
+After `db push`, confirm the write path (D-017): `\df+ public.*` shows the 30 RPCs as `security invoker` with
+`search_path=""`, executable by `authenticated` only; every table has an enabled `<table>_write_path` trigger.
+
 ## 2. Environment (server)
 
 | Variable | Where from | Notes |
