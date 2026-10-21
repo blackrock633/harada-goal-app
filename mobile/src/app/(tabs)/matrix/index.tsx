@@ -1,33 +1,36 @@
-import { Link } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
 
-import { useTheme } from '@/theme';
-import { EmptyState, Screen, Text } from '@/ui';
-
-const POSITIONS = [0, 1, 2, 3, 4, 5, 6, 7] as const;
+import { MatrixOverview } from '@/features/matrix';
+import { RefreshScreen } from '@/screens/RefreshScreen';
+import { ErrorScreen, LoadingScreen } from '@/screens/queryState';
+import { useGoalScreen } from '@/screens/useGoalScreen';
+import { EmptyState, Screen } from '@/ui';
 
 export default function MatrixScreen() {
-  const { colors } = useTheme();
+  const { state, detail, noGoals } = useGoalScreen();
+
+  if (noGoals) {
+    return (
+      <Screen>
+        <EmptyState
+          title="The matrix is empty"
+          message="Create a goal and its eight key areas will appear here."
+          action={{ label: 'Create your goal', onPress: () => router.push('/goal/new') }}
+        />
+      </Screen>
+    );
+  }
+  if (state.error) return <ErrorScreen error={state.error} onRetry={state.refetch} />;
+  if (state.loading || !detail) return <LoadingScreen />;
+
   return (
-    <Screen>
-      <EmptyState title="The matrix is empty" message="Your eight key areas and their actions will appear here." />
-      <View>
-        {POSITIONS.map((p) => (
-          <Link
-            key={p}
-            href={{ pathname: '/matrix/[position]', params: { position: String(p) } }}
-            accessibilityRole="link"
-            accessibilityLabel={`Key area ${p + 1}`}
-            style={[styles.row, { borderBottomColor: colors.rule }]}
-          >
-            <Text>{`Key area ${p + 1}`}</Text>
-          </Link>
-        ))}
-      </View>
-    </Screen>
+    <RefreshScreen refreshing={state.refreshing} onRefresh={state.refetch}>
+      <MatrixOverview
+        goal={detail}
+        onOpenArea={(position) =>
+          router.push({ pathname: '/matrix/[position]', params: { position: String(position), goal: detail.id } })
+        }
+      />
+    </RefreshScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  row: { minHeight: 48, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
-});

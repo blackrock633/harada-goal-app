@@ -1,4 +1,8 @@
-import { renderRouter, screen, testRouter } from 'expo-router/testing-library';
+import { renderRouter, screen, testRouter, waitFor } from 'expo-router/testing-library';
+
+import { queryClient } from '@/data/query-client';
+import { createFakeSupabase } from '@/data/test-support/fake-supabase';
+import { database } from '@/data/test-support/fixtures';
 
 const APP = './src/app';
 
@@ -9,20 +13,29 @@ jest.mock('@/auth/session', () => ({
   useSession: () => mockSession,
 }));
 
+let mockClient: unknown;
+jest.mock('@/data/supabase', () => ({
+  ...jest.requireActual('@/data/supabase'),
+  getSupabase: () => mockClient,
+}));
+
 beforeEach(() => {
   mockSession = { status: 'signedIn', session: {} };
+  mockClient = createFakeSupabase({ ...database(), goals: [], outcomes: [], actions: [] }).client;
 });
+
+// Leftover TanStack cache entries hold GC timers that keep Jest from exiting.
+afterEach(() => queryClient.clear());
 
 describe('app routes (signed in)', () => {
   it.each([
-    ['/today', 'Nothing for today yet'],
-    ['/goal', 'No goal yet'],
+    ['/today', 'Set your first goal'],
     ['/matrix', 'The matrix is empty'],
     ['/review', 'Nothing to review yet'],
-  ])('renders %s', async (url, copy) => {
+  ])('renders %s with no goals', async (url, copy) => {
     await renderRouter(APP, { initialUrl: url });
+    expect((await screen.findAllByText(copy))[0]).toBeOnTheScreen();
     expect(screen).toHavePathname(url);
-    expect(screen.getByText(copy)).toBeOnTheScreen();
     expect(screen.getAllByRole('button', { name: 'Account menu' }).length).toBeGreaterThan(0);
   });
 
@@ -50,10 +63,15 @@ describe('app routes (signed in)', () => {
     expect(screen.getByRole('button', { name: 'Create account' })).toBeOnTheScreen();
   });
 
-  it('opens a key-area detail route', async () => {
+  it('sends a user with no goals from My Goal to onboarding', async () => {
+    await renderRouter(APP, { initialUrl: '/goal' });
+    await waitFor(() => expect(screen).toHavePathname('/goal/new'));
+  });
+
+  it('opens a key-area detail route (empty state without goals)', async () => {
     await renderRouter(APP, { initialUrl: '/matrix/3' });
     expect(screen).toHavePathname('/matrix/3');
-    expect(screen.getByText('No key area yet')).toBeOnTheScreen();
+    expect(await screen.findByText('No goal yet')).toBeOnTheScreen();
   });
 
   it('rejects an out-of-range key area', async () => {

@@ -1,9 +1,39 @@
+import { router } from 'expo-router';
+
+import { useMutations, useReview } from '@/data/hooks';
+import { ReflectionForm, ReviewView } from '@/features/review';
+import { ErrorScreen, LoadingScreen } from '@/screens/queryState';
+import { useGoalScreen } from '@/screens/useGoalScreen';
 import { EmptyState, Screen } from '@/ui';
 
 export default function ReviewScreen() {
+  const { state, summary, detail, today, noGoals, extra: review } = useGoalScreen(useReview);
+  const mutations = useMutations();
+
+  if (noGoals) {
+    return (
+      <Screen>
+        <EmptyState
+          title="Nothing to review yet"
+          message="Create a goal, then reflections and plan changes will appear here."
+          action={{ label: 'Create your goal', onPress: () => router.push('/goal/new') }}
+        />
+      </Screen>
+    );
+  }
+  if (state.error) return <ErrorScreen error={state.error} onRetry={state.refetch} />;
+  if (state.loading || !summary || !detail || !today || !review?.data) return <LoadingScreen />;
+
+  // ReviewView supplies its own Screen scroll area.
   return (
-    <Screen>
-      <EmptyState title="Nothing to review yet" message="Reflections and plan changes will appear here as you work on your goal." />
-    </Screen>
+    <ReviewView
+      reflectionForm={
+        <ReflectionForm goalId={summary.id} today={today} addReflection={mutations.addReflection} />
+      }
+      completedThisWeek={summary.completedThisWeek}
+      outcomes={detail.outcomes}
+      reflections={review.data.reflections}
+      events={review.data.events}
+    />
   );
 }

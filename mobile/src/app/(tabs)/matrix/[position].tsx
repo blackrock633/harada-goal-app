@@ -1,6 +1,12 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 
-import { EmptyState, ErrorState, Screen } from '@/ui';
+import { useMutations } from '@/data/hooks';
+import { KeyAreaView } from '@/features/matrix';
+import { RefreshScreen } from '@/screens/RefreshScreen';
+import { ErrorScreen, LoadingScreen } from '@/screens/queryState';
+import { useGoalScreen } from '@/screens/useGoalScreen';
+import { EmptyState, ErrorState, Screen, Text } from '@/ui';
 
 /** Parses a key-area position (0..7); returns null when invalid. */
 export function parsePosition(raw: string | string[] | undefined): number | null {
@@ -12,7 +18,6 @@ export function parsePosition(raw: string | string[] | undefined): number | null
 export default function KeyAreaScreen() {
   const { position } = useLocalSearchParams<{ position: string }>();
   const index = parsePosition(position);
-
   if (index == null) {
     return (
       <Screen>
@@ -21,10 +26,51 @@ export default function KeyAreaScreen() {
       </Screen>
     );
   }
+  return <KeyArea index={index} />;
+}
+
+function KeyArea({ index }: { index: number }) {
+  const { state, detail, today, noGoals, refetchDetail } = useGoalScreen();
+  const mutations = useMutations();
+  const [banner, setBanner] = useState<string | null>(null);
+  const title = <Stack.Screen options={{ title: `Key area ${index + 1}` }} />;
+
+  if (noGoals) {
+    return (
+      <Screen>
+        {title}
+        <EmptyState
+          title="No goal yet"
+          message="Create a goal to plan its key areas."
+          action={{ label: 'Create your goal', onPress: () => router.push('/goal/new') }}
+        />
+      </Screen>
+    );
+  }
+  if (state.error) return <ErrorScreen error={state.error} onRetry={state.refetch} />;
+  if (state.loading || !detail || !today) return <LoadingScreen />;
+
   return (
-    <Screen>
-      <Stack.Screen options={{ title: `Key area ${index + 1}` }} />
-      <EmptyState title="No key area yet" message="This key area and its eight actions will appear here." />
-    </Screen>
+    <RefreshScreen refreshing={state.refreshing} onRefresh={state.refetch}>
+      {title}
+      {banner ? (
+        <Text tone="danger" accessibilityRole="alert">
+          {banner}
+        </Text>
+      ) : null}
+      <KeyAreaView
+        goal={detail}
+        position={index}
+        today={today}
+        matrix={mutations}
+        execution={mutations}
+        focus={mutations}
+        // setParams merges, so ?goal= is kept.
+        onNavigate={(p) => router.setParams({ position: String(p) })}
+        onError={setBanner}
+        onChanged={() => setBanner(null)}
+        onReloadLatest={refetchDetail}
+      />
+    </RefreshScreen>
   );
 }
