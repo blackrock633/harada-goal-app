@@ -1,4 +1,4 @@
-import type { LocalDate } from '@/domain/types';
+import type { LocalDate } from '../domain/types.js';
 
 export type AppErrorCode =
   | 'VALIDATION'

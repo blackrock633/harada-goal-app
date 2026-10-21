@@ -4,7 +4,7 @@
  * Shape validation lives here; business rules live in src/domain.
  */
 import { z } from 'zod';
-import { LIMITS } from '@/domain/limits';
+import { LIMITS } from '../domain/limits.js';
 
 const id = z.uuid({ message: 'Invalid id' });
 const localDate = z.iso.date({ message: 'Use a valid date (YYYY-MM-DD)' });

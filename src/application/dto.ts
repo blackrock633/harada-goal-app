@@ -32,7 +32,7 @@ import type {
   Purpose,
   ReflectionKind,
   Schedule,
-} from '@/domain/types';
+} from '../domain/types.js';
 
 type ISO = string;
 
