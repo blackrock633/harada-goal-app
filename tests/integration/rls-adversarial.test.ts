@@ -135,13 +135,16 @@ describe('RLS / authorization holes (asserting secure behaviour)', () => {
       expect(rows[0]!.p).toBe(false);
     });
 
-    it('public functions: nothing executable by anon; only owns_* executable by authenticated', async () => {
-      const { rows } = await t.client.query<{ proname: string; anon: boolean; auth: boolean }>(
-        `select p.proname, has_function_privilege('anon', p.oid, 'EXECUTE') anon, has_function_privilege('authenticated', p.oid, 'EXECUTE') auth
+    it('public functions: nothing executable by anon; everything authenticated can execute is an owns_* helper or a SECURITY INVOKER RPC with search_path=\'\'', async () => {
+      // D-017 (45b5109): writes go through SECURITY INVOKER RPCs, so authenticated may EXECUTE them.
+      const { rows } = await t.client.query<{ proname: string; anon: boolean; auth: boolean; definer: boolean; emptypath: boolean; config: string | null }>(
+        `select p.proname, has_function_privilege('anon', p.oid, 'EXECUTE') anon, has_function_privilege('authenticated', p.oid, 'EXECUTE') auth,
+                p.prosecdef definer, coalesce('search_path=""' = any(p.proconfig), false) emptypath, p.proconfig::text config
          from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname='public'`,
       );
-      const bad = rows.filter((r) => r.anon || (!r.proname.startsWith('owns_') && r.auth));
-      expect(bad.map((r) => r.proname)).toEqual([]);
+      expect(rows.filter((r) => r.anon).map((r) => r.proname), 'anon must execute nothing').toEqual([]);
+      const bad = rows.filter((r) => r.auth && !r.proname.startsWith('owns_') && (r.definer || !r.emptypath));
+      expect(bad.map((r) => `${r.proname} definer=${r.definer} config=${r.config}`), 'executable RPCs must be invoker with empty search_path').toEqual([]);
     });
 
     it('every SECURITY DEFINER function in public pins search_path', async () => {
@@ -245,10 +248,9 @@ describe('RLS / authorization holes (asserting secure behaviour)', () => {
       expect(r.error, 'a check on a task action should be rejected').toBeDefined();
     });
 
-    // ACCEPTED RISK H4 (P3, 97c845e): subject_id is documented as an untrusted label (column comment), not
-    // constrained. Nothing resolves it through RLS-bypassing code today. If a feature ever joins on subject_id,
-    // this must become a constraint and this test a plain `it`.
-    it.fails("H4 accepted: goal_events.subject_id may not reference a row outside the event's own goal", async () => {
+    // H4 (P3): FIXED for clients by D-017 (45b5109): direct goal_events inserts are rejected by the write-path
+    // guard (42501), so only trusted RPC/server code writes events.
+    it("H4: a client cannot write a goal_event whose subject_id references a row outside the event's own goal", async () => {
       const r = await attempt(t.client, bob(), `insert into goal_events (id, goal_id, type, summary, subject_id) values ($1,$2,'action_added','s',$3)`, [uuid(), id.gB, id.aA]);
       expect(r.error, "event in B's goal pointing at A's action").toBeDefined();
     });
