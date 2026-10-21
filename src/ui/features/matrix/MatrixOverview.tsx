@@ -6,7 +6,7 @@ import { Plus } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { GoalDetailDTO } from '@/application/dto';
 import { routes } from '@/ui/routes';
-import { SLOT_COUNT, buildMatrix, cellAt, doneLabel, type MatrixArea } from './matrix-model';
+import { SLOT_COUNT, buildMatrix, cellAt, doneLabel, type MatrixArea } from '@/application/matrix';
 
 export interface MatrixOverviewProps {
   goal: GoalDetailDTO;

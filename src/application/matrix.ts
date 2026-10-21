@@ -16,8 +16,8 @@
  * place as key area k in the centre block), holds key area k at its centre, and action j at
  * COMPASS[j] within the block.
  */
-import type { ActionDTO, GoalDetailDTO, OutcomeDTO } from '@shared/application/dto';
-import { MAX_ACTIONS_PER_OUTCOME, MAX_OUTCOMES_PER_GOAL } from '@shared/domain/limits';
+import type { ActionDTO, GoalDetailDTO, OutcomeDTO } from './dto';
+import { MAX_ACTIONS_PER_OUTCOME, MAX_OUTCOMES_PER_GOAL } from '../domain/limits.js';
 
 export const AREA_COUNT = MAX_OUTCOMES_PER_GOAL; // 8
 export const SLOT_COUNT = MAX_ACTIONS_PER_OUTCOME; // 8

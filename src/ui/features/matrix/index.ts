@@ -1,4 +1,4 @@
-export * from './matrix-model';
+export * from '@/application/matrix';
 export * from './MatrixOverview';
 export * from './FullMatrix';
 export * from './KeyAreaView';

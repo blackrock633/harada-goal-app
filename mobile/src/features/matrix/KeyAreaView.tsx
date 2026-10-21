@@ -10,7 +10,7 @@ import type { ActionDTO, GoalDetailDTO, OutcomeFieldsDTO } from '@shared/applica
 import { ActionEditorSheet, type ActionEditorMode } from './ActionEditorSheet';
 import { KeyAreaEditor } from './KeyAreaEditor';
 import { describeSchedule, formatShortDate, relativeDay } from './format';
-import { AREA_COUNT, SLOT_COUNT, buildMatrix, doneLabel } from './matrix-model';
+import { AREA_COUNT, SLOT_COUNT, buildMatrix, doneLabel } from '@shared/application/matrix';
 
 export interface KeyAreaViewProps {
   goal: GoalDetailDTO;

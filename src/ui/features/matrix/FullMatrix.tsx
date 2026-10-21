@@ -15,7 +15,7 @@ import {
   hubLabel,
   slotLabel,
   type MatrixArea,
-} from './matrix-model';
+} from '@/application/matrix';
 
 export interface FullMatrixProps {
   goal: GoalDetailDTO;

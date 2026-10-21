@@ -12,7 +12,7 @@ import { routes } from '@/ui/routes';
 import { Button, CheckCircle } from '@/ui/primitives';
 import { ActionEditorSheet, type ActionEditorMode } from './ActionEditorSheet';
 import { KeyAreaEditor } from './KeyAreaEditor';
-import { AREA_COUNT, SLOT_COUNT, buildMatrix, doneLabel } from './matrix-model';
+import { AREA_COUNT, SLOT_COUNT, buildMatrix, doneLabel } from '@/application/matrix';
 
 export interface KeyAreaViewProps {
   goal: GoalDetailDTO;

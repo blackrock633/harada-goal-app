@@ -5,7 +5,7 @@ import { useTheme } from '@/theme';
 import { Text } from '@/ui';
 import type { GoalDetailDTO } from '@shared/application/dto';
 
-import { SLOT_COUNT, buildMatrix, cellAt, doneLabel, type MatrixArea } from './matrix-model';
+import { SLOT_COUNT, buildMatrix, cellAt, doneLabel, type MatrixArea } from '@shared/application/matrix';
 
 export interface MatrixOverviewProps {
   goal: GoalDetailDTO;

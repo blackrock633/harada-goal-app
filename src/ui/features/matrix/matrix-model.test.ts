@@ -9,7 +9,7 @@ import {
   slotCoords,
   slotLabel,
   hubLabel,
-} from './matrix-model';
+} from '@/application/matrix';
 import { mkAction, mkGoal, mkOutcome, sampleGoal } from './fixtures.test-util';
 
 describe('buildMatrix', () => {
