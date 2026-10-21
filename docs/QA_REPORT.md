@@ -24,6 +24,8 @@ Chromium emulation (360×640, 390×844); WebKit/Safari is NOT TESTED.
 
 ## 2. Status on main `01c004f` (verified by QA 2026-10-20 14:40, both engines, under `caffeinate -i`)
 
+**Backend `data/supabase` 8575cf5 VERIFIED: tsc 0, vitest 546/546 including QA's updated adversarial suites.** Edge Function Deno wiring NOT TESTED (no Deno; staging tests ready).
+
 **Platform decision (user, 2026-10-20): rebuild as Expo/React Native.** **Data path (confirmed with the user, as reported by D):** reads via supabase-js under RLS; writes only via SECURITY INVOKER Postgres functions (`search_path=''`, EXECUTE to `authenticated` only) that set a transaction-local GUC `harada.write_path`; a statement-level guard trigger on every table raises 42501 for direct writes as anon/authenticated (revised by D from the earlier SECURITY DEFINER plan because of hosted-PG grant risk). QA test plan: 42501 on direct writes, catalog checks, no client path to the GUC, no persistence across transactions, foreign ids → NOT_FOUND. The web app below is the verified
 reference implementation. Native verification follows `NATIVE_QA_PLAN.md`.
 
@@ -34,7 +36,7 @@ reference implementation. Native verification follows `NATIVE_QA_PLAN.md`.
 | routes | VERIFIED (`/` 307 → signin, `/api/health` 200) |
 | e2e, Chrome + WebKit (iPhone UA) | **VERIFIED 62/62**: 15/15 journeys and 15/15 mobile-shell checks on each engine |
 | axe (6 real screens), offline save, 200% text, session end, forged cookie, lost response | VERIFIED on both engines |
-| Real Supabase (staging) | **BLOCKED (ready to run)**: `tests/staging/staging.test.ts` is written and skips until creds exist. Its grant/RLS queries and expected values were validated against the migrated schema (exact match) |
+| Real Supabase (staging) | **BLOCKED (ready to run, 15 tests)**: grants and RLS; RPC-only writes (direct write → 42501; foreign goal via add_outcome → HG404); harada_private not exposed (RPC-01); graphql closed (SEC-01); cross-user isolation; delete-account Edge Function (no JWT → 401, wrong password → data intact, success → cascade, bystander untouched, cannot sign in again) |
 | iOS Simulator / real device | **BLOCKED**: Xcode not installed (25 GB free is likely too little); Java/Maestro missing |
 | Native (Expo) app, native/app `eecac24` (includes data/supabase 45b5109 RPC write path) | **native tsc 0 · jest 136/136** · web on the same tree: **tsc 0, vitest 539/539 (+9 staging skipped)**, including QA's updated adversarial suite · no sign-in/data wiring in the app yet · simulator BLOCKED |
 
