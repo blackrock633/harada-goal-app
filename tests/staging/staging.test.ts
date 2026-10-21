@@ -13,6 +13,7 @@
  * Side effect: the isolation tests create two throwaway users (qa-staging-…@example.com) plus one goal
  * in the staging project. Deleting auth users needs the service role, which QA does not hold.
  */
+import crypto from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -60,6 +61,20 @@ describe.skipIf(!DB)('staging: grants on the live database (\\dp public.*)', () 
     expect(rows.map((r) => r.column_name).sort()).toEqual(['display_name', 'time_zone', 'updated_at']);
   });
 
+  it('harada_private is not exposed through PostgREST (RPC-01)', async () => {
+    const rows = await sql<{ cfg: string | null }[]>`select array_to_string(rolconfig, ',') cfg from pg_roles where rolname = 'authenticator'`;
+    expect(rows[0]?.cfg ?? '').not.toMatch(/harada_private/);
+  });
+
+  it('GraphQL surface is closed to app roles (SEC-01 mitigation)', async () => {
+    const rows = await sql<{ anon: boolean; auth: boolean }[]>`
+      select coalesce(has_schema_privilege('anon', 'graphql', 'USAGE'), false) anon,
+             coalesce(has_schema_privilege('authenticated', 'graphql', 'USAGE'), false) auth
+      from pg_namespace where nspname = 'graphql'`;
+    // No graphql schema at all (extension dropped) also passes.
+    for (const r of rows) expect([r.anon, r.auth]).toEqual([false, false]);
+  });
+
   it('every public table has RLS enabled', async () => {
     const rows = await sql<{ relname: string }[]>`select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity`;
@@ -89,9 +104,9 @@ describe.skipIf(!URL_ || !KEY)('staging: cross-user isolation through real Auth 
   beforeAll(async () => {
     a = await signedIn('a');
     b = await signedIn('b');
-    const { data: who } = await a.auth.getUser();
     goalId = crypto.randomUUID();
-    const ins = await a.from('goals').insert({ id: goalId, owner_id: who.user!.id, title: `QA staging secret ${tag}`, status: 'draft' });
+    // D-017: clients write only through RPCs.
+    const ins = await a.rpc('create_goal', { p_input: { id: goalId, title: `QA staging secret ${tag}` } });
     if (ins.error) throw new Error(`A could not create a goal: ${ins.error.message}`);
   });
 
@@ -112,9 +127,16 @@ describe.skipIf(!URL_ || !KEY)('staging: cross-user isolation through real Auth 
     expect(mine.data?.title).toBe(`QA staging secret ${tag}`);
   });
 
-  it("B cannot attach an outcome to A's goal", async () => {
-    const r = await b.from('outcomes').insert({ id: crypto.randomUUID(), goal_id: goalId, title: 'injected', position: 0 });
-    expect(r.error, 'insert into another user\'s goal must be rejected').not.toBeNull();
+  it("B cannot attach an outcome to A's goal via the RPC", async () => {
+    // Valid input (position included), so the only possible rejection is ownership: NOT_FOUND (HG404).
+    const r = await b.rpc('add_outcome', { p_input: { id: crypto.randomUUID(), goalId, position: 0, title: 'injected' } });
+    expect(r.error?.code, 'add_outcome on another user\'s goal must be NOT_FOUND').toBe('HG404');
+  });
+
+  it('direct table writes are rejected for a signed-in client (write path only via RPCs, 42501)', async () => {
+    const { data: who } = await b.auth.getUser();
+    const r = await b.from('goals').insert({ id: crypto.randomUUID(), owner_id: who.user!.id, title: 'direct', status: 'draft' });
+    expect(r.error?.code).toBe('42501');
   });
 
   it("B cannot claim A's goal by inserting a goal row with A's owner_id", async () => {
@@ -123,3 +145,60 @@ describe.skipIf(!URL_ || !KEY)('staging: cross-user isolation through real Auth 
     expect(r.error, 'owner_id must equal auth.uid()').not.toBeNull();
   });
 });
+
+describe.skipIf(!URL_ || !KEY)('staging: delete-account Edge Function (8575cf5)', () => {
+  const tag = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const client = () => createClient(URL_!, KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
+  const fn = `${URL_}/functions/v1/delete-account`;
+  const email = `qa-staging-del-${tag}@example.com`;
+  const password = `Qa-${tag}-correct-horse`;
+  let victim: SupabaseClient;
+  let bystander: SupabaseClient;
+  let token: string;
+  let victimGoal: string;
+  let bystanderGoal: string;
+
+  async function goalFor(c: SupabaseClient, title: string): Promise<string> {
+    const { data: who } = await c.auth.getUser();
+    const id = crypto.randomUUID();
+    const r = await c.rpc('create_goal', { p_input: { id, title } });
+    if (r.error) throw new Error(`create_goal failed for ${who.user?.id}: ${r.error.message}`);
+    return id;
+  }
+
+  beforeAll(async () => {
+    victim = client();
+    const up = await victim.auth.signUp({ email, password });
+    if (up.error || !up.data.session) throw new Error(`BLOCKED: sign-up needs a session (email confirmation off): ${up.error?.message ?? 'no session'}`);
+    token = up.data.session.access_token;
+    bystander = client();
+    const b = await bystander.auth.signUp({ email: `qa-staging-bys-${tag}@example.com`, password });
+    if (!b.data.session) throw new Error('BLOCKED: bystander sign-up has no session');
+    victimGoal = await goalFor(victim, `victim ${tag}`);
+    bystanderGoal = await goalFor(bystander, `bystander ${tag}`);
+  });
+
+  const post = (body: unknown, auth?: string) =>
+    fetch(fn, { method: 'POST', headers: { 'content-type': 'application/json', apikey: KEY!, ...(auth ? { authorization: `Bearer ${auth}` } : {}) }, body: JSON.stringify(body) });
+
+  it('no JWT → 401, nothing deleted', async () => {
+    const r = await post({ password, confirmation: 'DELETE' });
+    expect(r.status).toBe(401);
+    expect((await victim.from('goals').select('id').eq('id', victimGoal)).data).toHaveLength(1);
+  });
+
+  it('wrong password → rejected, account and data intact', async () => {
+    const r = await post({ password: 'definitely-wrong', confirmation: 'DELETE' }, token);
+    expect(r.status).toBe(400);
+    expect((await victim.from('goals').select('id').eq('id', victimGoal)).data).toHaveLength(1);
+  });
+
+  it('correct password → account deleted, every row gone, the other user untouched, cannot sign in again', async () => {
+    const r = await post({ password, confirmation: 'DELETE' }, token);
+    expect(r.status).toBe(200);
+    expect((await bystander.from('goals').select('id').eq('id', bystanderGoal)).data).toHaveLength(1);
+    const again = await client().auth.signInWithPassword({ email, password });
+    expect(again.error, 'deleted user must not be able to sign in').not.toBeNull();
+  });
+});
+
