@@ -21,6 +21,10 @@ npx supabase functions deploy delete-account   # keep "Verify JWT" on (the defau
 After `db push`, confirm the write path (D-017): `\df+ public.*` shows the 30 RPCs as `security invoker` with
 `search_path=""`, executable by `authenticated` only; every table has an enabled `<table>_write_path` trigger.
 
+**Disable GraphQL** (the apps don't use it): Database → Extensions → turn off `pg_graphql`, or remove
+`graphql_public` from API → Exposed schemas. Writes are already blocked there by the guard trigger, and the
+write-path flag closes at the end of every RPC (QA SEC-01), so this only removes surface. QA verifies it on staging.
+
 ## 2. Environment (server)
 
 | Variable | Where from | Notes |

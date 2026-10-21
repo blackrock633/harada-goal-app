@@ -87,6 +87,17 @@ describe('RPC write path', () => {
       await one(t.client, a(), 'create_goal', { title: 'Persist check' });
       expect(await codeOf(as(t.client, a(), (tx) => tx.query(`delete from goals where false`)))).toBe('42501');
     });
+    it('the write path closes when the RPC returns, even inside the same transaction (QA SEC-01)', async () => {
+      const id = uuid();
+      const code = await codeOf(
+        as(t.client, a(), async (tx) => {
+          await tx.query(`select * from public.create_goal($1::jsonb)`, [JSON.stringify({ title: 'via rpc' })]);
+          return tx.query(`insert into goals (id, owner_id, title, status, achieved_at) values ($1, $2, 'forged', 'achieved', now())`, [id, A]);
+        }),
+      );
+      expect(code).toBe('42501');
+      expect(await count(`goals where id = $1`, [id])).toBe(0);
+    });
     it('anon cannot execute any RPC; claimless authenticated is UNAUTHENTICATED', async () => {
       expect(await codeOf(call(t.client, 'anon', 'create_goal', { title: 'x' }))).toBe('42501');
       expect(await codeOf(call(t.client, 'authenticated-noclaims', 'create_goal', { title: 'x' }))).toBe('HG401');
@@ -126,7 +137,7 @@ describe('RPC write path', () => {
         `select n.nspname || '.' || p.proname as fn from pg_proc p join pg_namespace n on n.oid = p.pronamespace
          where n.nspname in ('public', 'harada_private') and p.prosrc ilike '%harada.write_path%' and p.prosrc ilike '%set_config%'`,
       );
-      expect(rows.map((r) => r.fn)).toEqual(['harada_private.begin_write']);
+      expect(rows.map((r) => r.fn).sort()).toEqual(['harada_private.begin_write', 'harada_private.end_write']);
       const dyn = await t.client.query(
         `select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
          where n.nspname = 'public' and p.prosrc ~* '\\mexecute\\M\\s'`,
@@ -179,6 +190,11 @@ describe('RPC write path', () => {
       const code = await codeOf(call(t.client, a(), 'create_goal', { id, title: 'Bad', outcomes: [{ title: 'O', actions: [{ title: 'x', kind: 'chore' }] }] }));
       expect(code).toBe('HG400');
       expect(await count(`goals where id = $1`, [id])).toBe(0);
+    });
+    it('malformed nested input and oversized values are VALIDATION, never raw errors (QA P3)', async () => {
+      expect(await codeOf(call(t.client, a(), 'create_goal', { title: 'x', outcomes: [['title']] }))).toBe('HG400');
+      expect(await codeOf(call(t.client, a(), 'create_goal', { title: 'x', outcomes: [{ title: 'O', measure: { target: 1e300 } }] }))).toBe('HG400');
+      expect(await codeOf(call(t.client, a(), 'create_goal', { title: 'x', vision: ' '.repeat(100_000) }))).toBe('HG400');
     });
     it('validation errors carry the field in hint', async () => {
       await expect(call(t.client, a(), 'create_goal', { title: '   ' })).rejects.toMatchObject({ code: 'HG400', hint: 'title' });
@@ -342,6 +358,9 @@ describe('RPC write path', () => {
                     (select json_agg(p) from profiles p where id = $1) as p`,
             [A],
           )).rows[0];
+        const bOwn = await one(t.client, b(), 'create_goal', { title: 'B own', outcomes: [{ title: 'B area' }] });
+        const bOwnGoal = bOwn.id as string;
+        const bOwnOutcome = (await t.client.query<{ id: string }>(`select id from outcomes where goal_id = $1`, [bOwnGoal])).rows[0]!.id;
         const before = await snapshot();
         const refl = uuid();
         // A fixed past date: A's time zone was changed above, so the UTC `today` may be A's tomorrow.
@@ -368,10 +387,18 @@ describe('RPC write path', () => {
         for (const [name, input] of cases) {
           expect({ name, code: await codeOf(call(t.client, b(), name, input)) }).toEqual({ name, code: 'HG404' });
         }
-        // Reusing A's ids in B's create: the primary key rejects it and nothing of B's plan is inserted.
-        expect(await codeOf(call(t.client, b(), 'create_goal', { id: goalId, title: 'Mine' }))).toBe('23505');
+        // Reusing A's ids in B's create: rejected as a generic CONFLICT (no constraint name, so no hint about
+        // which table the id lives in), and nothing of B's plan is inserted.
+        await expect(call(t.client, b(), 'create_goal', { id: goalId, title: 'Mine' })).rejects.toMatchObject({ code: 'HG409', constraint: undefined });
         const bGoal = uuid();
-        expect(await codeOf(call(t.client, b(), 'create_goal', { id: bGoal, title: 'Mine', outcomes: [{ id: out1, title: 'Steal' }] }))).toBe('23505');
+        expect(await codeOf(call(t.client, b(), 'create_goal', { id: bGoal, title: 'Mine', outcomes: [{ id: out1, title: 'Steal' }] }))).toBe('HG409');
+        for (const [name, input] of [
+          ['add_outcome', { id: out1, goalId: bOwnGoal, title: 'X' }],
+          ['add_action', { id: act1, outcomeId: bOwnOutcome, title: 'X', kind: 'task' }],
+          ['add_reflection', { id: refl, goalId: bOwnGoal, date: '2026-01-02', kind: 'daily', wentWell: 'x' }],
+        ] as const) {
+          expect({ name, code: await codeOf(call(t.client, b(), name, input)) }).toEqual({ name, code: 'HG409' });
+        }
         expect(await count(`goals where id = $1`, [bGoal])).toBe(0);
         // update_profile can only ever touch the caller's own row.
         await one(t.client, b(), 'update_profile', { displayName: 'Bobby' });
