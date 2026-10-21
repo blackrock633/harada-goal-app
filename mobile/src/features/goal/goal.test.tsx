@@ -49,6 +49,16 @@ describe('GoalForm create', () => {
     expect(createGoal).not.toHaveBeenCalled();
   });
 
+  it('moves focus to the first invalid field (A11Y-02)', async () => {
+    const { TextInput } = jest.requireActual('react-native') as typeof import('react-native');
+    const focus = jest.spyOn(TextInput.prototype as unknown as { focus: () => void }, 'focus');
+    await setupCreate();
+    await press('Create goal');
+    await screen.findByText('Required');
+    expect(focus).toHaveBeenCalled();
+    focus.mockRestore();
+  });
+
   it('allows a title up to the limit and shows a counter', async () => {
     const { createGoal, onCreated } = await setupCreate();
     await fireEvent.changeText(screen.getByLabelText(TITLE), 'a'.repeat(120));
@@ -288,7 +298,8 @@ describe('GoalOverview', () => {
   it('shows three separate figures and no merged percentage', async () => {
     await show(detail());
     expect(screen.getByText('2 of 72 positions filled')).toBeOnTheScreen();
-    expect(screen.getByText('0 of 0 tasks done')).toBeOnTheScreen();
+    expect(screen.getByText('No tasks yet')).toBeOnTheScreen(); // UX-01
+    expect(screen.queryByText(/0 of 0/)).toBeNull();
   });
 
   it('with no routines and no attainment there is no % anywhere', async () => {

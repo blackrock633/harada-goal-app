@@ -123,7 +123,10 @@ export function GoalOverview({
           <Text>{`${metrics.planning.filled} of ${metrics.planning.total} positions filled`}</Text>
         </Figure>
         <Figure label="Actions">
-          <Text>{`${metrics.completedTasks} of ${metrics.totalTasks} tasks done`}</Text>
+          {/* UX-01: a zero denominator is "No tasks yet", never "0 of 0". */}
+          <Text>
+            {metrics.totalTasks === 0 ? 'No tasks yet' : `${metrics.completedTasks} of ${metrics.totalTasks} tasks done`}
+          </Text>
         </Figure>
         {metrics.routineCount > 0 ? (
           <Figure label="Routines">

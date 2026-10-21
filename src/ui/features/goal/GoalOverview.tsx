@@ -85,7 +85,8 @@ export function GoalOverview({ goal, today, activateGoal, onActivated }: GoalOve
           <div className="py-3">
             <dt className="text-sm text-ink-muted">Actions</dt>
             <dd className="text-ink tabular-nums">
-              {metrics.completedTasks} of {metrics.totalTasks} tasks done
+              {/* UX-01: a zero denominator is "No tasks yet", never "0 of 0". */}
+              {metrics.totalTasks === 0 ? 'No tasks yet' : `${metrics.completedTasks} of ${metrics.totalTasks} tasks done`}
             </dd>
           </div>
           {metrics.routineCount > 0 && (

@@ -1,7 +1,7 @@
 export { Text, type TextProps, type TextTone } from './Text';
 export { Button, type ButtonProps, type ButtonVariant } from './Button';
 export { IconButton, DotsIcon, type IconButtonProps } from './IconButton';
-export { TextField, type TextFieldProps } from './TextField';
+export { TextField, type TextFieldHandle, type TextFieldProps } from './TextField';
 export { CheckCircle, type CheckCircleProps } from './CheckCircle';
 export { ProgressBar, NOT_MEASURABLE, type ProgressBarProps } from './ProgressBar';
 export { Badge, type BadgeProps, type BadgeTone } from './Badge';

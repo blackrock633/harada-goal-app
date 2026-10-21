@@ -4,7 +4,7 @@ import { View } from 'react-native';
 import { newClientId } from '@/data/errors';
 import type { GoalMutations } from '@/data/mutations';
 import { useTheme } from '@/theme';
-import { Button, Text, TextField } from '@/ui';
+import { Button, Text, TextField, type TextFieldHandle } from '@/ui';
 import type { GoalFieldsDTO } from '@shared/application/dto';
 
 import { DetailsFields } from './GoalFields';
@@ -17,6 +17,8 @@ import {
   validateDraft,
   type FieldErrors,
   type GoalDraft,
+  firstInvalid,
+  type FieldKey,
 } from './goalLogic';
 
 export type GoalFormProps = {
@@ -63,6 +65,18 @@ export function GoalForm({
   const [pending, setPending] = useState(false);
   const [conflict, setConflict] = useState(false);
   const inFlight = useRef(false);
+  // A11Y-02: after a failed submit, move focus to the first invalid field (as the web form does).
+  const fieldRefs = useRef<Partial<Record<FieldKey, TextFieldHandle | null>>>({});
+  const focusNext = useRef<FieldKey | null>(null);
+  const register = (key: FieldKey) => (el: TextFieldHandle | null) => {
+    fieldRefs.current[key] = el;
+  };
+  useEffect(() => {
+    const key = focusNext.current;
+    if (!key) return;
+    focusNext.current = null;
+    fieldRefs.current[key]?.focus();
+  }, [errors]);
   // One client id per create: reused on retry so a retried create is idempotent.
   const createIdRef = useRef<string | null>(null);
   // Latest updatedAt we know about; sent as expectedUpdatedAt on edit.
@@ -88,6 +102,7 @@ export function GoalForm({
     if (inFlight.current) return;
     const local = validateDraft(draft, today, !isEdit);
     if (Object.keys(local).length > 0) {
+      focusNext.current = firstInvalid(local);
       setErrors(local);
       setFormError('');
       return;
@@ -120,6 +135,7 @@ export function GoalForm({
         }
       } else {
         if (out.code === 'CONFLICT') setConflict(true);
+        focusNext.current = firstInvalid(out.fields);
         setErrors(out.fields);
         setFormError(out.message);
       }
@@ -156,6 +172,7 @@ export function GoalForm({
       <TextField
         label="What is your goal?"
         hint="One clear sentence. You can refine it later."
+        ref={register('title')}
         value={draft.title}
         onChangeText={(v) => setDraft((d) => ({ ...d, title: v }))}
         error={errors.title}
@@ -172,6 +189,7 @@ export function GoalForm({
               ? 'Format YYYY-MM-DD.'
               : 'Format YYYY-MM-DD. Must be in the future. Leave empty if there is no deadline.'
           }
+          ref={register('targetDate')}
           value={draft.targetDate}
           onChangeText={(v) => setDraft((d) => ({ ...d, targetDate: v.trim() }))}
           error={errors.targetDate}
@@ -192,6 +210,7 @@ export function GoalForm({
         draft={draft}
         errors={errors}
         disabled={pending}
+        register={register}
         onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
         onChangePurpose={(k, v) => setDraft((d) => ({ ...d, purpose: { ...d.purpose, [k]: v } }))}
       />

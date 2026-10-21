@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ComponentRef, type Ref } from 'react';
 import { AccessibilityInfo, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 
 import { MIN_TOUCH, useTheme } from '@/theme';
 
 import { Text } from './Text';
+
+/** The focusable instance behind a TextField (RN 0.88 separates component and instance types). */
+export type TextFieldHandle = ComponentRef<typeof TextInput>;
 
 export type TextFieldProps = Omit<
   TextInputProps,
@@ -17,6 +20,8 @@ export type TextFieldProps = Omit<
   multiline?: boolean;
   /** Show a counter once the value reaches 80% of this limit. */
   maxLength?: number;
+  /** React 19 passes `ref` as a prop; forwarded to the TextInput so forms can focus a field. */
+  ref?: Ref<TextFieldHandle>;
 };
 
 export function TextField({
@@ -30,6 +35,7 @@ export function TextField({
   style,
   onFocus,
   onBlur,
+  ref,
   ...rest
 }: TextFieldProps) {
   const { colors, radius, space, typeScale } = useTheme();
@@ -50,6 +56,7 @@ export function TextField({
       </Text>
       <TextInput
         {...rest}
+        ref={ref}
         value={value}
         onChangeText={onChangeText}
         multiline={multiline}

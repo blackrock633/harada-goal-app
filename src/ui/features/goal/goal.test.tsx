@@ -195,7 +195,8 @@ describe('GoalOverview', () => {
     expect(screen.getAllByRole('listitem').filter((li) => /^\d+\./.test(li.textContent ?? ''))).toHaveLength(8);
     expect(screen.getAllByText('Empty slot')).toHaveLength(6);
     expect(screen.getByText(/2 of 72 positions filled/)).toBeTruthy();
-    expect(screen.getByText(/0 of 0 tasks done/)).toBeTruthy();
+    expect(screen.getByText('No tasks yet')).toBeTruthy(); // UX-01
+    expect(screen.queryByText(/0 of 0/)).toBeNull();
     expect(screen.getByText(/Area 3: 5 \/ 10 km/)).toBeTruthy();
     expect(screen.queryByRole('progressbar')).toBeNull();
   });
