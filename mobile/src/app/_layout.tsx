@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
 import { SessionProvider, useSession } from '@/auth/session';
+import { QueryProvider } from '@/data/query-provider';
 import { useAppFonts, useTheme } from '@/theme';
 import { ErrorState, Screen } from '@/ui';
 
@@ -13,7 +14,9 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   return (
     <SessionProvider>
-      <RootNavigator />
+      <QueryProvider>
+        <RootNavigator />
+      </QueryProvider>
     </SessionProvider>
   );
 }
