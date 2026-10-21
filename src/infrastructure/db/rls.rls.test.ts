@@ -17,9 +17,13 @@ async function as<T>(client: PGlite, who: Who, fn: (tx: Transaction) => Promise<
     } else if (who === 'authenticated-noclaims') {
       await tx.query(`select set_config('role','authenticated',true)`);
     } else {
-      await tx.query(`select set_config('role','authenticated',true), set_config('request.jwt.claims',$1,true)`, [
-        JSON.stringify({ sub: who.sub, role: 'authenticated' }),
-      ]);
+      // Opens the write path like the trusted server does, so these tests exercise RLS itself. The guard
+      // that keeps clients out of direct writes is tested in rpc.rls.test.ts.
+      await tx.query(
+        `select set_config('role','authenticated',true), set_config('request.jwt.claims',$1,true),
+                set_config('harada.write_path','on',true)`,
+        [JSON.stringify({ sub: who.sub, role: 'authenticated' })],
+      );
     }
     return fn(tx);
   });
@@ -263,7 +267,7 @@ describe('row level security', () => {
       const del = (id: string) => as(t.client, alice(), (tx) => tx.query(`delete from goals where id=$1`, [id]));
       expect((await del(ids.goalA)).affectedRows).toBe(0);
       const gone = await t.client.transaction(async (tx) => {
-        await tx.query(`select set_config('role','authenticated',true), set_config('request.jwt.claims',$1,true)`, [JSON.stringify({ sub: A })]);
+        await tx.query(`select set_config('role','authenticated',true), set_config('request.jwt.claims',$1,true), set_config('harada.write_path','on',true)`, [JSON.stringify({ sub: A })]);
         const r = await tx.query(`delete from goals where id=$1`, [ids.archivedA]);
         await tx.rollback(); // keep fixtures stable
         return r.affectedRows;
@@ -278,7 +282,7 @@ describe('row level security', () => {
 
     it('goal_events INSERT works for the owner (append-only)', async () => {
       const ok = await t.client.transaction(async (tx) => {
-        await tx.query(`select set_config('role','authenticated',true), set_config('request.jwt.claims',$1,true)`, [JSON.stringify({ sub: A })]);
+        await tx.query(`select set_config('role','authenticated',true), set_config('request.jwt.claims',$1,true), set_config('harada.write_path','on',true)`, [JSON.stringify({ sub: A })]);
         const r = await tx.query(`insert into goal_events (id, goal_id, type, summary) values ($1,$2,'x','s')`, [uuid(), ids.goalA]);
         await tx.rollback();
         return r.affectedRows;
