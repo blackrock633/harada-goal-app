@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, secureSessionStorage } from '../secure-session-storage';
+import { CHUNK_BYTES, secureSessionStorage, splitUtf8 } from '../secure-session-storage';
 
 // In-memory stand-in for the platform mockKeychain.
 const mockKeychain = new Map<string, string>();
@@ -22,7 +22,7 @@ describe('secureSessionStorage', () => {
     const value = session(5000);
     await secureSessionStorage.setItem(KEY, value);
     expect(await secureSessionStorage.getItem(KEY)).toBe(value);
-    expect([...mockKeychain.values()].every((v) => v.length <= CHUNK_SIZE)).toBe(true);
+    expect([...mockKeychain.values()].every((v) => Buffer.byteLength(v, 'utf8') <= CHUNK_BYTES)).toBe(true);
     expect(mockKeychain.size).toBeGreaterThan(3);
   });
 
@@ -55,5 +55,54 @@ describe('secureSessionStorage', () => {
   it('sanitises keys the mockKeychain would reject', async () => {
     await secureSessionStorage.setItem('sb:weird/key', 'x');
     expect(await secureSessionStorage.getItem('sb:weird/key')).toBe('x');
+  });
+});
+
+describe('non-ASCII sessions (NAT-02)', () => {
+  it('no keychain item exceeds 2048 UTF-8 bytes with a non-ASCII display name', async () => {
+    const value = JSON.stringify({
+      access_token: 'a'.repeat(900),
+      refresh_token: 'r'.repeat(40),
+      user: { user_metadata: { display_name: '原田 隆史 — 目標達成の技術 🎯'.repeat(40) } },
+    });
+    await secureSessionStorage.setItem('sb-proj-auth-token', value);
+    for (const [k, v] of mockKeychain) if (!k.endsWith('.n')) expect(Buffer.byteLength(v, 'utf8')).toBeLessThanOrEqual(2048);
+    expect(await secureSessionStorage.getItem('sb-proj-auth-token')).toBe(value);
+  });
+
+  it('never splits a multi-byte character', () => {
+    const parts = splitUtf8('🎯'.repeat(10), 6); // 4-byte emoji: one per part
+    expect(parts).toEqual(Array(10).fill('🎯'));
+    expect(parts.join('')).toBe('🎯'.repeat(10));
+  });
+});
+
+describe('interrupted writes', () => {
+  it('reads as signed out if a write dies before publishing the count', async () => {
+    await secureSessionStorage.setItem(KEY, session(3000));
+    const store = jest.requireMock('expo-secure-store') as { setItemAsync: jest.Mock };
+    let writes = 0;
+    store.setItemAsync.mockImplementationOnce(async (k: string, v: string) => {
+      writes++;
+      mockKeychain.set(k, v); // count := '0'
+    });
+    store.setItemAsync.mockImplementationOnce(async () => {
+      throw new Error('app killed');
+    });
+    await expect(secureSessionStorage.setItem(KEY, session(4000))).rejects.toThrow('app killed');
+    expect(writes).toBe(1);
+    expect(await secureSessionStorage.getItem(KEY)).toBeNull();
+  });
+
+  it('sign-out after an interrupted write leaves no orphaned token parts', async () => {
+    await secureSessionStorage.setItem(KEY, session(5000));
+    const store = jest.requireMock('expo-secure-store') as { setItemAsync: jest.Mock };
+    store.setItemAsync.mockImplementationOnce(async (k: string, v: string) => void mockKeychain.set(k, v));
+    store.setItemAsync.mockImplementationOnce(async () => {
+      throw new Error('app killed');
+    });
+    await expect(secureSessionStorage.setItem(KEY, session(5000))).rejects.toThrow();
+    await secureSessionStorage.removeItem(KEY);
+    expect(mockKeychain.size).toBe(0);
   });
 });
