@@ -132,6 +132,9 @@ RLS is enabled on **every** table (a test fails if a new table lacks RLS or poli
 - Trigger `<table>_write_path` (statement level, every table; UPDATE only on profiles) raises 42501 for `anon` /
   `authenticated` unless `harada.write_path = 'on'` in the current transaction. `harada_private.begin_write()`
   and the server `UnitOfWork` set it; nothing a client can call does.
+- The flag spans exactly one RPC: each `public.<rpc>` is a wrapper that calls `harada_private.<rpc>_impl` and then
+  `harada_private.end_write()` (migration `20261020130000_write_path_scope.sql`, QA SEC-01). Wrappers turn
+  unique/exclusion violations into HG409 and shape errors into HG400, without constraint names.
 - RPCs are `SECURITY INVOKER`, `search_path = ''`, executable by `authenticated` only. Internal helpers live in
   schema `harada_private` (not exposed by PostgREST).
 - Tests: `src/infrastructure/db/rpc.rls.test.ts` (guard, catalog, every RPC, user B with user A's ids).
