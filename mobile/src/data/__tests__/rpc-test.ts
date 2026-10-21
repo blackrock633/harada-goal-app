@@ -165,6 +165,16 @@ describe('check / uncheck routine -> checkedToday', () => {
   });
 });
 
+describe('updateGoal purpose patch (data-loss regression, backend c215716)', () => {
+  it('sends only the purpose quadrant that was edited, never blanks for the others', async () => {
+    const t = newMutations({ update_goal: row(goalRow()) });
+    await t.m.updateGoal({ goalId: ID.goalActive, purpose: { othersTangible: 'A stronger team' } });
+    expect(t.rpc).toHaveBeenCalledWith('update_goal', {
+      p_input: { goalId: ID.goalActive, purpose: { othersTangible: 'A stronger team' } },
+    });
+  });
+});
+
 describe('focus mutations', () => {
   it('addToToday: rpc(add_to_today, p_input) then returns the reloaded ActionDTO with focusedToday', async () => {
     const t = newMutations({ add_to_today: row(focusRow(ID.task)) }, { daily_focus: [focusRow(ID.task)] });
