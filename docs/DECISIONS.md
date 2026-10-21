@@ -100,6 +100,6 @@ trusted Next.js `UnitOfWork` set it. Clients cannot: PostgREST sets only `reques
 `auth`-schema grant rights that `postgres` may not hold on hosted Supabase (PG15/17), and that can't be
 verified before the staging project exists. Revisit once staging confirms those rights.
 **Consequences:** Domain rules now exist in TypeScript (`src/domain`, used by the web app) and in SQL (the
-RPCs). The SQL suite `rpc.rls.test.ts` mirrors the TS behaviour; drift is a risk until the web app also writes
-through the RPCs. The event log (`goal_events`) is written only by trusted code, which also closes QA H4 for
+RPCs). `rpc-parity.rls.test.ts` runs the same command script through both and fails on any difference in outcome
+or resulting data; drift remains possible only for paths the script doesn't cover. The event log (`goal_events`) is written only by trusted code, which also closes QA H4 for
 clients. Account deletion needs the service-role key, so it will be a Supabase Edge Function, not an RPC.

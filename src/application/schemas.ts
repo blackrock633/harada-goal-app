@@ -61,6 +61,13 @@ export const createGoalSchema = z.object({
   purpose: purpose.partial().optional(),
 });
 export const createGoalFromTemplateSchema = z.object({ id: id.optional(), templateId: z.string().min(1).max(64) });
+/** A purpose patch: only the quadrants sent are changed (no defaults, so omitted ones are never blanked). */
+const purposePatch = z.object({
+  selfTangible: text(LIMITS.purposeQuadrant).optional(),
+  selfIntangible: text(LIMITS.purposeQuadrant).optional(),
+  othersTangible: text(LIMITS.purposeQuadrant).optional(),
+  othersIntangible: text(LIMITS.purposeQuadrant).optional(),
+});
 export const updateGoalSchema = z.object({
   goalId: id,
   expectedUpdatedAt,
@@ -68,7 +75,7 @@ export const updateGoalSchema = z.object({
   vision: text(LIMITS.vision).optional(),
   successCriteria: text(LIMITS.successCriteria).optional(),
   targetDate: localDate.nullable().optional(),
-  purpose: purpose.partial().optional(),
+  purpose: purposePatch.optional(),
 });
 export const goalIdSchema = z.object({ goalId: id });
 export const deleteGoalPermanentlySchema = z.object({
