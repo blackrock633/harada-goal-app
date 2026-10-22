@@ -11,6 +11,7 @@ const config = [
     ignores: [
       'legacy/**',
       '.claude/**',
+      'tests/native/**',
       '.next/**',
       'node_modules/**',
       '.data/**',

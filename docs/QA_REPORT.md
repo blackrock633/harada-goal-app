@@ -13,7 +13,7 @@ Related: `HARADA_SPEC.md` · `ACCEPTANCE_CRITERIA.md` · `research/HARADA_METHOD
 > Create a goal, build and edit the matrix, save securely to Supabase, reopen without losing data,
 > complete daily actions, and see accurate progress on a real mobile device.
 
-**PARTIALLY VERIFIED.** Every step works end to end on `ui/integration` 07fd5e9 (journeys 1–8, §5b) with dev auth,
+**PARTIALLY VERIFIED (native now included).** On native, the full journey (create goal, matrix, save, reopen, complete a daily action, accurate metrics, two-user isolation, retry without duplicates) passes with the real app code against the real database schema, RLS and RPCs (6/6, mutation-checked). Still missing: real Supabase over the network, and a device or simulator. Every step works end to end on `ui/integration` 07fd5e9 (journeys 1–8, §5b) with dev auth,
 an embedded Postgres carrying the real migrations and RLS, and Chromium phone emulation.
 **Not yet verified:** (1) a real Supabase project (GoTrue sign-up, hosted Postgres, PostgREST, `\dp public.*` grants);
 none is configured, so this needs a user action. (2) A real mobile device or iOS Safari; none is available.
@@ -38,7 +38,8 @@ reference implementation. Native verification follows `NATIVE_QA_PLAN.md`.
 | axe (6 real screens), offline save, 200% text, session end, forged cookie, lost response | VERIFIED on both engines |
 | Real Supabase (staging) | **BLOCKED (ready to run, 15 tests)**: grants and RLS; RPC-only writes (direct write → 42501; foreign goal via add_outcome → HG404); harada_private not exposed (RPC-01); graphql closed (SEC-01); cross-user isolation; delete-account Edge Function (no JWT → 401, wrong password → data intact, success → cascade, bystander untouched, cannot sign in again) |
 | iOS Simulator / real device | **BLOCKED**: Xcode not installed (25 GB free is likely too little); Java/Maestro missing |
-| Native (Expo) app, native/app `af3e12f` (auth, data layer; screens not yet wired) | **native tsc 0 · jest 288/288** · create ids reused across retries, reset only on success · cache cleared whenever the signed-in user changes (sign-out or account switch), mutation-checked by QA (removing the clear → 2 tests fail) · simulator BLOCKED |
+| Native (Expo) app, native/app `b490d93` (**every screen wired to real data**) | **web tsc 0 · native tsc 0 · jest 299/299** |
+| **Native journeys vs. the REAL database** (QA harness: real screens and data layer → PGlite with all migrations, RLS, real SQL RPCs) | **VERIFIED 6/6, three consecutive QA runs**: J1 create goal → reopen (fresh render, empty cache) → still shown · J2 matrix, 2 key areas + 3 actions → "Plan: 5 of 72", DB positions correct · J3 Today complete → reopen → still done; reopen task → persists · J4 "2 of 3 tasks done", attainment "Not measured yet", no % · J5 user B sees none of A's data, including A's goal-id routes · J6 lost response → error shown, retry → exactly 1 row. **Mutation-checked:** with create_goal's transaction silently rolled back, all 6 fail. Gaps: no HTTP/PostgREST, GoTrue, real network or device (`tests/native/README.md`) |
 
 ## 3. Open defects
 
