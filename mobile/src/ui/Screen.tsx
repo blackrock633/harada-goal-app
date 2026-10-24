@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useTheme } from '@/theme';
+import { CONTENT_MAX_WIDTH, useTheme } from '@/theme';
 
 export type ScreenProps = {
   children: ReactNode;
@@ -13,6 +13,8 @@ export type ScreenProps = {
   /** Pull-to-refresh: shown only when `onRefresh` is given. */
   refreshing?: boolean;
   onRefresh?: () => void;
+  /** Widest the content column gets on tablet / desktop. `full` lets a screen lay out its own wide grid. */
+  maxWidth?: number | 'full';
 };
 
 /**
@@ -24,7 +26,7 @@ export type ScreenProps = {
  * button from being swallowed by keyboard dismissal. This needs no native module, so it also
  * works in Expo Go.
  */
-export function Screen({ children, footer, keyboardVerticalOffset = 0, refreshing = false, onRefresh }: ScreenProps) {
+export function Screen({ children, footer, keyboardVerticalOffset = 0, refreshing = false, onRefresh, maxWidth = CONTENT_MAX_WIDTH }: ScreenProps) {
   const { colors, space } = useTheme();
   const insets = useSafeAreaInsets();
   return (
@@ -45,12 +47,11 @@ export function Screen({ children, footer, keyboardVerticalOffset = 0, refreshin
         contentContainerStyle={{
           paddingHorizontal: space[4] + Math.max(insets.left, insets.right),
           paddingTop: space[4],
-          paddingBottom: footer ? space[4] : space[8] + insets.bottom,
-          gap: space[4],
+          paddingBottom: footer ? space[4] : space[10] + insets.bottom,
           flexGrow: 1,
         }}
       >
-        {children}
+        <View style={[styles.column, { gap: space[4], maxWidth: maxWidth === 'full' ? undefined : maxWidth }]}>{children}</View>
       </ScrollView>
       {footer ? (
         <View
@@ -63,11 +64,11 @@ export function Screen({ children, footer, keyboardVerticalOffset = 0, refreshin
             backgroundColor: colors.paper,
           }}
         >
-          {footer}
+          <View style={[styles.column, { maxWidth: maxWidth === 'full' ? undefined : maxWidth }]}>{footer}</View>
         </View>
       ) : null}
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({ flex: { flex: 1 } });
+const styles = StyleSheet.create({ flex: { flex: 1 }, column: { width: '100%', alignSelf: 'center', flexGrow: 1 } });

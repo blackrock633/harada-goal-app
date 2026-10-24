@@ -29,7 +29,7 @@ afterEach(() => queryClient.clear());
 
 describe('app routes (signed in)', () => {
   it.each([
-    ['/today', 'Set your first goal'],
+    ['/today', 'Start with one goal'],
     ['/matrix', 'The matrix is empty'],
     ['/review', 'Nothing to review yet'],
   ])('renders %s with no goals', async (url, copy) => {

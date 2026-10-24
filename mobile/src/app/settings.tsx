@@ -6,11 +6,9 @@ import { signOut } from '@/data/auth';
 import { errorMessage } from '@/data/errors';
 import { useProfile } from '@/data/hooks';
 import { deleteAccount } from '@/screens/deleteAccount';
-import { useTheme } from '@/theme';
-import { Button, Screen, Text, TextField } from '@/ui';
+import { Button, ListRow, Screen, Section, Text, TextField } from '@/ui';
 
 export default function SettingsScreen() {
-  const { space } = useTheme();
   const session = useSession();
   const profile = useProfile();
   const email = session.status === 'signedIn' ? session.session?.user?.email : undefined;
@@ -29,27 +27,27 @@ export default function SettingsScreen() {
 
   return (
     <Screen>
-      <View style={{ gap: space[1] }}>
-        <Text variant="meta" tone="muted">Name</Text>
-        <Text>{profile.data?.displayName ?? '—'}</Text>
-      </View>
-      <View style={{ gap: space[1] }}>
-        <Text variant="meta" tone="muted">Email</Text>
-        <Text>{email ?? '—'}</Text>
-      </View>
-      <View style={{ gap: space[1] }}>
-        <Text variant="meta" tone="muted">Time zone</Text>
-        <Text>{profile.data?.timeZone ?? '—'}</Text>
-        <Text variant="meta" tone="muted">Decides when your day starts and what counts as today.</Text>
-      </View>
-      <Button title="Sign out" variant="secondary" loading={signingOut} onPress={handleSignOut} />
+      <Section title="Account" ruled={false}>
+        <View>
+          <ListRow title="Name" meta={profile.data?.displayName ?? '—'} />
+          <ListRow title="Email" meta={email ?? '—'} divider={false} />
+        </View>
+        <View style={{ alignItems: 'flex-start' }}>
+          <Button title="Sign out" variant="secondary" loading={signingOut} onPress={handleSignOut} />
+        </View>
+      </Section>
+      <Section
+        title="Time zone"
+        description="Decides when your day starts and what counts as today."
+      >
+        <Text tabular>{profile.data?.timeZone ?? '—'}</Text>
+      </Section>
       <DeleteAccount />
     </Screen>
   );
 }
 
 function DeleteAccount() {
-  const { space } = useTheme();
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [busy, setBusy] = useState(false);
@@ -83,10 +81,10 @@ function DeleteAccount() {
   }
 
   return (
-    <View style={{ gap: space[3], marginTop: space[6] }}>
-      <Text variant="heading">Delete account</Text>
+    <Section title="Delete account">
       <Text tone="muted">
-        This permanently deletes your account and all of your goals, plans and reflections. It cannot be undone.
+        This permanently deletes your account and all of your goals, plans and reflections. It
+        cannot be undone.
       </Text>
       {formError ? (
         <Text tone="danger" accessibilityRole="alert">
@@ -111,7 +109,9 @@ function DeleteAccount() {
         autoCapitalize="characters"
         autoCorrect={false}
       />
-      <Button title="Delete account" variant="danger" loading={busy} onPress={submit} />
-    </View>
+      <View style={{ alignItems: 'flex-start' }}>
+        <Button title="Delete account" variant="danger" loading={busy} onPress={submit} />
+      </View>
+    </Section>
   );
 }

@@ -3,9 +3,9 @@ import { NativeTabs } from 'expo-router/native-tabs';
 import { useTheme } from '@/theme';
 
 export default function TabsLayout() {
-  const { colors, fontFamily } = useTheme();
+  const { colors } = useTheme();
   return (
-    <NativeTabs tintColor={colors.accent} labelStyle={{ fontFamily: fontFamily.uiMedium }}>
+    <NativeTabs tintColor={colors.accent}>
       <NativeTabs.Trigger name="today">
         <NativeTabs.Trigger.Label>Today</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'checkmark.circle', selected: 'checkmark.circle.fill' }} md="check_circle" />

@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import type { GoalEventDTO, OutcomeDTO, ReflectionDTO } from '@shared/application/dto';
 import { useTheme } from '@/theme';
-import { EmptyState, Screen, Text } from '@/ui';
+import { EmptyState, Screen, Section, Text, useLayout } from '@/ui';
 import { formatLocalDate } from '../today/format';
 import { ReflectionCard } from './ReflectionCard';
 
@@ -36,10 +36,22 @@ function isoToLocalDate(iso: string): string {
 /** Reflections and events merged, newest first, grouped by local date. */
 export function buildTimeline(reflections: ReflectionDTO[], events: GoalEventDTO[]) {
   const entries: TimelineEntry[] = [
-    ...reflections.map((r): TimelineEntry => ({ type: 'reflection', date: r.date, sort: r.createdAt, item: r })),
-    ...events.map((e): TimelineEntry => ({ type: 'event', date: isoToLocalDate(e.occurredAt), sort: e.occurredAt, item: e })),
+    ...reflections.map((r): TimelineEntry => ({
+      type: 'reflection',
+      date: r.date,
+      sort: r.createdAt,
+      item: r,
+    })),
+    ...events.map((e): TimelineEntry => ({
+      type: 'event',
+      date: isoToLocalDate(e.occurredAt),
+      sort: e.occurredAt,
+      item: e,
+    })),
   ];
-  entries.sort((a, b) => (a.date === b.date ? b.sort.localeCompare(a.sort) : b.date.localeCompare(a.date)));
+  entries.sort((a, b) =>
+    a.date === b.date ? b.sort.localeCompare(a.sort) : b.date.localeCompare(a.date),
+  );
   const groups: { date: string; entries: TimelineEntry[] }[] = [];
   for (const e of entries) {
     const last = groups[groups.length - 1];
@@ -59,74 +71,131 @@ export function ReviewView({
   onRefresh,
 }: ReviewViewProps) {
   const { colors, space } = useTheme();
-  const groups = buildTimeline(reflections, events);
-  return (
-    <Screen refreshing={refreshing} onRefresh={onRefresh}>
-      <View style={{ gap: space[3] }}>
-        <Text variant="heading">Reflect</Text>
-        {reflectionForm}
-      </View>
+  const { width } = useLayout();
+  const twoPane = width >= 1024;
+  const groups = buildTimeline([], events);
+  const sortedReflections = [...reflections].sort((a, b) =>
+    a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : b.date.localeCompare(a.date),
+  );
 
-      <View style={{ gap: space[3], marginTop: space[4] }}>
-        <Text variant="heading">This week</Text>
+  const form = (
+    <View style={{ gap: space[4], maxWidth: 560 }}>
+      {/* On phones the screen header already names this; the heading pairs with "Past reflections" side by side. */}
+      {twoPane ? <Text variant="heading">Reflect</Text> : null}
+      {reflectionForm}
+    </View>
+  );
+
+  const history = (
+    <View style={{ gap: space[6] }}>
+      <Section title="Past reflections" ruled={!twoPane}>
+        {sortedReflections.length === 0 ? (
+          <Text tone="muted">
+            No reflections yet. Entries you save will appear here, newest first.
+          </Text>
+        ) : (
+          <View>
+            {sortedReflections.map((r) => (
+              <ReflectionCard key={r.id} reflection={r} />
+            ))}
+          </View>
+        )}
+      </Section>
+
+      <Section title="This week">
         <Text variant="meta" tone="muted">
           {completedThisWeek === 0
             ? 'No tasks completed yet this week.'
             : `${completedThisWeek} ${completedThisWeek === 1 ? 'task' : 'tasks'} completed this week.`}
         </Text>
         {outcomes.length === 0 ? (
-          <EmptyState title="No key areas yet" message="Add key areas in the matrix to see them here." />
-        ) : (
-          outcomes.map((o) => {
-            const tasks = o.actions.filter((a) => a.kind === 'task' && !a.archivedAt);
-            const doneCount = tasks.filter((a) => a.completedAt).length;
-            return (
-              <View key={o.id} style={{ gap: 2 }}>
-                <Text variant="body" style={{ fontFamily: 'Inter_500Medium' }}>
-                  {o.title}
-                </Text>
-                <Text variant="meta" tone="muted">
-                  {tasks.length === 0 ? 'No tasks yet' : `${doneCount} of ${tasks.length} tasks done`}
-                </Text>
-                {o.measure ? (
-                  <Text variant="meta" tone="muted">
-                    {`Measure: ${o.measure.current} of ${o.measure.target} ${o.measure.unit}`}
-                  </Text>
-                ) : null}
-              </View>
-            );
-          })
-        )}
-      </View>
-
-      <View style={{ gap: space[3], marginTop: space[4] }}>
-        <Text variant="heading">Recent activity</Text>
-        {groups.length === 0 ? (
           <EmptyState
-            title="Nothing here yet"
-            message="Reflections and changes to your plan will appear here as you go."
+            title="No key areas yet"
+            message="Add key areas in the matrix to see them here."
           />
         ) : (
-          groups.map((g) => (
-            <View key={g.date} testID="timeline-group" style={{ gap: space[2] }}>
-              <Text variant="meta" tone="muted" accessibilityRole="header" style={{ fontFamily: 'Inter_600SemiBold' }}>
+          <View>
+            {outcomes.map((o, i) => {
+              const tasks = o.actions.filter((a) => a.kind === 'task' && !a.archivedAt);
+              const doneCount = tasks.filter((a) => a.completedAt).length;
+              return (
+                <View
+                  key={o.id}
+                  style={{
+                    gap: 2,
+                    paddingVertical: space[3],
+                    borderBottomWidth: i < outcomes.length - 1 ? StyleSheet.hairlineWidth : 0,
+                    borderBottomColor: colors.rule,
+                  }}
+                >
+                  <Text variant="body" weight="medium">
+                    {o.title}
+                  </Text>
+                  <Text variant="meta" tone="muted" tabular>
+                    {tasks.length === 0
+                      ? 'No tasks yet'
+                      : `${doneCount} of ${tasks.length} tasks done`}
+                  </Text>
+                  {o.measure ? (
+                    <Text variant="meta" tone="muted" tabular>
+                      {`Measure: ${o.measure.current} of ${o.measure.target} ${o.measure.unit}`}
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </Section>
+
+      {groups.length > 0 ? (
+        <Section title="Plan changes">
+          {groups.map((g) => (
+            <View key={g.date} testID="timeline-group" style={{ gap: space[1] }}>
+              <Text
+                variant="caption"
+                weight="semibold"
+                tone="muted"
+                tabular
+                accessibilityRole="header"
+              >
                 {formatLocalDate(g.date, 'long')}
               </Text>
-              <View style={{ gap: space[3], borderLeftWidth: 1, borderLeftColor: colors.rule, paddingLeft: space[4] }}>
-                {g.entries.map((e) =>
-                  e.type === 'event' ? (
-                    <Text key={`e-${e.item.id}`} variant="meta">
-                      {e.item.summary}
-                    </Text>
-                  ) : (
-                    <ReflectionCard key={`r-${e.item.id}`} reflection={e.item} />
-                  ),
-                )}
-              </View>
+              {g.entries.map((e) =>
+                e.type === 'event' ? (
+                  <Text key={`e-${e.item.id}`} variant="meta">
+                    {e.item.summary}
+                  </Text>
+                ) : null,
+              )}
             </View>
-          ))
-        )}
-      </View>
+          ))}
+        </Section>
+      ) : null}
+    </View>
+  );
+
+  return (
+    <Screen refreshing={refreshing} onRefresh={onRefresh} maxWidth={twoPane ? 'full' : undefined}>
+      {twoPane ? (
+        <View style={[styles.panes, { gap: space[10] }]}>
+          <View style={styles.left}>{form}</View>
+          <View style={[styles.right, { borderLeftColor: colors.rule, paddingLeft: space[10] }]}>
+            {history}
+          </View>
+        </View>
+      ) : (
+        <>
+          {form}
+          {history}
+        </>
+      )}
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  panes: { flexDirection: 'row', alignItems: 'flex-start' },
+  left: { flex: 1, maxWidth: 560 },
+  right: { flex: 1, borderLeftWidth: StyleSheet.hairlineWidth },
+});

@@ -7,9 +7,11 @@ import { SessionProvider, useSession } from '@/auth/session';
 import { QueryProvider } from '@/data/query-provider';
 import { useAppFonts, useTheme } from '@/theme';
 import { ErrorState, Screen } from '@/ui';
+import { installWebSurfaces } from '@/ui/web-surfaces';
 
-// Keep the native splash screen up until Fraunces + Inter are loaded.
+// Keep the native splash screen up until the display face is loaded.
 SplashScreen.preventAutoHideAsync();
+installWebSurfaces();
 
 export default function RootLayout() {
   return (
@@ -23,7 +25,8 @@ export default function RootLayout() {
 
 function RootNavigator() {
   const { ready } = useAppFonts();
-  const { colors, scheme } = useTheme();
+  const theme = useTheme();
+  const { colors, scheme } = theme;
   const session = useSession();
   // Keep the splash up until fonts AND the stored session are known, so guards never evaluate
   // against a not-yet-loaded session (which would flash the sign-in screen).
@@ -75,6 +78,7 @@ function RootNavigator() {
             presentation: 'modal',
             headerShown: true,
             title: 'Settings',
+            headerTitleStyle: { fontFamily: theme.fontFamily.display, fontSize: theme.typeScale.heading.fontSize, color: colors.ink },
             headerShadowVisible: false,
             headerStyle: { backgroundColor: colors.paper },
             headerTintColor: colors.ink,

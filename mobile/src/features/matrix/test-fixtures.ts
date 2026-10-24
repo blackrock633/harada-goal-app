@@ -58,6 +58,8 @@ export function mkOutcome(position: number, title: string, actions: ActionDTO[] 
 export function mkGoal(outcomes: OutcomeDTO[], title = 'Run a marathon'): GoalDetailDTO {
   const cells: (OutcomeDTO | null)[] = Array.from({ length: 8 }, () => null);
   for (const o of outcomes) if (o.position !== null && o.position >= 0 && o.position < 8) cells[o.position] = o;
+  const placed = outcomes.flatMap((o) => o.actions);
+  const tasks = placed.filter((a) => a.kind === 'task');
   return {
     id: uid(1),
     title,
@@ -72,10 +74,10 @@ export function mkGoal(outcomes: OutcomeDTO[], title = 'Run a marathon'): GoalDe
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     metrics: {
-      planning: { filled: 0, total: 72, ratio: 0 },
+      planning: { filled: outcomes.length + placed.length, total: 72, ratio: (outcomes.length + placed.length) / 72 },
       taskCompletion: null,
-      completedTasks: 0,
-      totalTasks: 0,
+      completedTasks: tasks.filter((a) => a.completedAt).length,
+      totalTasks: tasks.length,
       routineAdherence: null,
       routineCount: 0,
       attainment: null,

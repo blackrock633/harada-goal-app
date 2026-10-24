@@ -70,14 +70,23 @@ describe('Today', () => {
 describe('Matrix', () => {
   it('renders the 8 key area tiles for the focused goal', async () => {
     await renderRouter(APP, { initialUrl: '/matrix' });
-    expect((await screen.findAllByLabelText('Goal: Run a marathon'))[0]).toBeOnTheScreen();
-    expect(screen.getAllByText(/^Key area \d$/)).toHaveLength(8);
+    // Wait for the matrix itself: Today's goal link carries the same "Goal: …" label.
+    expect(await screen.findByTestId('overview-goal')).toHaveProp('accessibilityLabel', 'Goal: Run a marathon');
+    // Every one of the 8 key-area positions is a cell: filled ones named, empty ones offering "Add key area".
+    const cells = screen.getAllByLabelText(/^(Add key area \d|Key area \d: )/);
+    expect(new Set(cells.map((c) => (c.props.accessibilityLabel as string).match(/\d/)![0])).size).toBe(8);
   });
 
-  it('key-area route renders the key area and its 8 action slots', async () => {
+  it('key-area route renders the key area and accounts for all 8 action positions', async () => {
     await renderRouter(APP, { initialUrl: `/matrix/0?goal=${ID.goalActive}` });
     expect(await screen.findByText('Key area 1 of 8')).toBeOnTheScreen();
-    for (let i = 0; i < 8; i++) expect(screen.getByTestId(`slot-0-${i}`)).toBeOnTheScreen();
+    // Filled positions are rows; open positions collapse into one "Add action" plus a count.
+    const filled = screen.queryAllByTestId(/^slot-0-[0-7]$/).length;
+    const open = 8 - filled;
+    if (open > 0) {
+      expect(screen.getByTestId('add-action')).toBeOnTheScreen();
+      expect(screen.getByText(`${open} of 8 ${open === 1 ? 'position' : 'positions'} open`)).toBeOnTheScreen();
+    }
   });
 });
 

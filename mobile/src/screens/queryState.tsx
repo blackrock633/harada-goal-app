@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { errorMessage } from '@/data/errors';
 import { QueryError } from '@/data/reads';
+import { useTheme } from '@/theme';
 import { ErrorState, Screen } from '@/ui';
 
 /** The slice of a TanStack query result the route screens look at. */
@@ -45,11 +46,30 @@ export function messageFor(error: unknown): string {
     : errorMessage({ code: 'UNAVAILABLE', message: '' });
 }
 
+/** A still, ruled outline of a screen (title + rows): the form before it is filled in. No shimmer. */
 export function LoadingScreen({ label = 'Loading' }: { label?: string }) {
+  const { colors, radius, space } = useTheme();
+  const bar = (width: `${number}%`, height: number) => (
+    <View style={{ width, height, borderRadius: radius.sm, backgroundColor: colors.surfaceSunken }} />
+  );
   return (
     <Screen>
-      <View accessibilityRole="progressbar" accessibilityLabel={label} style={{ paddingVertical: 48, alignItems: 'center' }}>
-        <ActivityIndicator />
+      <View accessibilityRole="progressbar" accessibilityLabel={label} style={{ gap: space[6], paddingTop: space[2] }}>
+        <View style={{ gap: space[3] }}>
+          {bar('62%', 28)}
+          {bar('40%', 14)}
+        </View>
+        <View>
+          {[78, 64, 70, 52].map((w) => (
+            <View
+              key={w}
+              style={{ paddingVertical: space[4], gap: space[2], borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule }}
+            >
+              {bar(`${w}%`, 14)}
+              {bar(`${w - 30}%`, 10)}
+            </View>
+          ))}
+        </View>
       </View>
     </Screen>
   );

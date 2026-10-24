@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 
 import type { ReflectionDTO } from '@shared/application/dto';
 import { addReflectionSchema } from '@shared/application/schemas';
 import { errorMessage, newClientId } from '@/data/errors';
 import type { ReviewMutations } from '@/data/mutations';
-import { MIN_TOUCH, useTheme } from '@/theme';
-import { Button, Text, TextField } from '@/ui';
+import { useTheme } from '@/theme';
+import { Button, DateField, SegmentedControl, Text, TextField } from '@/ui';
 
 export type ReflectionFormProps = {
   goalId: string;
@@ -24,10 +24,15 @@ export const REFLECTION_PROMPTS: { key: FieldKey; label: string }[] = [
   { key: 'nextChange', label: 'What will you change?' },
 ];
 
+const KINDS = [
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+] as const;
+
 const EMPTY: Record<FieldKey, string> = { wentWell: '', didntGoWell: '', nextChange: '' };
 
 export function ReflectionForm({ goalId, today, addReflection, onSaved }: ReflectionFormProps) {
-  const { colors, radius, space } = useTheme();
+  const { space } = useTheme();
   const [kind, setKind] = useState<'daily' | 'weekly'>('daily');
   const [date, setDate] = useState(today);
   const [values, setValues] = useState<Record<FieldKey, string>>(EMPTY);
@@ -93,56 +98,16 @@ export function ReflectionForm({ goalId, today, addReflection, onSaved }: Reflec
   }
 
   return (
-    <View style={{ gap: space[4] }}>
-      <View
-        accessibilityRole="radiogroup"
-        accessibilityLabel="Reflection type"
-        style={{
-          flexDirection: 'row',
-          alignSelf: 'flex-start',
-          borderWidth: 1,
-          borderColor: colors.ruleStrong,
-          borderRadius: radius.sm,
-          overflow: 'hidden',
+    <View style={{ gap: space[5] }}>
+      <SegmentedControl
+        label="Reflection type"
+        options={KINDS}
+        value={kind}
+        onChange={(k) => {
+          if (!saving) setKind(k);
         }}
-      >
-        {(['daily', 'weekly'] as const).map((k) => {
-          const label = k === 'daily' ? 'Daily' : 'Weekly';
-          const selected = kind === k;
-          return (
-            <Pressable
-              key={k}
-              accessibilityRole="radio"
-              accessibilityLabel={label}
-              accessibilityState={{ checked: selected, disabled: saving }}
-              disabled={saving}
-              onPress={() => setKind(k)}
-              style={{
-                minHeight: MIN_TOUCH,
-                minWidth: MIN_TOUCH,
-                paddingHorizontal: space[4],
-                justifyContent: 'center',
-                backgroundColor: selected ? colors.accent : colors.surface,
-              }}
-            >
-              <Text variant="meta" style={{ color: selected ? colors.accentInk : colors.ink, fontFamily: 'Inter_500Medium' }}>
-                {label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-      <TextField
-        label="Date"
-        value={date}
-        onChangeText={setDate}
-        hint="YYYY-MM-DD"
-        error={fieldErrors.date}
-        editable={!saving}
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="numbers-and-punctuation"
       />
+      <DateField label="Date" value={date} onChange={setDate} max={today} error={fieldErrors.date} />
       {REFLECTION_PROMPTS.map((p) => (
         <TextField
           key={p.key}
@@ -164,7 +129,12 @@ export function ReflectionForm({ goalId, today, addReflection, onSaved }: Reflec
           Reflection saved.
         </Text>
       ) : null}
-      <Button title="Save reflection" onPress={() => void submit()} loading={saving} />
+      <Button
+        title="Save reflection"
+        onPress={() => void submit()}
+        loading={saving}
+        style={{ alignSelf: 'flex-start', minWidth: 180 }}
+      />
     </View>
   );
 }

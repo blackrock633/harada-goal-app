@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 
 import { errorMessage } from '@/data/errors';
 import type { ExecutionMutations, FocusMutations, MatrixMutations } from '@/data/mutations';
-import { MIN_TOUCH, useTheme } from '@/theme';
-import { Button, CheckCircle, IconButton, Text } from '@/ui';
+import { CONTENT_MAX_WIDTH, useTheme } from '@/theme';
+import { Button, CheckCircle, FocusToggle, Icon, IconButton, ListRow, Section, Text, useLayout } from '@/ui';
 import type { ActionDTO, GoalDetailDTO, OutcomeFieldsDTO } from '@shared/application/dto';
 
 import { ActionEditorSheet, type ActionEditorMode } from './ActionEditorSheet';
 import { KeyAreaEditor } from './KeyAreaEditor';
 import { describeSchedule, formatShortDate, relativeDay } from './format';
-import { AREA_COUNT, SLOT_COUNT, buildMatrix, doneLabel } from '@shared/application/matrix';
+import { AreaBlock } from './MatrixSheet';
+import { AREA_COUNT, SLOT_COUNT, buildMatrix } from '@shared/application/matrix';
 
 export interface KeyAreaViewProps {
   goal: GoalDetailDTO;
@@ -33,6 +34,9 @@ export interface KeyAreaViewProps {
 
 type OutcomePatch = Pick<OutcomeFieldsDTO, 'id' | 'title' | 'description' | 'updatedAt'>;
 
+/** Cell size of the key area's block beside the list on wide screens. */
+const BLOCK_CELL = 88;
+
 const wrap = (n: number) => ((Math.trunc(n) % AREA_COUNT) + AREA_COUNT) % AREA_COUNT;
 
 export function KeyAreaView({
@@ -48,6 +52,7 @@ export function KeyAreaView({
   onReloadLatest,
 }: KeyAreaViewProps) {
   const { colors, radius, space } = useTheme();
+  const { wide, width } = useLayout();
   const pos = wrap(Number.isFinite(position) ? position : 0);
   const model = useMemo(() => buildMatrix(goal), [goal]);
   const area = model.areas[pos]!;
@@ -174,14 +179,172 @@ export function KeyAreaView({
   const title = outcomeOverride?.title ?? outcome?.title ?? '';
   const description = outcomeOverride?.description ?? outcome?.description ?? '';
 
+  // The area with any in-flight optimistic changes applied: the list and the mini block agree.
+  const liveArea = useMemo(
+    () => ({
+      ...area,
+      slots: area.slots.map((s) => ({ ...s, action: s.action ? effective(s.action) : null })),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [area, overrides],
+  );
+  const filledSlots = liveArea.slots.filter((s) => s.action);
+  const firstFree = liveArea.slots.find((s) => !s.action);
+  const openCount = SLOT_COUNT - filledSlots.length;
+  const tasks = filledSlots.filter((s) => s.action!.kind === 'task');
+  const tasksDone = tasks.filter((s) => s.action!.completedAt).length;
+
+  function addAt(position: number) {
+    if (!outcome) return;
+    openSheet({
+      type: 'add',
+      outcomeId: outcome.id,
+      position,
+      heading: `${title}: action ${position + 1} of ${SLOT_COUNT}`,
+    });
+  }
+
+  const list = outcome ? (
+    <Section
+      title="Actions"
+      description={`${filledSlots.length} of ${SLOT_COUNT} positions planned · ${tasksDone} of ${tasks.length} ${tasks.length === 1 ? 'task' : 'tasks'} done`}
+      ruled={false}
+    >
+      <View accessibilityLabel={`Actions in key area ${pos + 1}`}>
+        {filledSlots.map((slot, i) => {
+          const act = slot.action!;
+          const testID = `slot-${pos}-${slot.position}`;
+          const done = act.kind === 'task' && !!act.completedAt;
+          const checked = act.kind === 'task' ? done : act.checkedToday;
+          const isBusy = busy.has(act.id);
+          const disabled = act.kind === 'routine' && !act.dueToday;
+          const original = area.slots[slot.position]!.action!;
+          return (
+            <ListRow
+              key={slot.position}
+              testID={testID}
+              title={act.title}
+              meta={isBusy ? 'Saving…' : statusText(act, today)}
+              metaIcon={act.kind === 'routine' && !isBusy ? 'routine' : undefined}
+              done={done}
+              divider={i < filledSlots.length - 1 || openCount > 0}
+              accessibilityLabel={`Edit action ${slot.position + 1} of ${SLOT_COUNT}: ${act.title}`}
+              onPress={() => openSheet({ type: 'edit', action: act })}
+              leading={
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text variant="caption" tone="faint" tabular style={{ width: space[4], textAlign: 'right' }}>
+                    {slot.position + 1}
+                  </Text>
+                  <CheckCircle
+                    shape={act.kind === 'routine' ? 'square' : 'circle'}
+                    checked={checked}
+                    accessibilityLabel={`${checked ? 'Reopen' : 'Complete'}: ${act.title}`}
+                    busy={isBusy}
+                    disabled={disabled}
+                    onPress={() => toggle(original)}
+                  />
+                </View>
+              }
+              trailing={
+                canFocus && !act.archivedAt ? (
+                  <FocusToggle
+                    on={act.focusedToday}
+                    actionTitle={act.title}
+                    busy={isBusy}
+                    display={wide ? 'label' : 'icon'}
+                    onPress={() => toggleFocus(original)}
+                  />
+                ) : undefined
+              }
+            />
+          );
+        })}
+      </View>
+      {firstFree ? (
+        <View style={{ alignItems: 'flex-start', gap: space[1] }}>
+          <Button
+            testID="add-action"
+            title="Add action"
+            icon="add"
+            variant="ghost"
+            accessibilityLabel={`Add action ${firstFree.position + 1} of ${SLOT_COUNT}`}
+            onPress={() => addAt(firstFree.position)}
+          />
+          <Text variant="caption" tone="muted" tabular>
+            {`${openCount} of ${SLOT_COUNT} ${openCount === 1 ? 'position' : 'positions'} open`}
+          </Text>
+        </View>
+      ) : (
+        <Text variant="caption" tone="muted">
+          All 8 positions are planned.
+        </Text>
+      )}
+    </Section>
+  ) : null;
+
+  const header = !outcome ? (
+    <View style={{ gap: space[3] }}>
+      <Text variant="title">{`Key area ${pos + 1} is empty`}</Text>
+      <Text variant="body" tone="muted">
+        Name one outcome that moves the goal forward. You can fill the other key areas later.
+      </Text>
+      <View style={{ alignItems: 'flex-start' }}>
+        <Button title={`Add key area ${pos + 1}`} icon="add" onPress={() => setEditorOpen(true)} />
+      </View>
+    </View>
+  ) : (
+    <View style={{ gap: space[2] }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space[2] }}>
+        <Text variant="title" accessibilityRole="header" style={{ flex: 1, flexShrink: 1 }}>
+          {title}
+        </Text>
+        <IconButton icon="edit" accessibilityLabel="Edit key area" onPress={() => setEditorOpen(true)} />
+      </View>
+      {description ? (
+        <Text variant="body" tone="muted">
+          {description}
+        </Text>
+      ) : null}
+      {outcome.measure ? (
+        <View
+          accessible
+          accessibilityLabel={`Measure: ${outcome.measure.current} of ${outcome.measure.target} ${outcome.measure.unit}`}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: space[1] }}
+        >
+          <Icon name="measure" size={15} color={colors.inkMuted} />
+          <Text variant="meta" tone="muted" tabular>
+            {`${outcome.measure.current} / ${outcome.measure.target} ${outcome.measure.unit}`}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const aside =
+    outcome && width >= 1024 ? (
+      <View style={{ width: BLOCK_CELL * 3 + 3, gap: space[2] }}>
+        <AreaBlock
+          areas={[...model.areas.slice(0, pos), liveArea, ...model.areas.slice(pos + 1)]}
+          goalTitle={goal.title}
+          areaPosition={pos}
+          cellSize={BLOCK_CELL}
+          onOpenAction={(_, slot) => slot.action && openSheet({ type: 'edit', action: slot.action })}
+          onAddAction={(_, p) => addAt(p)}
+        />
+        <Text variant="caption" tone="muted">
+          This key area on the full sheet
+        </Text>
+      </View>
+    ) : null;
+
   return (
     <View style={{ gap: space[4], minWidth: 0 }}>
       <View accessibilityRole="toolbar" accessibilityLabel="Key area navigation" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space[2] }}>
-        <Button title="‹ Prev" variant="ghost" accessibilityLabel={`Previous key area (${prevPos + 1})`} onPress={() => navigate(prevPos)} />
-        <Text variant="meta" tone="muted" style={{ fontFamily: 'Inter_600SemiBold' }}>
+        <IconButton icon="back" accessibilityLabel={`Previous key area (${prevPos + 1})`} onPress={() => navigate(prevPos)} />
+        <Text variant="caption" tone="muted" weight="semibold" tabular>
           {`Key area ${pos + 1} of ${AREA_COUNT}`}
         </Text>
-        <Button title="Next ›" variant="ghost" accessibilityLabel={`Next key area (${nextPos + 1})`} onPress={() => navigate(nextPos)} />
+        <IconButton icon="forward" accessibilityLabel={`Next key area (${nextPos + 1})`} onPress={() => navigate(nextPos)} />
       </View>
 
       {pendingNav !== null ? (
@@ -215,147 +378,28 @@ export function KeyAreaView({
         </View>
       ) : null}
 
-      {!outcome ? (
-        <View style={{ borderWidth: 1, borderStyle: 'dashed', borderColor: colors.ruleStrong, borderRadius: radius.md, padding: space[4], gap: space[3] }}>
-          <Text variant="heading">{`Key area ${pos + 1} is empty`}</Text>
-          <Text variant="meta" tone="muted">
-            Name one outcome that moves the goal forward. You can fill the other key areas later.
+      {areaDirty && !editorOpen && pendingNav === null && outcome ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
+          <Icon name="warning" size={16} color={colors.warning} />
+          <Text variant="meta" tone="warning" style={{ flex: 1 }}>
+            Unsaved changes to this key area
           </Text>
-          <Button title={`Add key area ${pos + 1}`} onPress={() => setEditorOpen(true)} />
+          <Button title="Continue editing" variant="secondary" size="compact" onPress={() => setEditorOpen(true)} />
+        </View>
+      ) : null}
+
+      {aside ? (
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space[8] }}>
+          <View style={{ flex: 1, maxWidth: CONTENT_MAX_WIDTH, gap: space[4], minWidth: 0 }}>
+            {header}
+            {list}
+          </View>
+          {aside}
         </View>
       ) : (
         <>
-          <View style={{ backgroundColor: colors.accentSoft, borderRadius: radius.md, padding: space[3], flexDirection: 'row', alignItems: 'flex-start', gap: space[2] }}>
-            <View style={{ flex: 1, minWidth: 0, gap: space[1] }}>
-              <Text variant="heading" accessibilityRole="header" style={{ flexShrink: 1 }}>
-                {title}
-              </Text>
-              {description ? (
-                <Text variant="meta" tone="muted" style={{ flexShrink: 1 }}>
-                  {description}
-                </Text>
-              ) : null}
-              <Text variant="meta" tone="muted">
-                {`${area.actionCount} of ${SLOT_COUNT} action slots planned · ${doneLabel(area.doneCount, area.actionCount)}`}
-              </Text>
-              {outcome.measure ? (
-                <Text variant="meta" tone="muted">
-                  {`Measure: ${outcome.measure.current} / ${outcome.measure.target} ${outcome.measure.unit}`}
-                </Text>
-              ) : null}
-            </View>
-            <IconButton accessibilityLabel="Edit key area" onPress={() => setEditorOpen(true)} icon={<Text variant="body">✎</Text>} />
-          </View>
-
-          {areaDirty && !editorOpen && pendingNav === null ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
-              <Text variant="meta" tone="warning" style={{ flex: 1 }}>
-                Unsaved changes to this key area
-              </Text>
-              <Button title="Continue editing" variant="secondary" onPress={() => setEditorOpen(true)} />
-            </View>
-          ) : null}
-
-          <View accessibilityLabel={`Actions in key area ${pos + 1}`} style={{ gap: space[2] }}>
-            {area.slots.map((slot) => {
-              const act = slot.action ? effective(slot.action) : null;
-              const testID = `slot-${pos}-${slot.position}`;
-              if (!act) {
-                return (
-                  <Button
-                    key={slot.position}
-                    testID={testID}
-                    title={`${slot.position + 1}. Add action`}
-                    accessibilityLabel={`Add action ${slot.position + 1} of ${SLOT_COUNT}`}
-                    variant="secondary"
-                    onPress={() =>
-                      openSheet({
-                        type: 'add',
-                        outcomeId: outcome.id,
-                        position: slot.position,
-                        heading: `${title}: action ${slot.position + 1} of ${SLOT_COUNT}`,
-                      })
-                    }
-                  />
-                );
-              }
-              const done = act.kind === 'task' && !!act.completedAt;
-              const checked = act.kind === 'task' ? done : act.checkedToday;
-              const isBusy = busy.has(act.id);
-              const disabled = act.kind === 'routine' && !act.dueToday;
-              return (
-                <View
-                  key={slot.position}
-                  testID={testID}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    minWidth: 0,
-                    borderWidth: 1,
-                    borderColor: colors.rule,
-                    borderRadius: radius.sm,
-                    backgroundColor: colors.surface,
-                  }}
-                >
-                  <CheckCircle
-                    checked={checked}
-                    accessibilityLabel={`${checked ? 'Reopen' : 'Complete'}: ${act.title}`}
-                    busy={isBusy}
-                    disabled={disabled}
-                    onPress={() => toggle(slot.action!)}
-                  />
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Edit action ${slot.position + 1} of ${SLOT_COUNT}: ${act.title}`}
-                    onPress={() => openSheet({ type: 'edit', action: act })}
-                    style={{ flex: 1, minWidth: 0, minHeight: MIN_TOUCH, justifyContent: 'center', paddingVertical: space[1], paddingRight: space[2] }}
-                  >
-                    <Text
-                      variant="meta"
-                      numberOfLines={2}
-                      style={{ fontFamily: 'Inter_500Medium', flexShrink: 1, textDecorationLine: done ? 'line-through' : 'none' }}
-                      tone={done ? 'muted' : 'default'}
-                    >
-                      {`${act.kind === 'routine' ? '↻ ' : ''}${act.title}`}
-                    </Text>
-                    {isBusy ? (
-                      <Text variant="meta" accessibilityRole="text" accessibilityLiveRegion="polite" style={{ fontFamily: 'Inter_600SemiBold' }}>
-                        Saving…
-                      </Text>
-                    ) : (
-                      <Text variant="meta" tone="muted" style={{ flexShrink: 1 }}>
-                        {statusText(act, today)}
-                      </Text>
-                    )}
-                  </Pressable>
-                  {canFocus && !act.archivedAt ? (
-                    <Pressable
-                      accessibilityRole="switch"
-                      accessibilityLabel={`Add to today: ${act.title}`}
-                      accessibilityState={{ checked: act.focusedToday, busy: isBusy, disabled: isBusy }}
-                      disabled={isBusy}
-                      onPress={() => toggleFocus(slot.action!)}
-                      style={{
-                        minWidth: MIN_TOUCH,
-                        minHeight: MIN_TOUCH,
-                        marginRight: space[1],
-                        paddingHorizontal: space[2],
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderRadius: radius.sm,
-                        backgroundColor: act.focusedToday ? colors.accentSoft : 'transparent',
-                        opacity: isBusy ? 0.6 : 1,
-                      }}
-                    >
-                      <Text variant="meta" tone={act.focusedToday ? 'default' : 'muted'} style={{ fontFamily: 'Inter_500Medium', textAlign: 'center' }}>
-                        {act.focusedToday ? 'On today' : 'Add to today'}
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              );
-            })}
-          </View>
+          {header}
+          {list}
         </>
       )}
 

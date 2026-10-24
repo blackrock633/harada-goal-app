@@ -20,6 +20,7 @@ const TEXT_TONE: Record<BadgeTone, TextTone> = {
   danger: 'danger',
 };
 
+/** A small status stamp: square-cornered, hairline, like a rubber stamp on the form. */
 export function Badge({ text, tone = 'neutral' }: BadgeProps) {
   const { colors, radius, space } = useTheme();
   const border = {
@@ -37,12 +38,12 @@ export function Badge({ text, tone = 'neutral' }: BadgeProps) {
         alignSelf: 'flex-start',
         borderWidth: 1,
         borderColor: border,
-        borderRadius: radius.full,
+        borderRadius: radius.sm,
         paddingHorizontal: space[2],
-        paddingVertical: 2,
+        paddingVertical: 1,
       }}
     >
-      <Text variant="meta" tone={TEXT_TONE[tone]} style={{ fontFamily: 'Inter_500Medium' }}>
+      <Text variant="caption" weight="semibold" tone={TEXT_TONE[tone]}>
         {text}
       </Text>
     </View>

@@ -26,6 +26,8 @@ export default function TodayScreen() {
           onOpenGoal={(goal) => router.push({ pathname: '/goal', params: { goal } })}
           onOpenMatrix={(goal) => router.push({ pathname: '/matrix', params: { goal } })}
           onCreateGoal={() => router.push('/goal/new')}
+          activateGoal={mutations.activateGoal}
+          onOpenReview={(goal) => router.push({ pathname: '/review', params: { goal } })}
         />
       ) : null}
     </Gate>

@@ -49,6 +49,13 @@ export function localToday(now = new Date()): string {
   return `${now.getFullYear()}-${m}-${d}`;
 }
 
+/** The day after `date` ('YYYY-MM-DD'), for a date picker's earliest selectable day. */
+export function nextDay(date: string): string {
+  const d = new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate() + 1);
+  return localToday(d);
+}
+
 export function daysBetween(fromDate: string, toDate: string): number {
   const a = new Date(`${fromDate}T00:00:00`).getTime();
   const b = new Date(`${toDate}T00:00:00`).getTime();

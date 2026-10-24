@@ -4,7 +4,7 @@ import { View } from 'react-native';
 import { newClientId } from '@/data/errors';
 import type { MatrixMutations } from '@/data/mutations';
 import { useTheme } from '@/theme';
-import { Button, Sheet, Text, TextField } from '@/ui';
+import { Button, DateField, SegmentedControl, Sheet, Text, TextField } from '@/ui';
 import type { ActionDTO } from '@shared/application/dto';
 import { addActionSchema, updateActionSchema } from '@shared/application/schemas';
 import { LIMITS } from '@shared/domain/limits';
@@ -20,6 +20,11 @@ import {
   zodFieldErrors,
 } from './form-utils';
 import { DAY_NAMES } from './format';
+
+const KINDS = [
+  { value: 'task', label: 'Task' },
+  { value: 'routine', label: 'Routine' },
+] as const;
 
 export type ActionEditorMode =
   | { type: 'add'; outcomeId: string; /** Action slot 0..7 being filled. */ position: number; heading?: string }
@@ -149,37 +154,28 @@ export function ActionEditorSheet({ visible, onClose, mode, mutations, onSaved, 
         multiline
         editable={!pending}
       />
-      <View style={{ gap: space[2] }}>
-        <Text variant="meta" tone="muted" style={{ fontFamily: 'Inter_500Medium' }}>
+      <View style={{ gap: space[1] }}>
+        <Text variant="meta" weight="medium" tone="muted">
           Type
         </Text>
-        <View accessibilityRole="radiogroup" accessibilityLabel="Type" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
-          <Chip role="radio" label="Task" selected={kind === 'task'} onPress={() => setKind('task')} disabled={pending} />
-          <Chip role="radio" label="Routine" selected={kind === 'routine'} onPress={() => setKind('routine')} disabled={pending} />
-        </View>
+        <SegmentedControl
+          label="Type"
+          options={KINDS}
+          value={kind}
+          onChange={(k) => !pending && setKind(k)}
+        />
         {errors.kind ? (
-          <Text variant="meta" tone="danger">
+          <Text variant="caption" tone="danger">
             {errors.kind}
           </Text>
         ) : null}
       </View>
       {kind === 'task' ? (
-        <TextField
-          label="Due date (optional)"
-          value={dueDate}
-          onChangeText={setDueDate}
-          error={errors.dueDate}
-          hint="YYYY-MM-DD"
-          placeholder="2026-03-05"
-          keyboardType="numbers-and-punctuation"
-          autoComplete="off"
-          autoCorrect={false}
-          editable={!pending}
-        />
+        <DateField label="Due date (optional)" value={dueDate} onChange={setDueDate} error={errors.dueDate} clearable />
       ) : (
         <View style={{ gap: space[3] }}>
           <View style={{ gap: space[2] }}>
-            <Text variant="meta" tone="muted" style={{ fontFamily: 'Inter_500Medium' }}>
+            <Text variant="meta" weight="medium" tone="muted">
               Schedule
             </Text>
             <View accessibilityRole="radiogroup" accessibilityLabel="Schedule" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
@@ -188,14 +184,14 @@ export function ActionEditorSheet({ visible, onClose, mode, mutations, onSaved, 
               <Chip role="radio" label="N times per week" selected={sched.type === 'weekly'} onPress={() => setSched((s) => ({ ...s, type: 'weekly' }))} disabled={pending} />
             </View>
             {errors.schedule ? (
-              <Text variant="meta" tone="danger">
+              <Text variant="caption" tone="danger">
                 {errors.schedule}
               </Text>
             ) : null}
           </View>
           {sched.type === 'weekdays' ? (
             <View style={{ gap: space[2] }}>
-              <Text variant="meta" tone="muted" style={{ fontFamily: 'Inter_500Medium' }}>
+              <Text variant="meta" weight="medium" tone="muted">
                 Days
               </Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>

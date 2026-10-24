@@ -1,7 +1,7 @@
 import { useState, type Ref } from 'react';
 import { View } from 'react-native';
 
-import { Button, Text, TextField, type TextFieldHandle } from '@/ui';
+import { Button, Section, Text, TextField, type TextFieldHandle } from '@/ui';
 import { useTheme } from '@/theme';
 
 import {
@@ -35,6 +35,7 @@ export function DetailsFields({ draft, errors, disabled, onChange, onChangePurpo
 
   return (
     <View style={{ gap: space[5] }}>
+      <Section title="Success and vision">
       <View style={{ gap: space[2] }}>
         <TextField
           label="How you'll know you've succeeded (optional)"
@@ -66,12 +67,12 @@ export function DetailsFields({ draft, errors, disabled, onChange, onChangePurpo
         multiline
         maxLength={FIELD_LIMITS.vision}
       />
+      </Section>
 
-      <View style={{ gap: space[3] }}>
-        <Text variant="heading">Why it matters</Text>
-        <Text variant="meta" tone="muted">
-          Your reasons are saved as the four purpose notes on this goal. All of them are optional.
-        </Text>
+      <Section
+        title="Why it matters"
+        description="Your reasons are saved as the four purpose notes on this goal. All of them are optional."
+      >
         {visible.map((f) => (
           <TextField
             key={f.key}
@@ -87,9 +88,11 @@ export function DetailsFields({ draft, errors, disabled, onChange, onChangePurpo
           />
         ))}
         {!expanded ? (
-          <Button title="Add more reasons" variant="ghost" onPress={() => setOpen(true)} />
+          <View style={{ alignItems: 'flex-start' }}>
+            <Button title="Add more reasons" variant="ghost" onPress={() => setOpen(true)} />
+          </View>
         ) : null}
-      </View>
+      </Section>
     </View>
   );
 }

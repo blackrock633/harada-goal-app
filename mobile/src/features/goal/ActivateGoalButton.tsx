@@ -11,9 +11,16 @@ export type ActivateGoalButtonProps = {
   goalId: string;
   activateGoal: GoalMutations['activateGoal'];
   onActivated?: (goal: GoalFieldsDTO) => void;
+  /** Line above the button; pass null where the surrounding screen already says it. */
+  note?: string | null;
 };
 
-export function ActivateGoalButton({ goalId, activateGoal, onActivated }: ActivateGoalButtonProps) {
+export function ActivateGoalButton({
+  goalId,
+  activateGoal,
+  onActivated,
+  note = 'This goal is a draft. Activating it puts its actions on Today.',
+}: ActivateGoalButtonProps) {
   const { space } = useTheme();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
@@ -38,10 +45,14 @@ export function ActivateGoalButton({ goalId, activateGoal, onActivated }: Activa
 
   return (
     <View style={{ gap: space[2] }}>
-      <Text variant="meta" tone="muted">
-        This goal is a draft. Activating it puts its actions on Today.
-      </Text>
-      <Button title="Activate goal" loading={pending} onPress={run} />
+      {note ? (
+        <Text variant="meta" tone="muted">
+          {note}
+        </Text>
+      ) : null}
+      <View style={{ alignItems: 'flex-start' }}>
+        <Button title="Activate goal" loading={pending} onPress={run} />
+      </View>
       {error ? (
         <Text variant="meta" tone="danger" accessibilityRole="alert">
           {error}

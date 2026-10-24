@@ -1,18 +1,22 @@
 import { Text as RNText, type TextProps as RNTextProps } from 'react-native';
 
-import { useTheme, type TextVariant } from '@/theme';
+import { useTheme, type FontWeight, type TextVariant } from '@/theme';
 
 export type TextTone = 'default' | 'muted' | 'faint' | 'accent' | 'danger' | 'success' | 'warning';
 
 export type TextProps = RNTextProps & {
   variant?: TextVariant;
   tone?: TextTone;
+  /** UI variants only (headline, body, meta, caption); display variants keep their face. */
+  weight?: FontWeight;
+  /** Tabular figures, for counts and dates that sit in columns or change in place. */
+  tabular?: boolean;
 };
 
 const HEADER_VARIANTS: TextVariant[] = ['display', 'title', 'heading'];
 
-export function Text({ variant = 'body', tone = 'default', style, accessibilityRole, ...rest }: TextProps) {
-  const { colors, typeScale } = useTheme();
+export function Text({ variant = 'body', tone = 'default', weight, tabular, style, accessibilityRole, ...rest }: TextProps) {
+  const { colors, typeScale, fontWeight } = useTheme();
   const color = {
     default: colors.ink,
     muted: colors.inkMuted,
@@ -25,7 +29,13 @@ export function Text({ variant = 'body', tone = 'default', style, accessibilityR
   return (
     <RNText
       accessibilityRole={accessibilityRole ?? (HEADER_VARIANTS.includes(variant) ? 'header' : undefined)}
-      style={[typeScale[variant], { color }, style]}
+      style={[
+        typeScale[variant],
+        { color },
+        weight && !HEADER_VARIANTS.includes(variant) ? { fontWeight: fontWeight[weight] } : null,
+        tabular ? { fontVariant: ['tabular-nums'] } : null,
+        style,
+      ]}
       {...rest}
     />
   );

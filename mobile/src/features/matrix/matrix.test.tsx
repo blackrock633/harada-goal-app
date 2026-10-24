@@ -4,6 +4,8 @@ import { fail, ok } from '@shared/application/result';
 
 import { KeyAreaView, type KeyAreaViewProps } from './KeyAreaView';
 import { MatrixOverview } from './MatrixOverview';
+import { MatrixSheet } from './MatrixSheet';
+import { buildMatrix } from '@shared/application/matrix';
 import { mkAction, mkGoal, mkOutcome, sampleGoal } from './test-fixtures';
 
 const TODAY = '2026-03-01';
@@ -38,17 +40,16 @@ describe('matrix structure', () => {
   it('overview has 8 key area tiles around the goal and an honest completeness line', async () => {
     const onOpenArea = jest.fn();
     await render(<MatrixOverview goal={sampleGoal()} onOpenArea={onOpenArea} />);
-    expect(screen.getByText('Goal')).toBeOnTheScreen();
     expect(screen.getByLabelText('Goal: Run a marathon')).toBeOnTheScreen();
-    expect(screen.getAllByText(/^Key area \d$/)).toHaveLength(8);
+    expect(screen.getAllByText(/^[1-8]$/)).toHaveLength(8); // position numbers
     expect(screen.getAllByRole('button')).toHaveLength(8);
     expect(screen.getAllByRole('button', { name: /^Add key area \d$/ })).toHaveLength(6);
     const c = within(screen.getByTestId('completeness'));
-    expect(c.getByText('Plan: 5 of 72 positions filled')).toBeOnTheScreen();
+    expect(c.getByText('5 of 72 positions planned')).toBeOnTheScreen();
     expect(c.getByText('2 of 8 key areas · 3 of 64 actions')).toBeOnTheScreen();
-    expect(c.getByText('Actions: 1 of 3 done')).toBeOnTheScreen();
+    expect(c.getByText('1 of 2 tasks done')).toBeOnTheScreen();
     expect(screen.queryByText(/%/)).toBeNull();
-    expect(screen.getByText('3/8 actions')).toBeOnTheScreen();
+    expect(screen.getByText('3/8')).toBeOnTheScreen();
   });
 
   it('overview tiles navigate by position', async () => {
@@ -62,18 +63,23 @@ describe('matrix structure', () => {
 
   it('key area view shows exactly 8 slot rows with filled and empty labels', async () => {
     await setup();
-    for (let p = 0; p < 8; p++) expect(screen.getByTestId(`slot-2-${p}`)).toBeOnTheScreen();
+    for (const p of [0, 1, 4]) expect(screen.getByTestId(`slot-2-${p}`)).toBeOnTheScreen(); // placed actions
+    expect(screen.queryByTestId('slot-2-2')).toBeNull(); // open positions are not rows
     expect(screen.queryByTestId('slot-2-8')).toBeNull();
-    expect(screen.getAllByRole('button', { name: /^Add action \d of 8$/ })).toHaveLength(5);
+    // One quiet "Add action" row opens the first free position (3 here: 1, 2 and 5 are taken).
+    expect(screen.getAllByRole('button', { name: /^Add action \d of 8$/ })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Add action 3 of 8' })).toBeOnTheScreen();
+    expect(screen.getByText('5 of 8 positions open')).toBeOnTheScreen();
+    expect(screen.getByText('1 of 2 tasks done', { exact: false })).toBeOnTheScreen();
     expect(screen.getByRole('checkbox', { name: 'Reopen: Run 5k' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Complete: Buy shoes' })).not.toBeChecked();
-    expect(screen.getByRole('switch', { name: 'Add to today: Run 5k' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: "Today's focus: Run 5k" })).not.toBeChecked();
   });
 
   it('plannable positions are 72 = 8 + 64', async () => {
     const goal = mkGoal(Array.from({ length: 8 }, (_, i) => mkOutcome(i, `Area ${i}`)));
     await render(<MatrixOverview goal={goal} onOpenArea={jest.fn()} />);
-    expect(screen.getByText('Plan: 8 of 72 positions filled')).toBeOnTheScreen();
+    expect(screen.getByText('8 of 72 positions planned')).toBeOnTheScreen();
   });
 });
 
@@ -82,8 +88,8 @@ describe('adding actions', () => {
     const { matrix, props } = await setup();
     matrix.addAction
       .mockResolvedValueOnce(fail('UNAVAILABLE', 'offline'))
-      .mockResolvedValueOnce(ok(mkAction({ n: 9, position: 3, title: 'Swim' })));
-    await fireEvent.press(screen.getByRole('button', { name: 'Add action 4 of 8' }));
+      .mockResolvedValueOnce(ok(mkAction({ n: 9, position: 2, title: 'Swim' })));
+    await fireEvent.press(screen.getByRole('button', { name: 'Add action 3 of 8' }));
     await fireEvent.changeText(screen.getByLabelText('Title'), 'Swim');
     await fireEvent.press(screen.getByRole('button', { name: 'Add action' }));
     expect(await screen.findByText(/Couldn't reach the server/)).toBeOnTheScreen();
@@ -91,7 +97,7 @@ describe('adding actions', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Add action' }));
     expect(matrix.addAction).toHaveBeenCalledTimes(2);
     const [a, b] = matrix.addAction.mock.calls.map((c) => c[0]);
-    expect(a.position).toBe(3);
+    expect(a.position).toBe(2);
     expect(a.outcomeId).toBe(sampleGoal().matrix.outcomes[2]!.id);
     expect(a.id).toEqual(expect.any(String));
     expect(b.id).toBe(a.id);
@@ -101,9 +107,9 @@ describe('adding actions', () => {
 
   it('a new create gets a new client id', async () => {
     const { matrix } = await setup();
-    matrix.addAction.mockResolvedValue(ok(mkAction({ n: 9, position: 3 })));
+    matrix.addAction.mockResolvedValue(ok(mkAction({ n: 9, position: 2 })));
     const ids: string[] = [];
-    for (const label of ['Add action 4 of 8', 'Add action 3 of 8']) {
+    for (const label of ['Add action 3 of 8', 'Add action 3 of 8']) {
       await fireEvent.press(screen.getByRole('button', { name: label }));
       await fireEvent.changeText(screen.getByLabelText('Title'), 'x');
       await fireEvent.press(screen.getByRole('button', { name: 'Add action' }));
@@ -115,7 +121,7 @@ describe('adding actions', () => {
 
   it('validates with the shared schema, shows the error under the field and does not call', async () => {
     const { matrix } = await setup();
-    await fireEvent.press(screen.getByRole('button', { name: 'Add action 4 of 8' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Add action 3 of 8' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Add action' }));
     expect(await screen.findByRole('alert')).toBeOnTheScreen();
     expect(matrix.addAction).not.toHaveBeenCalled();
@@ -123,7 +129,7 @@ describe('adding actions', () => {
 
   it('long titles and notes do not break the editor (counter and notes error)', async () => {
     const { matrix } = await setup();
-    await fireEvent.press(screen.getByRole('button', { name: 'Add action 4 of 8' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Add action 3 of 8' }));
     await fireEvent.changeText(screen.getByLabelText('Title'), 'x'.repeat(161));
     await fireEvent.changeText(screen.getByLabelText('Notes'), 'n'.repeat(2001));
     await fireEvent.press(screen.getByRole('button', { name: 'Add action' }));
@@ -134,9 +140,10 @@ describe('adding actions', () => {
 
   it('routine schedule sends weekdays; due date field uses the numeric punctuation keyboard', async () => {
     const { matrix } = await setup();
-    matrix.addAction.mockResolvedValue(ok(mkAction({ n: 9, position: 3 })));
-    await fireEvent.press(screen.getByRole('button', { name: 'Add action 4 of 8' }));
-    expect(screen.getByLabelText('Due date (optional)').props.keyboardType).toBe('numbers-and-punctuation');
+    matrix.addAction.mockResolvedValue(ok(mkAction({ n: 9, position: 2 })));
+    await fireEvent.press(screen.getByRole('button', { name: 'Add action 3 of 8' }));
+    // A date is picked, never typed: the due date is a DateField, not a text input.
+    expect(screen.getByRole('button', { name: 'Due date (optional): not set' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('radio', { name: 'Routine' }));
     await fireEvent.press(screen.getByRole('radio', { name: 'Specific weekdays' }));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Wed' }));
@@ -305,23 +312,51 @@ describe('today focus toggle', () => {
     focus.addToToday.mockResolvedValue(ok(mkAction({ ...base, focusedToday: true })));
     focus.removeFromToday.mockResolvedValue(ok(mkAction({ ...base, focusedToday: false })));
     const id = sampleGoal().matrix.outcomes[2]!.slots[4]!.id;
-    await fireEvent.press(screen.getByRole('switch', { name: 'Add to today: Run 5k' }));
+    await fireEvent.press(screen.getByRole('switch', { name: "Today\'s focus: Run 5k" }));
     await act(async () => {});
     expect(focus.addToToday).toHaveBeenCalledWith({ actionId: id });
-    expect(screen.getByRole('switch', { name: 'Add to today: Run 5k' })).toBeChecked();
-    expect(screen.getByText('On today')).toBeOnTheScreen();
-    await fireEvent.press(screen.getByRole('switch', { name: 'Add to today: Run 5k' }));
+    expect(screen.getByRole('switch', { name: "Today\'s focus: Run 5k" })).toBeChecked();
+    await fireEvent.press(screen.getByRole('switch', { name: "Today\'s focus: Run 5k" }));
     await act(async () => {});
     expect(focus.removeFromToday).toHaveBeenCalledWith({ actionId: id });
-    expect(screen.getByRole('switch', { name: 'Add to today: Run 5k' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: "Today\'s focus: Run 5k" })).not.toBeChecked();
   });
 
   it('rolls back a failed focus change (e.g. daily limit)', async () => {
     const { focus, props } = await setup();
     focus.addToToday.mockResolvedValue(fail('LIMIT_REACHED', 'You can focus on 5 things a day.'));
-    await fireEvent.press(screen.getByRole('switch', { name: 'Add to today: Run 5k' }));
+    await fireEvent.press(screen.getByRole('switch', { name: "Today\'s focus: Run 5k" }));
     await act(async () => {});
-    expect(screen.getByRole('switch', { name: 'Add to today: Run 5k' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: "Today\'s focus: Run 5k" })).not.toBeChecked();
     expect(props.onError).toHaveBeenCalledWith('You can focus on 5 things a day.');
+  });
+});
+
+describe('full 9x9 sheet', () => {
+  it('shows each key area twice (hub and block centre) and labels every cell', async () => {
+    const goal = sampleGoal();
+    const onOpenArea = jest.fn();
+    const onOpenAction = jest.fn();
+    const onAddAction = jest.fn();
+    await render(
+      <MatrixSheet
+        areas={buildMatrix(goal).areas}
+        goalTitle={goal.title}
+        cellSize={100}
+        onOpenArea={onOpenArea}
+        onOpenAction={onOpenAction}
+        onAddAction={onAddAction}
+      />,
+    );
+    expect(screen.getAllByLabelText('Key area 3, Fitness, 3 of 8 actions')).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Add key area 1' })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Action 1 of key area 3: Stretch, routine' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Action 5 of key area 3: Run 5k, done' })).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Action 2 of key area 3: Buy shoes' }));
+    expect(onOpenAction).toHaveBeenCalledWith(2, expect.objectContaining({ position: 1 }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Add action 3 to key area 3' }));
+    expect(onAddAction).toHaveBeenCalledWith(2, 2);
+    // Positions of an empty key area cannot take actions.
+    expect(screen.queryByRole('button', { name: 'Add action 1 to key area 1' })).toBeNull();
   });
 });

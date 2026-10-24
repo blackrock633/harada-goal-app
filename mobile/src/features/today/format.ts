@@ -31,3 +31,16 @@ export function describeSchedule(schedule: Schedule | null | undefined): string 
   if (schedule.type === 'weekly') return `${schedule.timesPerWeek}× a week`;
   return '';
 }
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** "Saturday, 24 October": the screen title on Today. */
+export function formatTodayTitle(dateStr: string): string {
+  const date = new Date(dateStr + 'T00:00:00');
+  if (isNaN(date.getTime())) return dateStr;
+  return `${WEEKDAYS[date.getDay()]}, ${date.getDate()} ${MONTHS[date.getMonth()]}`;
+}

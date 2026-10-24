@@ -68,13 +68,13 @@ describe('GoalForm create', () => {
     expect(onCreated).toHaveBeenCalled();
   });
 
-  it('blocks a today-or-earlier target date on create', async () => {
+  it('picks the target date instead of typing it, and sends none when unset', async () => {
     const { createGoal } = await setupCreate();
     await fireEvent.changeText(screen.getByLabelText(TITLE), 'x');
-    await fireEvent.changeText(screen.getByLabelText('Target date (optional)'), today);
+    expect(screen.getByRole('button', { name: 'Target date (optional): not set' })).toBeOnTheScreen();
     await press('Create goal');
-    expect(await screen.findByText('Pick a date in the future.')).toBeOnTheScreen();
-    expect(createGoal).not.toHaveBeenCalled();
+    await waitFor(() => expect(createGoal).toHaveBeenCalled());
+    expect(createGoal.mock.calls[0]![0]).toMatchObject({ targetDate: null });
   });
 
   it('shows server fieldErrors under the field and keeps input', async () => {
@@ -297,7 +297,7 @@ describe('GoalOverview', () => {
 
   it('shows three separate figures and no merged percentage', async () => {
     await show(detail());
-    expect(screen.getByText('2 of 72 positions filled')).toBeOnTheScreen();
+    expect(screen.getByText('2 of 72 positions planned')).toBeOnTheScreen();
     expect(screen.getByText('No tasks yet')).toBeOnTheScreen(); // UX-01
     expect(screen.queryByText(/0 of 0/)).toBeNull();
   });
@@ -318,10 +318,9 @@ describe('GoalOverview', () => {
         }),
       }),
     );
-    expect(screen.getByText('40 of 72 positions filled')).toBeOnTheScreen();
+    expect(screen.getByText('40 of 72 positions planned')).toBeOnTheScreen();
     expect(screen.getByText('3 of 9 tasks done')).toBeOnTheScreen();
-    expect(screen.getByText('2 routines')).toBeOnTheScreen();
-    expect(screen.getByText('Routines: 75% adherence over 28 days')).toBeOnTheScreen();
+    expect(screen.getByText('Routines kept: 75% over 28 days')).toBeOnTheScreen();
     expect(screen.getByText('Measured attainment: 42%')).toBeOnTheScreen();
     expect(screen.getByText('Area 3: 5 / 10 km')).toBeOnTheScreen();
   });

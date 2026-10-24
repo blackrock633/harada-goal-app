@@ -4,7 +4,7 @@ import { View } from 'react-native';
 import { errorMessage, newClientId } from '@/data/errors';
 import type { GoalMutations } from '@/data/mutations';
 import { useTheme } from '@/theme';
-import { Button, Text, TextField } from '@/ui';
+import { Button, DateField, ListRow, Section, Text, TextField } from '@/ui';
 import type { GoalFieldsDTO, TemplateSummaryDTO } from '@shared/application/dto';
 import type { Result } from '@shared/application/result';
 
@@ -14,6 +14,7 @@ import {
   buildPayload,
   emptyDraft,
   localToday,
+  nextDay,
   toOutcome,
   validateDraft,
   type FieldErrors,
@@ -41,7 +42,7 @@ export function GoalOnboarding({
   onGoToToday,
   today: todayProp,
 }: GoalOnboardingProps) {
-  const { space, colors } = useTheme();
+  const { space, colors, radius } = useTheme();
   const today = todayProp ?? localToday();
   const [step, setStep] = useState<Step>('title');
   const [draft, setDraft] = useState<GoalDraft>(emptyDraft);
@@ -159,7 +160,7 @@ export function GoalOnboarding({
   const errorBox = formError ? (
     <View
       accessibilityRole="alert"
-      style={{ borderWidth: 1, borderColor: colors.danger, padding: space[3], borderRadius: 6 }}
+      style={{ borderWidth: 1, borderColor: colors.danger, padding: space[3], borderRadius: radius.md }}
     >
       <Text variant="meta" tone="danger">
         {formError}
@@ -176,8 +177,10 @@ export function GoalOnboarding({
           You don&apos;t need a complete matrix to begin. Add an action to any key area, activate your goal, and
           you can start working on it from Today straight away.
         </Text>
-        <Button title="Open matrix" onPress={() => onOpenMatrix(goal.id)} />
-        <Button title="Go to Today" variant="secondary" onPress={onGoToToday} />
+        <View style={{ gap: space[2] }}>
+          <Button title="Open matrix" onPress={() => onOpenMatrix(goal.id)} />
+          <Button title="Go to Today" variant="secondary" onPress={onGoToToday} />
+        </View>
       </View>
     );
   }
@@ -222,50 +225,45 @@ export function GoalOnboarding({
           maxLength={FIELD_LIMITS.title}
           autoComplete="off"
         />
-        <TextField
+        <DateField
           label="Target date (optional)"
-          hint="Format YYYY-MM-DD. Must be in the future."
+          hint="Leave empty if there is no deadline."
           value={draft.targetDate}
-          onChangeText={(v) => setDraft((d) => ({ ...d, targetDate: v.trim() }))}
+          onChange={(v) => setDraft((d) => ({ ...d, targetDate: v }))}
           error={errors.targetDate}
-          editable={!busy}
-          placeholder="YYYY-MM-DD"
-          keyboardType="numbers-and-punctuation"
-          autoCorrect={false}
-          maxLength={10}
+          min={nextDay(today)}
+          clearable
         />
         <Button title="Create goal" loading={pending} disabled={busy} onPress={createFirst} />
       </View>
 
       {templates.length > 0 ? (
-        <View style={{ gap: space[3], borderTopWidth: 1, borderTopColor: colors.rule, paddingTop: space[5] }}>
-          <Text variant="heading">Or start from an example</Text>
-          <Text variant="meta" tone="muted">
-            An example creates a new goal with ready-made key areas and actions that you can change.
-          </Text>
-          {templates.map((t) => (
-            <View
-              key={t.id}
-              style={{ gap: space[2], paddingVertical: space[3], borderBottomWidth: 1, borderBottomColor: colors.rule }}
-            >
-              <Text style={{ fontFamily: 'Inter_500Medium' }}>{t.name}</Text>
-              <Text variant="meta" tone="muted">
-                {t.summary}
-              </Text>
-              <Text variant="meta" tone="muted">
-                {`${t.outcomeCount} key areas, ${t.actionCount} actions`}
-              </Text>
-              <Button
-                title="Use this"
-                variant="secondary"
-                accessibilityLabel={`Use example: ${t.name}`}
-                loading={pendingTemplate === t.id}
-                disabled={busy}
-                onPress={() => chooseTemplate(t.id)}
+        <Section
+          title="Or start from an example"
+          description="An example creates a new goal with ready-made key areas and actions that you can change."
+        >
+          <View>
+            {templates.map((t, i) => (
+              <ListRow
+                key={t.id}
+                title={t.name}
+                meta={`${t.summary}\n${t.outcomeCount} key areas · ${t.actionCount} actions`}
+                divider={i < templates.length - 1}
+                trailing={
+                  <Button
+                    title="Use this"
+                    variant="secondary"
+                    size="compact"
+                    accessibilityLabel={`Use example: ${t.name}`}
+                    loading={pendingTemplate === t.id}
+                    disabled={busy}
+                    onPress={() => chooseTemplate(t.id)}
+                  />
+                }
               />
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        </Section>
       ) : null}
     </View>
   );

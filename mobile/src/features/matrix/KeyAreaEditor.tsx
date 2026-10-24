@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { newClientId } from '@/data/errors';
 import type { MatrixMutations } from '@/data/mutations';
+import { useTheme } from '@/theme';
 import { Button, Sheet, TextField } from '@/ui';
 import type { OutcomeFieldsDTO } from '@shared/application/dto';
 import { addOutcomeSchema, updateOutcomeSchema } from '@shared/application/schemas';
@@ -29,6 +30,7 @@ export interface KeyAreaEditorProps {
 
 /** Create a key area or edit its title/description, in a bottom sheet. */
 export function KeyAreaEditor({ mode, mutations, visible, onClose, onDone, onDirtyChange, onReloadLatest }: KeyAreaEditorProps) {
+  const { space } = useTheme();
   const isCreate = mode.type === 'create';
   const [baseline, setBaseline] = useState(() =>
     mode.type === 'edit' ? { title: mode.outcome.title, description: mode.outcome.description } : { title: '', description: '' },
@@ -111,7 +113,7 @@ export function KeyAreaEditor({ mode, mutations, visible, onClose, onDone, onDir
             title={isCreate ? 'Create key area' : 'Save key area'}
             loading={pending}
             onPress={() => void submit()}
-            style={formError ? { marginTop: 12 } : undefined}
+            style={formError ? { marginTop: space[3] } : undefined}
           />
         </>
       }

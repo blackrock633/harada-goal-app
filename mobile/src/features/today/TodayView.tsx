@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import type { ActionDTO, NextItemDTO, TodayDTO } from '@shared/application/dto';
 import type { AppError } from '@shared/application/result';
 import { MAX_DAILY_FOCUS } from '@shared/domain/limits';
-import { useTheme } from '@/theme';
-import { CheckCircle, EmptyState, IconButton, Screen, Text } from '@/ui';
+import { MIN_TOUCH, useTheme } from '@/theme';
+import { Button, CheckCircle, EmptyState, FocusToggle, Icon, ListRow, Screen, Section, Text, useLayout } from '@/ui';
 import { errorMessage } from '@/data/errors';
-import type { ExecutionMutations, FocusMutations } from '@/data/mutations';
+import type { ExecutionMutations, FocusMutations, GoalMutations } from '@/data/mutations';
+import { ActivateGoalButton } from '@/features/goal/ActivateGoalButton';
 import { ActiveGoalsPanel } from './ActiveGoalsPanel';
-import { describeSchedule, formatLocalDate, relativeDay } from './format';
+import { describeSchedule, formatTodayTitle, relativeDay } from './format';
 
 export type TodayViewProps = {
   data: TodayDTO;
@@ -26,7 +27,14 @@ export type TodayViewProps = {
   onCreateGoal?: () => void;
   /** Empty state: nothing due; opens the matrix of the given (first active) goal. */
   onOpenMatrix?: (goalId: string) => void;
+  /** Draft state: the same mutation as the goal screen, so a draft can be activated from Today. */
+  activateGoal?: GoalMutations['activateGoal'];
+  onActivated?: () => void;
+  /** "Reflect on today" link. */
+  onOpenReview?: (goalId: string) => void;
 };
+
+const TWO_COLUMN_BREAKPOINT = 1024;
 
 type ListKey = 'focus' | 'next' | 'done';
 type Lists = Record<ListKey, NextItemDTO[]>;
@@ -87,8 +95,13 @@ export function TodayView({
   onOpenGoal,
   onCreateGoal,
   onOpenMatrix,
+  activateGoal,
+  onActivated,
+  onOpenReview,
 }: TodayViewProps) {
   const { space } = useTheme();
+  const { width } = useLayout();
+  const twoColumns = width >= TWO_COLUMN_BREAKPOINT;
   const [lists, setLists] = useState<Lists>(() => fromData(data));
   const listsRef = useRef(lists);
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
@@ -191,293 +204,265 @@ export function TodayView({
     });
 
   const { focus, next, done } = lists;
-  const total = focus.length + next.length + done.length;
-  const doneCount = focus.filter((i) => isDone(i.action)).length + done.length;
-  const hasRows = total > 0;
   const full = focus.length >= MAX_DAILY_FOCUS;
-  const allFocusDone = focus.every((i) => isDone(i.action));
+  const multiGoal = data.goals.length > 1;
+  // With nothing in focus, the first derived item is offered as "Start here" and not repeated below.
+  const suggestion = focus.length === 0 ? next[0] : undefined;
+  const rest = suggestion ? next.slice(1) : next;
+  const routinesDue = rest.filter((i) => i.action.kind === 'routine');
+  const openTasks = rest.filter((i) => i.action.kind !== 'routine');
+  const firstGoal = data.goals[0];
+  const draft = data.goals.length === 0 ? data.draftGoals[0] : undefined;
 
-  return (
-    <Screen refreshing={refreshing} onRefresh={onRefresh}>
-      <View style={{ gap: space[1] }}>
-        <Text variant="title">{formatLocalDate(data.today, 'long')}</Text>
-        {hasRows ? (
-          <Text variant="body" tone="muted" accessibilityLiveRegion="polite">
-            {`${doneCount} of ${total} done today`}
-          </Text>
-        ) : null}
-      </View>
+  /** `suggest`: the "Start here" row, with a primary Focus button instead of the toggle. */
+  const row = (item: NextItemDTO, from: ListKey, suggest = false) => {
+    const a = item.action;
+    const routine = a.kind === 'routine';
+    const checked = from === 'focus' ? isDone(a) : from === 'done';
+    const busy = pending.has(a.id);
+    const parts: string[] = [];
+    if (busy) parts.push('Saving…');
+    if (item.overdue && !checked) parts.push('Overdue');
+    if (a.dueDate && !routine) parts.push(`Due ${relativeDay(a.dueDate, data.today)}`);
+    if (routine) parts.push(describeSchedule(a.schedule) || 'Routine');
+    parts.push(multiGoal ? `${item.goalTitle} · ${item.outcomeTitle}` : item.outcomeTitle);
+    if (suggest) parts.unshift('Start here');
+    return (
+      <ListRow
+        key={a.id}
+        testID={suggest ? 'focus-suggestion' : undefined}
+        divider={!suggest}
+        title={a.title}
+        meta={parts.join(' · ')}
+        metaIcon={routine ? 'routine' : undefined}
+        done={checked}
+        onPress={onOpenAction ? () => onOpenAction(item.goalId, item.outcomePosition) : undefined}
+        leading={
+          <CheckCircle
+            shape={routine ? 'square' : 'circle'}
+            checked={checked}
+            accessibilityLabel={checked ? `Reopen: ${a.title}` : `Complete: ${a.title}`}
+            busy={busy}
+            onPress={() => toggle(item, from, from === 'focus' ? !isDone(a) : from === 'next')}
+          />
+        }
+        trailing={
+          suggest && width >= 768 ? (
+            <Button
+              title="Focus on this"
+              icon="focus"
+              size="compact"
+              disabled={busy}
+              accessibilityLabel={`Today's focus: ${a.title}`}
+              onPress={() => addToToday(item)}
+            />
+          ) : suggest || from === 'done' ? undefined : (
+            <FocusToggle
+              on={from === 'focus'}
+              actionTitle={a.title}
+              display={width >= 768 ? 'label' : 'icon'}
+              disabled={busy || (from === 'next' && full)}
+              onPress={() => (from === 'focus' ? removeFromToday(item) : addToToday(item))}
+            />
+          )
+        }
+      />
+    );
+  };
 
-      {errorMsg ? (
-        <Text variant="body" tone="danger" accessibilityRole="alert">
-          {errorMsg}
+  const emptyLine = (text: string, action?: { label: string; onPress: () => void }) => (
+    <View style={{ gap: space[1], alignItems: 'flex-start' }}>
+      <Text variant="body" tone="muted">
+        {text}
+      </Text>
+      {action ? <Button title={action.label} variant="ghost" onPress={action.onPress} style={{ marginLeft: -space[2] }} /> : null}
+    </View>
+  );
+
+  const matrixAction =
+    onOpenMatrix && firstGoal ? { label: 'Choose from matrix', onPress: () => onOpenMatrix(firstGoal.id) } : undefined;
+
+  const focusSection = (
+    <Section
+      title="Focus"
+      ruled={false}
+      action={
+        <Text variant="meta" tone="muted" tabular accessibilityLabel={`${focus.length} of ${MAX_DAILY_FOCUS} chosen`}>
+          {`${focus.length} of ${MAX_DAILY_FOCUS}`}
         </Text>
-      ) : null}
-
-      {!hasRows ? (
-        <TodayEmpty data={data} onCreateGoal={onCreateGoal} onOpenGoal={onOpenGoal} onOpenMatrix={onOpenMatrix} />
-      ) : null}
-
-      {focus.length > 0 || next.length > 0 ? (
-        <View style={{ gap: space[2] }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <SectionTitle>Today&apos;s focus</SectionTitle>
-            <Text variant="meta" tone="muted">{`${focus.length} of ${MAX_DAILY_FOCUS} picked`}</Text>
-          </View>
-          {focus.length > 0 ? (
-            <Card>
-              {focus.map((item) => {
-                const busy = pending.has(item.action.id);
-                return (
-                  <Row
-                    key={item.action.id}
-                    item={item}
-                    today={data.today}
-                    checked={isDone(item.action)}
-                    pending={busy}
-                    onToggle={() => toggle(item, 'focus', !isDone(item.action))}
-                    onOpen={onOpenAction}
-                    trailing={
-                      <IconButton
-                        accessibilityLabel={`Remove from today: ${item.action.title}`}
-                        disabled={busy}
-                        onPress={() => removeFromToday(item)}
-                        icon={<Text variant="body">✕</Text>}
-                      />
-                    }
-                  />
-                );
-              })}
-            </Card>
-          ) : (
-            <Text variant="meta" tone="muted">
-              {`Nothing picked yet. Add up to ${MAX_DAILY_FOCUS} actions from Next up.`}
-            </Text>
-          )}
-          {full ? (
-            <Text variant="meta" tone="muted">
-              {`You have picked ${MAX_DAILY_FOCUS} of ${MAX_DAILY_FOCUS}. Remove one to add another.`}
-            </Text>
+      }
+    >
+      {focus.length > 0 ? (
+        <View>{focus.map((i) => row(i, 'focus'))}</View>
+      ) : suggestion ? (
+        // Nothing chosen yet: name one concrete next step (the first item of the derived list)
+        // instead of describing the feature. Any other action can still be picked below.
+        <View style={{ gap: space[1] }}>
+          {row(suggestion, 'next', true)}
+          {width < 768 ? (
+            // Phones: the button gets its own line so the row's text keeps its full width.
+            <Button
+              title="Focus on this"
+              icon="focus"
+              disabled={pending.has(suggestion.action.id)}
+              accessibilityLabel={`Today's focus: ${suggestion.action.title}`}
+              onPress={() => addToToday(suggestion)}
+              style={{ alignSelf: 'flex-start', marginLeft: MIN_TOUCH + space[2] }}
+            />
           ) : null}
+          <Text variant="meta" tone="muted">
+            {`Or tap the sun on any action below. Up to ${MAX_DAILY_FOCUS} a day.`}
+          </Text>
         </View>
-      ) : null}
-
-      {next.length > 0 ? (
-        <View style={{ gap: space[2] }}>
-          <SectionTitle>Next up</SectionTitle>
-          <Card>
-            {next.map((item) => {
-              const busy = pending.has(item.action.id);
-              return (
-                <Row
-                  key={item.action.id}
-                  item={item}
-                  today={data.today}
-                  checked={false}
-                  pending={busy}
-                  onToggle={() => toggle(item, 'next', true)}
-                  onOpen={onOpenAction}
-                  trailing={
-                    <IconButton
-                      accessibilityLabel={`Add to today: ${item.action.title}`}
-                      disabled={busy || full}
-                      onPress={() => addToToday(item)}
-                      icon={<Text variant="body">＋</Text>}
-                    />
-                  }
-                />
-              );
-            })}
-          </Card>
-        </View>
-      ) : null}
-
-      {next.length === 0 && total > 0 && allFocusDone ? (
+      ) : (
+        emptyLine(`Pick up to ${MAX_DAILY_FOCUS} actions for today from your matrix.`, matrixAction)
+      )}
+      {full ? (
         <Text variant="meta" tone="muted">
-          Nothing left for today. Nicely done.
+          {`You have picked ${MAX_DAILY_FOCUS} of ${MAX_DAILY_FOCUS}. Remove one to add another.`}
         </Text>
       ) : null}
+    </Section>
+  );
 
-      {done.length > 0 ? (
-        <View style={{ gap: space[2] }}>
+  const routinesSection = (
+    <Section title="Routines due" ruled={!twoColumns}>
+      {routinesDue.length > 0 ? <View>{routinesDue.map((i) => row(i, 'next'))}</View> : emptyLine('No routines due today.')}
+    </Section>
+  );
+
+  const tasksSection = (
+    <Section title="Open tasks" ruled={!twoColumns}>
+      {openTasks.length > 0 ? <View>{openTasks.map((i) => row(i, 'next'))}</View> : emptyLine('No open tasks.')}
+    </Section>
+  );
+
+  const doneSection =
+    done.length > 0 ? (
+      <Section
+        title="Done today"
+        action={
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Done today (${done.length})`}
             accessibilityState={{ expanded: doneOpen }}
             onPress={() => setDoneOpen((o) => !o)}
-            style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: space[1] }}
+            style={{ minHeight: MIN_TOUCH, flexDirection: 'row', alignItems: 'center', gap: space[1], marginTop: -space[2] }}
           >
-            <Text variant="meta" tone="muted" style={{ fontFamily: 'Inter_600SemiBold' }}>
-              {doneOpen ? '▾' : '▸'}
+            <Text variant="meta" tone="muted" tabular>
+              {String(done.length)}
             </Text>
-            <SectionTitle>{`Done today (${done.length})`}</SectionTitle>
+            <Icon name="expand" size={18} style={{ transform: [{ rotate: doneOpen ? '0deg' : '-90deg' }] }} />
           </Pressable>
-          {doneOpen ? (
-            <Card>
-              {done.map((item) => (
-                <Row
-                  key={item.action.id}
-                  item={item}
-                  today={data.today}
-                  checked
-                  pending={pending.has(item.action.id)}
-                  onToggle={() => toggle(item, 'done', false)}
-                  onOpen={onOpenAction}
-                />
-              ))}
-            </Card>
-          ) : null}
-        </View>
+        }
+      >
+        {doneOpen ? <View>{done.map((i) => row(i, 'done'))}</View> : null}
+      </Section>
+    ) : null;
+
+  const reflect =
+    firstGoal && onOpenReview ? (
+      <View style={{ alignItems: 'flex-start' }}>
+        <Button title="Reflect on today" variant="ghost" icon="reflect" onPress={() => onOpenReview(firstGoal.id)} style={{ marginLeft: -space[2] }} />
+      </View>
+    ) : null;
+
+  const panel = <ActiveGoalsPanel goals={data.goals} onOpenGoal={onOpenGoal} />;
+
+  const goalLine = firstGoal ?? draft;
+  const goalLineText = firstGoal
+    ? data.goals.length > 1
+      ? `${firstGoal.title} and ${data.goals.length - 1} more`
+      : firstGoal.title
+    : draft?.title;
+
+  const heading = (
+    <View style={{ gap: space[1] }}>
+      <Text variant="title">{formatTodayTitle(data.today)}</Text>
+      {goalLine && goalLineText ? (
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={`Goal: ${goalLineText}`}
+          disabled={!onOpenGoal}
+          onPress={() => onOpenGoal?.(goalLine.id)}
+          hitSlop={space[2]}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: space[1] }}
+        >
+          <Text variant="meta" tone="muted" style={{ flexShrink: 1 }}>
+            {goalLineText}
+          </Text>
+          {onOpenGoal ? <Icon name="forward" size={14} /> : null}
+        </Pressable>
       ) : null}
-
-      <ActiveGoalsPanel goals={data.goals} onOpenGoal={onOpenGoal} />
-    </Screen>
-  );
-}
-
-function SectionTitle({ children }: { children: string }) {
-  return (
-    <Text variant="meta" tone="muted" accessibilityRole="header" style={{ fontFamily: 'Inter_600SemiBold' }}>
-      {children}
-    </Text>
-  );
-}
-
-function Card({ children }: { children: ReactNode }) {
-  const { colors, radius } = useTheme();
-  return (
-    <View
-      style={{
-        borderWidth: 1,
-        borderColor: colors.rule,
-        borderRadius: radius.md,
-        backgroundColor: colors.surface,
-        overflow: 'hidden',
-      }}
-    >
-      {children}
     </View>
   );
-}
 
-function TodayEmpty({
-  data,
-  onCreateGoal,
-  onOpenGoal,
-  onOpenMatrix,
-}: {
-  data: TodayDTO;
-  onCreateGoal?: () => void;
-  onOpenGoal?: (goalId: string) => void;
-  onOpenMatrix?: (goalId: string) => void;
-}) {
+  const errorBanner = errorMsg ? (
+    <Text variant="body" tone="danger" accessibilityRole="alert">
+      {errorMsg}
+    </Text>
+  ) : null;
+
   if (!data.hasAnyGoals) {
     return (
-      <EmptyState
-        title="Set your first goal"
-        message="Name one thing you want, break it into key areas, and the actions for today will show up here."
-        action={onCreateGoal ? { label: 'Set your first goal', onPress: onCreateGoal } : undefined}
-      />
+      <Screen refreshing={refreshing} onRefresh={onRefresh}>
+        {heading}
+        <EmptyState
+          title="Start with one goal"
+          message="The Harada Method starts with a single goal, broken into key areas and the actions that fill them. Today lists what to do next."
+          action={onCreateGoal ? { label: 'Set your goal', onPress: onCreateGoal } : undefined}
+        />
+      </Screen>
     );
   }
-  if (data.goals.length === 0 && data.draftGoals.length > 0) {
-    const draft = data.draftGoals[0]!;
-    return (
-      <EmptyState
-        title="Activate a goal to begin"
-        message={`"${draft.title}" is still a draft. Activate it and today's actions will appear here.`}
-        action={onOpenGoal ? { label: 'Open goal', onPress: () => onOpenGoal(draft.id) } : undefined}
-      />
-    );
-  }
-  const goalId = data.goals[0]?.id;
-  const open = onOpenMatrix && goalId ? () => onOpenMatrix(goalId) : undefined;
-  const action = open ? { label: 'Open the matrix', onPress: open } : undefined;
-  if (data.goals.length > 0) {
-    return (
-      <EmptyState
-        title="A clear day"
-        message="Nothing scheduled today. Pick up to 5 actions from your matrix to focus on."
-        action={action}
-      />
-    );
-  }
-  return (
-    <EmptyState
-      title="Nothing due today"
-      message="You are clear for now. Pick a few actions from your matrix to work on next."
-      action={action}
-    />
-  );
-}
 
-type RowProps = {
-  item: NextItemDTO;
-  today: string;
-  checked: boolean;
-  pending: boolean;
-  onToggle: () => void;
-  onOpen?: (goalId: string, outcomePosition: number) => void;
-  trailing?: ReactNode;
-};
+  if (draft) {
+    return (
+      <Screen refreshing={refreshing} onRefresh={onRefresh}>
+        {heading}
+        <Section title="Activate your goal to begin" ruled={false}>
+          <Text variant="body" tone="muted">
+            {`"${draft.title}" is still a draft. Today's actions appear once the goal is active.`}
+          </Text>
+          {activateGoal ? (
+            <ActivateGoalButton goalId={draft.id} activateGoal={activateGoal} onActivated={onActivated} note={null} />
+          ) : onOpenGoal ? (
+            <View style={{ alignItems: 'flex-start' }}>
+              <Button title="Open goal" onPress={() => onOpenGoal(draft.id)} />
+            </View>
+          ) : null}
+        </Section>
+      </Screen>
+    );
+  }
 
-function Row({ item, today, checked, pending, onToggle, onOpen, trailing }: RowProps) {
-  const { colors, space } = useTheme();
-  const { action } = item;
-  const routine = action.kind === 'routine';
   return (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        borderBottomWidth: 1,
-        borderBottomColor: colors.rule,
-        paddingHorizontal: space[1],
-      }}
-    >
-      <CheckCircle
-        checked={checked}
-        accessibilityLabel={checked ? `Reopen: ${action.title}` : `Complete: ${action.title}`}
-        busy={pending}
-        onPress={onToggle}
-      />
-      <Pressable
-        accessibilityRole="link"
-        accessibilityState={{ busy: pending, disabled: !onOpen }}
-        disabled={!onOpen}
-        onPress={() => onOpen?.(item.goalId, item.outcomePosition)}
-        style={{ flex: 1, minWidth: 0, paddingVertical: space[2], paddingRight: space[2] }}
-      >
-        <Text
-          variant="body"
-          tone={checked ? 'muted' : 'default'}
-          style={checked ? { textDecorationLine: 'line-through' } : undefined}
-        >
-          {action.title}
-        </Text>
-        <Text variant="meta" tone="muted" numberOfLines={1}>
-          {`${item.goalTitle} · ${item.outcomeTitle}`}
-        </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: space[3], marginTop: 2 }}>
-          {pending ? (
-            <Text variant="meta" accessibilityLiveRegion="polite" style={{ fontFamily: 'Inter_500Medium' }}>
-              Saving…
-            </Text>
-          ) : null}
-          {item.overdue && !checked ? (
-            <Text variant="meta" tone="danger" style={{ fontFamily: 'Inter_600SemiBold' }}>
-              Overdue
-            </Text>
-          ) : null}
-          {action.dueDate && !routine ? (
-            <Text variant="meta" tone="muted">{`Due ${relativeDay(action.dueDate, today)}`}</Text>
-          ) : null}
-          {routine ? (
-            <Text variant="meta" tone="muted">{`↻ ${describeSchedule(action.schedule) || 'Routine'}`}</Text>
-          ) : null}
+    <Screen refreshing={refreshing} onRefresh={onRefresh} maxWidth={twoColumns ? 1040 : undefined}>
+      {heading}
+      {errorBanner}
+      {twoColumns ? (
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space[10] }}>
+          <View style={{ flex: 1, gap: space[4] }}>
+            {focusSection}
+            {routinesSection}
+            {doneSection}
+          </View>
+          <View style={{ flex: 1, gap: space[4] }}>
+            {tasksSection}
+            {reflect}
+            {panel}
+          </View>
         </View>
-      </Pressable>
-      {trailing}
-    </View>
+      ) : (
+        <>
+          {focusSection}
+          {routinesSection}
+          {tasksSection}
+          {doneSection}
+          {reflect}
+          {panel}
+        </>
+      )}
+    </Screen>
   );
 }

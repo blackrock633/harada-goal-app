@@ -1,0 +1,207 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-24T19:44:08.617583Z",
+  "title": "Design System: Harada",
+  "extensions": {
+    "colorMeta": {
+      "vermilion": {
+        "role": "primary",
+        "displayName": "Vermilion (shu)",
+        "canonical": "#C2401C",
+        "tonalRamp": [
+          "#3A1E15",
+          "#6B2410",
+          "#9E3214",
+          "#C2401C",
+          "#EB6A45",
+          "#F49B7E",
+          "#F6E4DC",
+          "#FBF2EE"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#F7F5F0",
+        "tonalRamp": [
+          "#131311",
+          "#1B1A17",
+          "#5E5A52",
+          "#857F74",
+          "#CBC6BA",
+          "#E2DED4",
+          "#EFECE5",
+          "#F7F5F0"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#1B1A17",
+        "tonalRamp": [
+          "#0E0E0D",
+          "#1B1A17",
+          "#3D3A35",
+          "#5E5A52",
+          "#6F6A61",
+          "#857F74",
+          "#A6A196",
+          "#CBC6BA"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The goal statement, Mincho 700."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Screen titles."
+      },
+      "heading": {
+        "displayName": "Heading",
+        "purpose": "Section names and matrix centre cell."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Row, group and cell names."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default text."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Secondary lines."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Smallest supporting text, matrix numbers."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "fast",
+        "value": "120ms",
+        "purpose": "Press and toggle feedback."
+      },
+      {
+        "name": "base",
+        "value": "200ms",
+        "purpose": "Default state transitions."
+      },
+      {
+        "name": "slow",
+        "value": "280ms",
+        "purpose": "Sheet and layout changes. Honour Reduce Motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide",
+        "value": "768px"
+      },
+      {
+        "name": "content-max",
+        "value": "680px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one action a view exists for.",
+      "html": "<button class=\"ds-btn-primary\">Save</button>",
+      "css": ".ds-btn-primary{background:#C2401C;color:#fff;border:1px solid #C2401C;border-radius:8px;min-height:44px;padding:0 20px;font:600 17px -apple-system,Roboto,sans-serif}.ds-btn-primary:hover{background:#9E3214}.ds-btn-primary:focus-visible{outline:2px solid #C2401C;outline-offset:2px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Hairline outline alternative.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary{background:transparent;color:#1B1A17;border:1px solid #CBC6BA;border-radius:8px;min-height:44px;padding:0 20px;font:600 17px -apple-system,Roboto,sans-serif}.ds-btn-secondary:hover{background:#EFECE5}.ds-btn-secondary:focus-visible{outline:2px solid #C2401C;outline-offset:2px}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "text-field",
+      "description": "White field, 8 radius, vermilion 2px on focus.",
+      "html": "<input class=\"ds-field\" placeholder=\"Goal\">",
+      "css": ".ds-field{background:#fff;color:#1B1A17;border:1px solid #857F74;border-radius:8px;min-height:44px;padding:0 12px;font:400 17px -apple-system,Roboto,sans-serif}.ds-field:focus{outline:none;border:2px solid #C2401C}"
+    },
+    {
+      "name": "Focus Toggle",
+      "kind": "chip",
+      "refersTo": "focus-toggle-on",
+      "description": "Pill marking an action as today's focus.",
+      "html": "<button class=\"ds-focus\">In today</button>",
+      "css": ".ds-focus{background:#F6E4DC;color:#9E3214;border:1px solid #F6E4DC;border-radius:999px;min-height:32px;padding:0 12px;font:500 13px -apple-system,Roboto,sans-serif}.ds-focus:focus-visible{outline:2px solid #C2401C}"
+    },
+    {
+      "name": "List Row",
+      "kind": "custom",
+      "description": "Hairline-divided row, no card.",
+      "html": "<div class=\"ds-row\"><span>Run 5 km</span><span class=\"ds-meta\">Routine</span></div>",
+      "css": ".ds-row{display:flex;justify-content:space-between;align-items:center;min-height:56px;padding:12px 0;border-bottom:1px solid #E2DED4;font:400 17px -apple-system,Roboto,sans-serif;color:#1B1A17}.ds-meta{font-size:15px;color:#5E5A52}"
+    },
+    {
+      "name": "Matrix Sheet",
+      "kind": "custom",
+      "description": "Square cells, heavy ink block rules, ink centre cell.",
+      "html": "<div class=\"ds-sheet\"><div class=\"ds-cell\">1</div><div class=\"ds-cell ds-center\">Goal</div><div class=\"ds-cell\">2</div></div>",
+      "css": ".ds-sheet{display:grid;grid-template-columns:repeat(3,64px);border:1.5px solid #1B1A17;background:#F7F5F0}.ds-cell{min-height:64px;padding:8px;border-right:1px solid #E2DED4;font:400 13px -apple-system,Roboto,sans-serif;color:#1B1A17}.ds-center{background:#1B1A17;color:#F7F5F0;font:700 20px 'Shippori Mincho B1',serif}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Printed Harada Sheet",
+    "overview": "A ruled paper form with ink entries. Structure comes from hairline rules, ink weight and type, not boxes. One vermilion marks what matters now. Mincho names, platform UI face for work.",
+    "keyCharacteristics": [
+      "Warm paper, warm ink, one vermilion; dark scheme keeps the hues.",
+      "Flat: no shadows; depth is rules, sunken tone and a scrim.",
+      "Square cells, 8-radius controls, 14-radius sheet only, pills for the focus toggle.",
+      "Mincho for names, system face for work."
+    ],
+    "rules": [
+      {
+        "name": "The One Vermilion Rule",
+        "body": "Vermilion marks what matters now (the one action, the selection, the done mark, focus).",
+        "section": "colors"
+      },
+      {
+        "name": "The Accent-On-Soft Rule",
+        "body": "On vermilion-soft, text is vermilion-on-soft; plain vermilion text fails contrast there.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mincho-For-Names Rule",
+        "body": "Mincho is only for the goal and screen/section names.",
+        "section": "typography"
+      },
+      {
+        "name": "The Rules-Not-Boxes Rule",
+        "body": "Group with a hairline or whitespace, not bordered or filled cards.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do read values from useTheme() / tokens.ts.",
+      "Do give every control a MIN_TOUCH target and an accessible name.",
+      "Do keep one primary button per view.",
+      "Do separate groups with hairlines and 16 to 24 spacing.",
+      "Do keep text at 12 or larger and check both schemes."
+    ],
+    "donts": [
+      "Don't wrap content in cards, shadows or tinted panels to create structure.",
+      "Don't set vermilion text on vermilion-soft.",
+      "Don't use Mincho for rows, buttons or metadata.",
+      "Don't round matrix cells or apply 14 or 999 radius to ordinary controls.",
+      "Don't label any measure goal progress.",
+      "Don't hand-draw glyph icons or bypass the icon vocabulary."
+    ]
+  }
+}

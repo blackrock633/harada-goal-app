@@ -1,9 +1,9 @@
 import type { Session } from '@supabase/supabase-js';
-import Storage from 'expo-sqlite/kv-store';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import { getSupabase, SESSION_STORAGE_KEY, SupabaseNotConfiguredError } from '@/data/supabase';
 
+import { installFlags } from './install-flags';
 import { secureSessionStorage } from './secure-session-storage';
 
 const INSTALL_FLAG = 'harada.installed';
@@ -19,7 +19,7 @@ interface KeyValue {
  * wiped on uninstall, so a missing install flag means "fresh install": drop any keychain session.
  */
 export async function clearSessionIfFreshInstall(
-  flags: KeyValue = Storage,
+  flags: KeyValue = installFlags,
   removeSession: () => Promise<void> = () => secureSessionStorage.removeItem(SESSION_STORAGE_KEY),
 ): Promise<boolean> {
   if ((await flags.getItem(INSTALL_FLAG)) !== null) return false;

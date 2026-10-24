@@ -29,12 +29,11 @@ describe('TodayView', () => {
   it('shows the heading and count, and optimistically completes a task', async () => {
     const m = muts();
     await render(<TodayView data={data()} mutations={m} focusMutations={fmuts()} />);
-    expect(screen.getByRole('header', { name: 'Monday, October 19, 2026' })).toBeTruthy();
-    expect(screen.getByText('0 of 2 done today')).toBeTruthy();
+    expect(screen.getByRole('header', { name: 'Monday, 19 October' })).toBeTruthy();
+    expect(screen.getByRole('header', { name: 'Focus' })).toBeTruthy();
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Complete: Write chapter' }));
     expect(screen.getByRole('checkbox', { name: 'Reopen: Write chapter' })).toBeChecked();
     expect(m.completeAction).toHaveBeenCalledWith({ actionId: 'a1' });
-    expect(screen.getByText('1 of 2 done today')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Done today (1)' })).toBeTruthy();
   });
 
@@ -47,7 +46,6 @@ describe('TodayView', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Boom');
     expect(checkboxNames()).toEqual(['Complete: Write chapter', 'Complete: Other']);
     expect(onError).toHaveBeenCalledWith('Boom');
-    expect(screen.getByText('0 of 2 done today')).toBeTruthy();
   });
 
   it('uses the friendly message for UNAVAILABLE', async () => {
@@ -75,7 +73,7 @@ describe('TodayView', () => {
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Complete: Stretch' }));
     expect(m.checkRoutine).toHaveBeenCalledWith({ actionId: 'r1', date: '2026-10-19' });
     expect(m.completeAction).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.queryByText('Saving…')).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/Saving…/)).toBeNull());
     await fireEvent.press(await screen.findByRole('checkbox', { name: 'Reopen: Stretch' }));
     expect(m.uncheckRoutine).toHaveBeenCalledWith({ actionId: 'r1', date: '2026-10-19' });
     expect(await screen.findByRole('checkbox', { name: 'Complete: Stretch' })).toBeTruthy();
@@ -86,14 +84,14 @@ describe('TodayView', () => {
     const m = muts({ completeAction: jest.fn(() => d.promise) });
     await render(<TodayView data={data()} mutations={m} focusMutations={fmuts()} />);
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Complete: Write chapter' }));
-    expect(screen.getByText('Saving…')).toBeTruthy();
+    expect(screen.getByText(/Saving…/)).toBeTruthy();
     const box = screen.getByRole('checkbox', { name: 'Reopen: Write chapter' });
     expect(box.props.accessibilityState).toMatchObject({ busy: true, disabled: true });
     await fireEvent.press(box);
     expect(m.reopenAction).not.toHaveBeenCalled();
     expect(m.completeAction).toHaveBeenCalledTimes(1);
     await act(async () => d.resolve({ ok: true, data: action() }));
-    expect(screen.queryByText('Saving…')).toBeNull();
+    expect(screen.queryByText(/Saving…/)).toBeNull();
   });
 
   it('applies data that arrives mid-write once the write settles', async () => {
@@ -121,29 +119,30 @@ describe('TodayView', () => {
       />,
     );
     expect(checkboxNames()[0]).toBe('Complete: Late one');
-    expect(screen.getByText('Overdue')).toBeTruthy();
-    expect(screen.getByText('Due Yesterday')).toBeTruthy();
+    expect(screen.getByText(/Overdue · Due Yesterday/)).toBeTruthy();
     expect(screen.getByText(long)).toBeTruthy();
-    expect(screen.getAllByText('Goal · Area').length).toBe(2);
+    expect(screen.getAllByText(/Area$/).length).toBe(2);
   });
 
   it('row body press opens the action key area', async () => {
     const onOpenAction = jest.fn();
     await render(<TodayView data={data()} mutations={muts()} focusMutations={fmuts()} onOpenAction={onOpenAction} />);
-    await fireEvent.press(screen.getAllByRole('link')[0]!);
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Write chapter' })[0]!);
     expect(onOpenAction).toHaveBeenCalledWith('g1', 3);
   });
 
   it('adds to focus, removes, and rolls back a failed add', async () => {
     const f = fmuts();
     await render(<TodayView data={data()} mutations={muts()} focusMutations={f} />);
-    expect(screen.getByText('0 of 5 picked')).toBeTruthy();
-    await fireEvent.press(screen.getByRole('button', { name: 'Add to today: Write chapter' }));
+    expect(screen.getByText('0 of 5')).toBeTruthy();
+    // With nothing in focus, the first action is offered as "Start here" with a Focus button.
+    expect(screen.getByTestId('focus-suggestion')).toHaveTextContent(/Start here/);
+    await fireEvent.press(screen.getByRole('button', { name: "Today's focus: Write chapter" }));
     expect(f.addToToday).toHaveBeenCalledWith({ actionId: 'a1', date: '2026-10-19' });
-    expect(screen.getByText('1 of 5 picked')).toBeTruthy();
-    await fireEvent.press(await screen.findByRole('button', { name: 'Remove from today: Write chapter' }));
+    expect(screen.getByText('1 of 5')).toBeTruthy();
+    await fireEvent.press(await screen.findByRole('switch', { name: "Today's focus: Write chapter", checked: true }));
     expect(f.removeFromToday).toHaveBeenCalledWith({ actionId: 'a1', date: '2026-10-19' });
-    expect(await screen.findByText('0 of 5 picked')).toBeTruthy();
+    expect(await screen.findByText('0 of 5')).toBeTruthy();
     expect(checkboxNames()).toEqual(['Complete: Write chapter', 'Complete: Other']);
   });
 
@@ -151,18 +150,18 @@ describe('TodayView', () => {
     const onError = jest.fn();
     const f = fmuts({ addToToday: jest.fn(async () => ({ ok: false as const, error: { code: 'LIMIT_REACHED' as const, message: 'Focus is full' } })) });
     await render(<TodayView data={data()} mutations={muts()} focusMutations={f} onError={onError} />);
-    await fireEvent.press(screen.getByRole('button', { name: 'Add to today: Other' }));
+    await fireEvent.press(screen.getByRole('switch', { name: "Today's focus: Other" }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Focus is full');
     expect(onError).toHaveBeenCalledWith('Focus is full');
-    expect(screen.getByText('0 of 5 picked')).toBeTruthy();
+    expect(screen.getByText('0 of 5')).toBeTruthy();
     expect(checkboxNames()).toEqual(['Complete: Write chapter', 'Complete: Other']);
   });
 
   it('disables add with a visible reason at 5 picked', async () => {
     const picked = [1, 2, 3, 4, 5].map((n) => item({ id: `f${n}`, title: `Pick ${n}`, focusedToday: true }));
     await render(<TodayView data={data({ focus: picked })} mutations={muts()} focusMutations={fmuts()} />);
-    expect(screen.getByText('5 of 5 picked')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Add to today: Write chapter' }).props.accessibilityState).toMatchObject({ disabled: true });
+    expect(screen.getByText('5 of 5')).toBeTruthy();
+    expect(screen.getByRole('switch', { name: "Today's focus: Write chapter" }).props.accessibilityState).toMatchObject({ disabled: true });
     expect(screen.getByText(/Remove one to add another/)).toBeTruthy();
   });
 
@@ -180,36 +179,55 @@ describe('TodayView', () => {
   });
 
   describe('empty states', () => {
-    it('first goal CTA', async () => {
+    it('no goal: start with one goal', async () => {
       const onCreateGoal = jest.fn();
       await render(<TodayView data={data({ next: [], goals: [], hasAnyGoals: false })} mutations={muts()} focusMutations={fmuts()} onCreateGoal={onCreateGoal} />);
-      await fireEvent.press(screen.getByRole('button', { name: 'Set your first goal' }));
+      expect(screen.getByText('Start with one goal')).toBeTruthy();
+      await fireEvent.press(screen.getByRole('button', { name: 'Set your goal' }));
       expect(onCreateGoal).toHaveBeenCalled();
     });
-    it('nothing due points to the matrix', async () => {
+    it('nothing due: each section says so and focus points to the matrix', async () => {
       const onOpenMatrix = jest.fn();
       await render(<TodayView data={data({ next: [] })} mutations={muts()} focusMutations={fmuts()} onOpenMatrix={onOpenMatrix} />);
-      expect(screen.getByText(/Nothing scheduled today/)).toBeTruthy();
-      await fireEvent.press(screen.getByRole('button', { name: 'Open the matrix' }));
+      expect(screen.getByText('Pick up to 5 actions for today from your matrix.')).toBeTruthy();
+      expect(screen.getByText('No routines due today.')).toBeTruthy();
+      expect(screen.getByText('No open tasks.')).toBeTruthy();
+      await fireEvent.press(screen.getByRole('button', { name: 'Choose from matrix' }));
       expect(onOpenMatrix).toHaveBeenCalledWith('g1');
     });
-    it('drafts prompt activation', async () => {
-      const onOpenGoal = jest.fn();
+    it('draft: says so and activates right on Today', async () => {
+      const activateGoal = jest.fn(async () => ({ ok: true as const, data: {} as never }));
+      const onActivated = jest.fn();
       await render(
-        <TodayView data={data({ next: [], goals: [], draftGoals: [goal({ id: 'd1', title: 'Draft one', status: 'draft' })] })} mutations={muts()} focusMutations={fmuts()} onOpenGoal={onOpenGoal} />,
+        <TodayView
+          data={data({ next: [], goals: [], draftGoals: [goal({ id: 'd1', title: 'Draft one', status: 'draft' })] })}
+          mutations={muts()}
+          focusMutations={fmuts()}
+          activateGoal={activateGoal}
+          onActivated={onActivated}
+        />,
       );
       expect(screen.getByText(/"Draft one" is still a draft/)).toBeTruthy();
-      await fireEvent.press(screen.getByRole('button', { name: 'Open goal' }));
-      expect(onOpenGoal).toHaveBeenCalledWith('d1');
+      expect(screen.getByText(/appear once the goal is active/)).toBeTruthy();
+      await fireEvent.press(screen.getByRole('button', { name: 'Activate goal' }));
+      expect(activateGoal).toHaveBeenCalledWith({ goalId: 'd1' });
+      await waitFor(() => expect(onActivated).toHaveBeenCalled());
     });
+  });
+
+  it('puts routines in their own section with a square check', async () => {
+    const routine = item({ id: 'r1', title: 'Stretch', kind: 'routine', schedule: { type: 'daily' }, dueToday: true });
+    await render(<TodayView data={data({ next: [routine, item()] })} mutations={muts()} focusMutations={fmuts()} />);
+    expect(screen.getByRole('header', { name: 'Routines due' })).toBeTruthy();
+    expect(screen.getByRole('header', { name: 'Open tasks' })).toBeTruthy();
   });
 
   describe('ActiveGoalsPanel', () => {
     it('shows counts, no merged percentage, and hides unknown pace', async () => {
       await render(<TodayView data={data()} mutations={muts()} focusMutations={fmuts()} />);
-      expect(screen.getByText('2 due today')).toBeTruthy();
-      expect(screen.getByText('1 of 4 tasks done')).toBeTruthy();
-      expect(screen.getByText('10/72 planned')).toBeTruthy();
+      expect(screen.getByText(/2 due today/)).toBeTruthy();
+      expect(screen.getByText(/1 of 4 tasks done/)).toBeTruthy();
+      expect(screen.getByText(/10 of 72 positions planned/)).toBeTruthy();
       expect(screen.queryByText(/by measures/)).toBeNull();
       expect(screen.queryByText(/%/)).toBeNull();
       expect(screen.queryByRole('progressbar')).toBeNull();

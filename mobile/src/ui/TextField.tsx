@@ -51,7 +51,7 @@ export function TextField({
 
   return (
     <View style={{ gap: space[1] }}>
-      <Text variant="meta" tone="muted" style={{ fontFamily: 'Inter_500Medium' }}>
+      <Text variant="meta" weight="medium" tone="muted">
         {label}
       </Text>
       <TextInput
@@ -81,26 +81,26 @@ export function TextField({
             color: colors.ink,
             backgroundColor: colors.surface,
             borderColor,
-            borderRadius: radius.sm,
+            borderRadius: radius.md,
             borderWidth: focused || error ? 2 : 1,
             paddingHorizontal: space[3],
-            minHeight: multiline ? 120 : MIN_TOUCH,
+            minHeight: multiline ? 112 : MIN_TOUCH,
           },
           style,
         ]}
       />
       {hint && !error ? (
-        <Text variant="meta" tone="muted">
+        <Text variant="caption" tone="muted">
           {hint}
         </Text>
       ) : null}
       {error ? (
-        <Text variant="meta" tone="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
+        <Text variant="caption" tone="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
           {error}
         </Text>
       ) : null}
       {showCounter ? (
-        <Text variant="meta" tone="muted" style={{ textAlign: 'right' }}>
+        <Text variant="caption" tone="muted" tabular style={{ textAlign: 'right' }}>
           {`${value.length} / ${maxLength}`}
         </Text>
       ) : null}

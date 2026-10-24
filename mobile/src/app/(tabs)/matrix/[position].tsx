@@ -5,7 +5,7 @@ import { useMutations } from '@/data/hooks';
 import { KeyAreaView } from '@/features/matrix';
 import { ErrorScreen, LoadingScreen } from '@/screens/queryState';
 import { useGoalScreen } from '@/screens/useGoalScreen';
-import { EmptyState, ErrorState, Screen, Text } from '@/ui';
+import { EmptyState, ErrorState, Screen, Text, useLayout } from '@/ui';
 
 /** Parses a key-area position (0..7); returns null when invalid. */
 export function parsePosition(raw: string | string[] | undefined): number | null {
@@ -21,7 +21,12 @@ export default function KeyAreaScreen() {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Key area' }} />
-        <ErrorState title="Key area not found" message="Key areas are numbered 1 to 8." />
+        <ErrorState
+          title="Key area not found"
+          message="Key areas are numbered 1 to 8."
+          retryLabel="Back to matrix"
+          onRetry={() => router.replace('/matrix')}
+        />
       </Screen>
     );
   }
@@ -31,8 +36,10 @@ export default function KeyAreaScreen() {
 function KeyArea({ index }: { index: number }) {
   const { state, detail, today, noGoals, refetchDetail } = useGoalScreen();
   const mutations = useMutations();
+  const { width } = useLayout();
   const [banner, setBanner] = useState<string | null>(null);
-  const title = <Stack.Screen options={{ title: `Key area ${index + 1}` }} />;
+  // The pager under the header already reads "Key area N of 8"; the header keeps only Back.
+  const title = <Stack.Screen options={{ title: `Key area ${index + 1}`, headerTitle: () => null }} />;
 
   if (noGoals) {
     return (
@@ -50,7 +57,7 @@ function KeyArea({ index }: { index: number }) {
   if (state.loading || !detail || !today) return <LoadingScreen />;
 
   return (
-    <Screen refreshing={state.refreshing} onRefresh={state.refetch}>
+    <Screen refreshing={state.refreshing} onRefresh={state.refetch} maxWidth={width >= 1024 ? 1040 : undefined}>
       {title}
       {banner ? (
         <Text tone="danger" accessibilityRole="alert">

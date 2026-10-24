@@ -1,12 +1,15 @@
 import { router } from 'expo-router';
 
+import { useMutations } from '@/data/hooks';
 import { MatrixOverview } from '@/features/matrix';
 import { ErrorScreen, LoadingScreen } from '@/screens/queryState';
 import { useGoalScreen } from '@/screens/useGoalScreen';
-import { EmptyState, Screen } from '@/ui';
+import { EmptyState, Screen, useLayout } from '@/ui';
 
 export default function MatrixScreen() {
-  const { state, detail, noGoals } = useGoalScreen();
+  const { state, detail, noGoals, refetchDetail } = useGoalScreen();
+  const mutations = useMutations();
+  const { wide } = useLayout();
 
   if (noGoals) {
     return (
@@ -23,9 +26,12 @@ export default function MatrixScreen() {
   if (state.loading || !detail) return <LoadingScreen />;
 
   return (
-    <Screen refreshing={state.refreshing} onRefresh={state.refetch}>
+    <Screen refreshing={state.refreshing} onRefresh={state.refetch} maxWidth={wide ? 'full' : undefined}>
       <MatrixOverview
         goal={detail}
+        matrix={mutations}
+        onChanged={refetchDetail}
+        onReloadLatest={refetchDetail}
         onOpenArea={(position) =>
           router.push({ pathname: '/matrix/[position]', params: { position: String(position), goal: detail.id } })
         }

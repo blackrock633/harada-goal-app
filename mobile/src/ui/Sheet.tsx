@@ -4,7 +4,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/theme';
 
-import { Button } from './Button';
+import { IconButton } from './IconButton';
+import { useReduceMotion } from './use-reduce-motion';
 import { Text } from './Text';
 
 export type SheetProps = {
@@ -24,12 +25,13 @@ export type SheetProps = {
 export function Sheet({ visible, onClose, title, children, footer }: SheetProps) {
   const { colors, radius, space } = useTheme();
   const insets = useSafeAreaInsets();
+  const reduceMotion = useReduceMotion();
   return (
     <Modal
       testID="sheet-modal"
       visible={visible}
       transparent
-      animationType="slide"
+      animationType={reduceMotion ? 'fade' : 'slide'}
       onRequestClose={onClose}
       supportedOrientations={['portrait', 'landscape']}
     >
@@ -41,25 +43,29 @@ export function Sheet({ visible, onClose, title, children, footer }: SheetProps)
           accessibilityRole="button"
           accessibilityLabel="Dismiss"
           onPress={onClose}
-          style={[styles.flex, { backgroundColor: 'rgba(0,0,0,0.4)' }]}
+          style={[styles.flex, { backgroundColor: colors.scrim }]}
         />
         <View
           accessibilityViewIsModal
           accessibilityLabel={title}
           style={{
-            maxHeight: '85%',
+            maxHeight: '88%',
+            width: '100%',
+            maxWidth: 640,
+            alignSelf: 'center',
             backgroundColor: colors.surface,
-            borderTopLeftRadius: radius.md,
-            borderTopRightRadius: radius.md,
+            borderTopLeftRadius: radius.lg,
+            borderTopRightRadius: radius.lg,
             borderTopWidth: StyleSheet.hairlineWidth,
             borderColor: colors.rule,
           }}
         >
-          <View style={[styles.header, { paddingHorizontal: space[4], paddingTop: space[3] }]}>
+          <View style={[styles.grabber, { backgroundColor: colors.ruleStrong, marginTop: space[2] }]} />
+          <View style={[styles.header, { paddingLeft: space[4], paddingRight: space[2], paddingTop: space[1] }]}>
             <Text variant="heading" style={styles.flex}>
               {title}
             </Text>
-            <Button title="Close" variant="ghost" onPress={onClose} />
+            <IconButton icon="close" accessibilityLabel="Close" tone="muted" onPress={onClose} />
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled"
@@ -91,4 +97,5 @@ export function Sheet({ visible, onClose, title, children, footer }: SheetProps)
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  grabber: { width: 36, height: 5, borderRadius: 3, alignSelf: 'center' },
 });

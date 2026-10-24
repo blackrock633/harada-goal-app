@@ -4,7 +4,7 @@ import { View } from 'react-native';
 import { newClientId } from '@/data/errors';
 import type { GoalMutations } from '@/data/mutations';
 import { useTheme } from '@/theme';
-import { Button, Text, TextField, type TextFieldHandle } from '@/ui';
+import { Button, DateField, Section, Text, TextField, type TextFieldHandle } from '@/ui';
 import type { GoalFieldsDTO } from '@shared/application/dto';
 
 import { DetailsFields } from './GoalFields';
@@ -13,6 +13,7 @@ import {
   buildPayload,
   emptyDraft,
   localToday,
+  nextDay,
   toOutcome,
   validateDraft,
   type FieldErrors,
@@ -56,7 +57,7 @@ export function GoalForm({
   onReloadLatest,
   today: todayProp,
 }: GoalFormProps) {
-  const { space, colors } = useTheme();
+  const { space, colors, radius } = useTheme();
   const today = todayProp ?? localToday();
   const isEdit = mode === 'edit';
   const [draft, setDraft] = useState<GoalDraft>(() => draftFrom(goal));
@@ -158,7 +159,7 @@ export function GoalForm({
       {formError ? (
         <View
           accessibilityRole="alert"
-          style={{ borderWidth: 1, borderColor: colors.danger, padding: space[3], gap: space[2], borderRadius: 6 }}
+          style={{ borderWidth: 1, borderColor: colors.danger, padding: space[3], gap: space[2], borderRadius: radius.md }}
         >
           <Text variant="meta" tone="danger">
             {formError}
@@ -169,42 +170,35 @@ export function GoalForm({
         </View>
       ) : null}
 
-      <TextField
-        label="What is your goal?"
-        hint="One clear sentence. You can refine it later."
-        ref={register('title')}
-        value={draft.title}
-        onChangeText={(v) => setDraft((d) => ({ ...d, title: v }))}
-        error={errors.title}
-        editable={!pending}
-        maxLength={FIELD_LIMITS.title}
-        autoComplete="off"
-      />
-
-      <View style={{ gap: space[2] }}>
+      <Section title="Goal" ruled={false}>
         <TextField
-          label="Target date (optional)"
-          hint={
-            isEdit
-              ? 'Format YYYY-MM-DD.'
-              : 'Format YYYY-MM-DD. Must be in the future. Leave empty if there is no deadline.'
-          }
-          ref={register('targetDate')}
-          value={draft.targetDate}
-          onChangeText={(v) => setDraft((d) => ({ ...d, targetDate: v.trim() }))}
-          error={errors.targetDate}
+          label="What is your goal?"
+          hint="One clear sentence. You can refine it later."
+          ref={register('title')}
+          value={draft.title}
+          onChangeText={(v) => setDraft((d) => ({ ...d, title: v }))}
+          error={errors.title}
           editable={!pending}
-          placeholder="YYYY-MM-DD"
-          keyboardType="numbers-and-punctuation"
-          autoCorrect={false}
-          maxLength={10}
+          maxLength={FIELD_LIMITS.title}
+          autoComplete="off"
         />
-        {pastDateWarning ? (
-          <Text variant="meta" tone="warning" accessibilityRole="alert">
-            {pastDateWarning}
-          </Text>
-        ) : null}
-      </View>
+        <View style={{ gap: space[2] }}>
+          <DateField
+            label="Target date (optional)"
+            hint={isEdit ? undefined : 'Leave empty if there is no deadline.'}
+            value={draft.targetDate}
+            onChange={(v) => setDraft((d) => ({ ...d, targetDate: v }))}
+            error={errors.targetDate}
+            min={isEdit ? undefined : nextDay(today)}
+            clearable
+          />
+          {pastDateWarning ? (
+            <Text variant="meta" tone="warning" accessibilityRole="alert">
+              {pastDateWarning}
+            </Text>
+          ) : null}
+        </View>
+      </Section>
 
       <DetailsFields
         draft={draft}
@@ -215,7 +209,7 @@ export function GoalForm({
         onChangePurpose={(k, v) => setDraft((d) => ({ ...d, purpose: { ...d.purpose, [k]: v } }))}
       />
 
-      <View style={{ gap: space[3] }}>
+      <View style={{ gap: space[2] }}>
         <Button title={isEdit ? 'Save goal' : 'Create goal'} loading={pending} onPress={submit} />
         {onCancel ? <Button title="Cancel" variant="ghost" disabled={pending} onPress={onCancel} /> : null}
       </View>
