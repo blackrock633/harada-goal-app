@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Harada">
+  <rect width="1024" height="1024" rx="0" fill="#C2401C"/>
+  <rect x="194.56" y="194.56" width="634.88" height="634.88" rx="69.682" fill="none" stroke="#FFFFFF" stroke-width="19.3561"/>
+  <line x1="406.161" y1="194.56" x2="406.161" y2="829.44" stroke="#FFFFFF" stroke-width="19.3561"/>
+  <line x1="617.839" y1="194.56" x2="617.839" y2="829.44" stroke="#FFFFFF" stroke-width="19.3561"/>
+  <line x1="194.56" y1="406.161" x2="829.44" y2="406.161" stroke="#FFFFFF" stroke-width="19.3561"/>
+  <line x1="194.56" y1="617.839" x2="829.44" y2="617.839" stroke="#FFFFFF" stroke-width="19.3561"/>
+  <rect x="450.06" y="450.06" width="123.879" height="123.879" rx="23.2273" fill="#FFFFFF"/>
+</svg>

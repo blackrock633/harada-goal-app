@@ -10,6 +10,7 @@ const config = [
   {
     ignores: [
       'legacy/**',
+      'brand/**',
       '.claude/**',
       '.next/**',
       'node_modules/**',

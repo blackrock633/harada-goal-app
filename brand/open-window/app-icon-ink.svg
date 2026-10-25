@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Harada">
+  <rect width="1024" height="1024" rx="0" fill="#131311"/>
+  <rect x="266.667" y="266.667" width="106.667" height="106.667" rx="21.3333" fill="none" stroke="#EEEBE4" stroke-width="21.3333"/>
+  <rect x="458.667" y="266.667" width="106.667" height="106.667" rx="21.3333" fill="none" stroke="#EEEBE4" stroke-width="21.3333"/>
+  <rect x="650.667" y="266.667" width="106.667" height="106.667" rx="21.3333" fill="none" stroke="#EEEBE4" stroke-width="21.3333"/>
+  <rect x="266.667" y="458.667" width="106.667" height="106.667" rx="21.3333" fill="none" stroke="#EEEBE4" stroke-width="21.3333"/>
+  <rect x="437.333" y="437.333" width="149.333" height="149.333" rx="32" fill="#EB6A45"/>
+  <rect x="650.667" y="458.667" width="106.667" height="106.667" rx="21.3333" fill="none" stroke="#EEEBE4" stroke-width="21.3333"/>
+  <rect x="266.667" y="650.667" width="106.667" height="106.667" rx="21.3333" fill="none" stroke="#EEEBE4" stroke-width="21.3333"/>
+  <rect x="458.667" y="650.667" width="106.667" height="106.667" rx="21.3333" fill="none" stroke="#EEEBE4" stroke-width="21.3333"/>
+  <rect x="650.667" y="650.667" width="106.667" height="106.667" rx="21.3333" fill="none" stroke="#EEEBE4" stroke-width="21.3333"/>
+</svg>
