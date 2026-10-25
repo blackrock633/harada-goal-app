@@ -152,7 +152,7 @@
     {
       "name": "Matrix Sheet",
       "kind": "custom",
-      "description": "Square cells, heavy ink block rules, ink centre cell.",
+      "description": "Square cells, heavy ink block rules, accent-soft centre goal cell with centred Mincho.",
       "html": "<div class=\"ds-sheet\"><div class=\"ds-cell\">1</div><div class=\"ds-cell ds-center\">Goal</div><div class=\"ds-cell\">2</div></div>",
       "css": ".ds-sheet{display:grid;grid-template-columns:repeat(3,64px);border:1.5px solid #1B1A17;background:#F7F5F0}.ds-cell{min-height:64px;padding:8px;border-right:1px solid #E2DED4;font:400 13px -apple-system,Roboto,sans-serif;color:#1B1A17}.ds-center{background:#1B1A17;color:#F7F5F0;font:700 20px 'Shippori Mincho B1',serif}"
     }

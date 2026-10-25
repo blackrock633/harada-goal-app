@@ -167,7 +167,7 @@ Paper, ink and rule neutrals carry nearly everything; vermilion is rare by desig
 
 ### Neutral
 - **Paper** (`paper`): screen and matrix cell ground. **Surface** (`surface`): fields and the bottom sheet. **Sunken** (`surface-sunken`): pressed states and segmented-control track.
-- **Ink** (`ink`): text, the matrix frame and block rules, the centre goal cell fill, the progress fill. **Ink Muted** / **Ink Faint**: secondary and tertiary text (both at accessible contrast).
+- **Ink** (`ink`): text, the matrix frame and block rules, the progress fill. **Ink Muted** / **Ink Faint**: secondary and tertiary text (both at accessible contrast).
 - **Rule** (`rule`): row dividers, inner hairlines, progress track. **Rule Strong**: section tops, secondary button outline, pill borders, grabber. **Rule Input** (`rule-input`): field border and unchecked marks, darker so the control boundary meets 3:1.
 
 ### Status
@@ -236,7 +236,7 @@ Four variants, 8 radius, 1 px border, 44/48 min height, 20 horizontal padding (1
 One vocabulary in `src/ui/Icon.tsx`: SF Symbols on iOS, Material Symbols on Android and web, one name per meaning (add, edit, close, check, back, forward, expand, routine, task, date, goal, matrix, focus, reflect, account, more, archive, warning, today, measure). Add a name there; never draw glyphs in screens. Default 20, sized to text.
 
 ### Matrix Sheet (signature)
-`SheetGrid` / `MatrixSheet`: a 9x9 grid of square cells on paper. Heavy 1.5 px ink frame and block separators every 3 cells, `rule` hairlines elsewhere. The centre goal cell is an ink fill with paper Mincho text. Key-area cells show a caption number (tabular), headline name and a count. Action cells show caption text (3 to 4 lines), a routine or check glyph at 12, and `surface-sunken` on press. Empty positions are an invitation: a faint or vermilion plus, never an error state. Cell size fits the width up to a max, or is fixed.
+`SheetGrid` / `MatrixSheet`: a 9x9 grid of square cells on paper. Heavy 1.5 px ink frame and block separators every 3 cells, `rule` hairlines elsewhere. The centre goal cell is the one warm tint: `accent-soft` fill with centred `accent-on-soft` Mincho, scaled to the cell, identical in light and dark (an ink fill turned into a glaring white block in dark mode). Key-area cells show a caption number (tabular), headline name and a count. Action cells show caption text (3 to 4 lines), a routine or check glyph at 12, and `surface-sunken` on press. Empty positions are an invitation: one grey plus in every empty cell, with only the next key area labelled "Add key area"; never accent, never an error state. Cell size fits the width up to a max, or is fixed.
 
 ## Do's and Don'ts
 

@@ -122,8 +122,9 @@ function CellBody({
 }
 
 /**
- * The goal: the one inverted cell, the anchor of the form. `cellSize` scales the Mincho to the
- * cell so a long word never breaks mid-word on the 9x9 sheet; without it the heading size is used.
+ * The goal: the anchor of the form, set in Mincho, centred, on the one warm tint (朱 seal on paper),
+ * the same in light and dark. `cellSize` scales the type to the cell so a long word never breaks
+ * mid-word on the 9x9 sheet; without it the heading size is used.
  */
 export function GoalCell({ title, dense, cellSize }: { title: string; dense: boolean; cellSize?: number }) {
   const { colors, space } = useTheme();
@@ -133,13 +134,16 @@ export function GoalCell({ title, dense, cellSize }: { title: string; dense: boo
       testID="overview-goal"
       label={`Goal: ${title}`}
       padding={dense ? space[1] : space[2]}
-      background={colors.ink}
+      background={colors.accentSoft}
     >
-      <View style={{ flex: 1, justifyContent: 'center' }}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <Text
           variant="heading"
           numberOfLines={dense ? 4 : 5}
-          style={[{ color: colors.paper }, fontSize ? { fontSize, lineHeight: Math.round(fontSize * 1.3) } : null]}
+          style={[
+            { color: colors.accentOnSoft, textAlign: 'center' },
+            fontSize ? { fontSize, lineHeight: Math.round(fontSize * 1.3) } : null,
+          ]}
         >
           {title}
         </Text>
@@ -176,10 +180,10 @@ export interface KeyAreaCellProps {
   onPress?: () => void;
   testID?: string;
   /**
-   * Empty cell: 'accent' (the next key area to add: accent + and caption), 'muted' (default: a
-   * quiet +), or 'none' (just the position number). Only one cell per view should be 'accent'.
+   * Empty cell: 'labelled' (the next key area to add: + and "Add key area"), 'muted' (default: a
+   * quiet +), or 'none' (just the position number). Only one cell per view should be 'labelled'.
    */
-  addStyle?: 'accent' | 'muted' | 'none';
+  addStyle?: 'labelled' | 'muted' | 'none';
   /** See CellBody: false for the repeated key-area views in the outer blocks. */
   focusable?: boolean;
 }
@@ -198,14 +202,9 @@ export function KeyAreaCell({ area, dense, label, onPress, testID, addStyle = 'm
         </Text>
         {addStyle === 'none' ? null : (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: space[1] }}>
-            <Icon
-              name="add"
-              size={dense ? 16 : 20}
-              color={addStyle === 'accent' ? colors.accent : colors.inkFaint}
-              weight={addStyle === 'accent' ? 'semibold' : 'regular'}
-            />
-            {dense || addStyle !== 'accent' ? null : (
-              <Text variant="caption" weight="medium" style={{ textAlign: 'center', color: colors.accent }}>
+            <Icon name="add" size={dense ? 16 : 20} color={colors.inkMuted} />
+            {dense || addStyle !== 'labelled' ? null : (
+              <Text variant="caption" tone="muted" style={{ textAlign: 'center' }}>
                 Add key area
               </Text>
             )}

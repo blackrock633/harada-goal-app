@@ -150,7 +150,7 @@ function KeyAreaGrid({ m, goalTitle, onOpenArea }: { m: MatrixModel; goalTitle: 
               area={area}
               dense={false}
               label={label}
-              addStyle={area.position === next ? 'accent' : 'muted'}
+              addStyle={area.position === next ? 'labelled' : 'muted'}
               onPress={() => onOpenArea(area.position)}
             />
           );

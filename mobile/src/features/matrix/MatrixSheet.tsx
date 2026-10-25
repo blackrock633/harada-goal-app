@@ -25,7 +25,7 @@ interface CellContext extends SheetHandlers {
   goalTitle: string;
   dense: boolean;
   size: number;
-  /** The first key area without an outcome: the one empty hub that carries the accent. */
+  /** The first key area without an outcome: the one empty hub that is labelled. */
   nextEmptyArea?: number;
 }
 
@@ -45,7 +45,7 @@ function renderRef(ref: CellRef, ctx: CellContext) {
         label={label}
         onPress={ctx.onOpenArea ? () => ctx.onOpenArea!(area.position) : undefined}
         testID={`sheet-${ref.kind}-${area.position}`}
-        addStyle={ref.kind !== 'hub' ? 'none' : area.position === ctx.nextEmptyArea ? 'accent' : 'muted'}
+        addStyle={ref.kind !== 'hub' ? 'none' : area.position === ctx.nextEmptyArea ? 'labelled' : 'muted'}
         focusable={ref.kind === 'hub'}
       />
     );
