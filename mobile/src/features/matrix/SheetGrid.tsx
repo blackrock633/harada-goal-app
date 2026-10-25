@@ -121,9 +121,13 @@ function CellBody({
   );
 }
 
-/** The goal: the one inverted cell, the anchor of the form. */
-export function GoalCell({ title, dense }: { title: string; dense: boolean }) {
+/**
+ * The goal: the one inverted cell, the anchor of the form. `cellSize` scales the Mincho to the
+ * cell so a long word never breaks mid-word on the 9x9 sheet; without it the heading size is used.
+ */
+export function GoalCell({ title, dense, cellSize }: { title: string; dense: boolean; cellSize?: number }) {
   const { colors, space } = useTheme();
+  const fontSize = dense ? 12 : cellSize ? Math.min(20, Math.max(13, Math.floor(cellSize / 7))) : undefined;
   return (
     <CellBody
       testID="overview-goal"
@@ -135,7 +139,7 @@ export function GoalCell({ title, dense }: { title: string; dense: boolean }) {
         <Text
           variant="heading"
           numberOfLines={dense ? 4 : 5}
-          style={[{ color: colors.paper }, dense ? { fontSize: 12, lineHeight: 16 } : null]}
+          style={[{ color: colors.paper }, fontSize ? { fontSize, lineHeight: Math.round(fontSize * 1.3) } : null]}
         >
           {title}
         </Text>
@@ -171,7 +175,10 @@ export interface KeyAreaCellProps {
   label: string;
   onPress?: () => void;
   testID?: string;
-  /** Empty cell: 'accent' plus + caption, 'muted' (default), or 'none' (just the position number). */
+  /**
+   * Empty cell: 'accent' (the next key area to add: accent + and caption), 'muted' (default: a
+   * quiet +), or 'none' (just the position number). Only one cell per view should be 'accent'.
+   */
   addStyle?: 'accent' | 'muted' | 'none';
   /** See CellBody: false for the repeated key-area views in the outer blocks. */
   focusable?: boolean;
@@ -191,9 +198,14 @@ export function KeyAreaCell({ area, dense, label, onPress, testID, addStyle = 'm
         </Text>
         {addStyle === 'none' ? null : (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: space[1] }}>
-            <Icon name="add" size={dense ? 18 : 22} color={addStyle === 'accent' ? colors.accent : colors.inkMuted} weight="medium" />
-            {dense ? null : (
-              <Text variant="caption" tone="muted" style={{ textAlign: 'center' }}>
+            <Icon
+              name="add"
+              size={dense ? 16 : 20}
+              color={addStyle === 'accent' ? colors.accent : colors.inkFaint}
+              weight={addStyle === 'accent' ? 'semibold' : 'regular'}
+            />
+            {dense || addStyle !== 'accent' ? null : (
+              <Text variant="caption" weight="medium" style={{ textAlign: 'center', color: colors.accent }}>
                 Add key area
               </Text>
             )}

@@ -15,8 +15,8 @@ import {
 } from '@shared/application/matrix';
 
 import { ActionEditorSheet, type ActionEditorMode } from './ActionEditorSheet';
-import { MatrixSheet } from './MatrixSheet';
-import { GoalCell, KeyAreaCell, RuledGrid, useMeasuredWidth } from './SheetGrid';
+import { MatrixSheet, firstEmptyArea } from './MatrixSheet';
+import { DENSE_BELOW, GoalCell, KeyAreaCell, RuledGrid, useMeasuredWidth } from './SheetGrid';
 
 export interface MatrixOverviewProps {
   goal: GoalDetailDTO;
@@ -47,8 +47,9 @@ export function MatrixOverview({ goal, onOpenArea, matrix, onChanged, onReloadLa
   const { space } = useTheme();
   const { wide, width } = useLayout();
   const { height } = useWindowDimensions();
-  // Fit the whole hero sheet in the viewport height (floor 64 pt; below that the page scrolls).
-  const maxCell = Math.max(64, Math.floor((height - 190) / 9));
+  // Fit the whole hero sheet in the viewport height, but never so small that action titles cram
+  // into three caption lines (floor 104 pt = the non-dense size; below that the page scrolls).
+  const maxCell = Math.max(DENSE_BELOW, Math.floor((height - 190) / 9));
   const m = useMemo(() => buildMatrix(goal), [goal]);
   const [view, setView] = useState<View_>('areas');
   const [sheet, setSheet] = useState<{ id: number; mode: ActionEditorMode } | null>(null);
@@ -129,6 +130,7 @@ export function MatrixOverview({ goal, onOpenArea, matrix, onChanged, onReloadLa
 /** The centre 3x3 of the sheet: goal in the middle, key areas around it. */
 function KeyAreaGrid({ m, goalTitle, onOpenArea }: { m: MatrixModel; goalTitle: string; onOpenArea: (p: number) => void }) {
   const [width, onLayout] = useMeasuredWidth();
+  const next = firstEmptyArea(m.areas);
   return (
     <View onLayout={onLayout}>
       <RuledGrid
@@ -143,7 +145,15 @@ function KeyAreaGrid({ m, goalTitle, onOpenArea }: { m: MatrixModel; goalTitle: 
           const label = o
             ? `Key area ${n}: ${o.title}, ${area.actionCount} of ${SLOT_COUNT} actions planned. Actions: ${area.doneCount} of ${area.actionCount} done`
             : `Add key area ${n}`;
-          return <KeyAreaCell area={area} dense={false} label={label} onPress={() => onOpenArea(area.position)} />;
+          return (
+            <KeyAreaCell
+              area={area}
+              dense={false}
+              label={label}
+              addStyle={area.position === next ? 'accent' : 'muted'}
+              onPress={() => onOpenArea(area.position)}
+            />
+          );
         }}
       />
     </View>

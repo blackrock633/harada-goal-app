@@ -24,10 +24,13 @@ interface CellContext extends SheetHandlers {
   areas: MatrixArea[];
   goalTitle: string;
   dense: boolean;
+  size: number;
+  /** The first key area without an outcome: the one empty hub that carries the accent. */
+  nextEmptyArea?: number;
 }
 
 function renderRef(ref: CellRef, ctx: CellContext) {
-  if (ref.kind === 'goal') return <GoalCell title={ctx.goalTitle} dense={ctx.dense} />;
+  if (ref.kind === 'goal') return <GoalCell title={ctx.goalTitle} dense={ctx.dense} cellSize={ctx.size} />;
   const area = ctx.areas[ref.areaPosition!]!;
   const n = area.position + 1;
   if (ref.kind === 'hub' || ref.kind === 'centre') {
@@ -42,7 +45,7 @@ function renderRef(ref: CellRef, ctx: CellContext) {
         label={label}
         onPress={ctx.onOpenArea ? () => ctx.onOpenArea!(area.position) : undefined}
         testID={`sheet-${ref.kind}-${area.position}`}
-        addStyle={ref.kind === 'hub' ? 'accent' : 'none'}
+        addStyle={ref.kind !== 'hub' ? 'none' : area.position === ctx.nextEmptyArea ? 'accent' : 'muted'}
         focusable={ref.kind === 'hub'}
       />
     );
@@ -77,6 +80,11 @@ function renderRef(ref: CellRef, ctx: CellContext) {
   );
 }
 
+/** Position of the first key area not yet written, if any. */
+export function firstEmptyArea(areas: MatrixArea[]) {
+  return areas.find((a) => !a.outcome)?.position;
+}
+
 export interface MatrixSheetProps extends SheetHandlers {
   areas: MatrixArea[];
   goalTitle: string;
@@ -89,7 +97,7 @@ export interface MatrixSheetProps extends SheetHandlers {
 export function MatrixSheet({ areas, goalTitle, cellSize, maxCell = 128, ...handlers }: MatrixSheetProps) {
   const [width, onLayout] = useMeasuredWidth();
   const size = cellSize ?? Math.min(maxCell, Math.max(0, Math.floor((width - 2 * HEAVY_RULE) / 9)));
-  const ctx: CellContext = { areas, goalTitle, dense: size < DENSE_BELOW, ...handlers };
+  const ctx: CellContext = { areas, goalTitle, dense: size < DENSE_BELOW, size, nextEmptyArea: firstEmptyArea(areas), ...handlers };
   return (
     <View onLayout={cellSize ? undefined : onLayout} style={{ width: cellSize ? undefined : '100%' }}>
       {size > 0 ? (
@@ -116,7 +124,7 @@ export interface AreaBlockProps extends SheetHandlers {
 /** One key area's 3x3 block from the sheet: the key area in the centre, its actions around it. */
 export function AreaBlock({ areas, goalTitle, areaPosition, cellSize, ...handlers }: AreaBlockProps) {
   const [br, bc] = COMPASS[areaPosition]!;
-  const ctx: CellContext = { areas, goalTitle, dense: cellSize < DENSE_BELOW, ...handlers };
+  const ctx: CellContext = { areas, goalTitle, dense: cellSize < DENSE_BELOW, size: cellSize, nextEmptyArea: firstEmptyArea(areas), ...handlers };
   return (
     <RuledGrid
       n={3}

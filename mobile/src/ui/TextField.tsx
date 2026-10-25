@@ -1,5 +1,5 @@
 import { useEffect, useState, type ComponentRef, type Ref } from 'react';
-import { AccessibilityInfo, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
+import { AccessibilityInfo, TextInput, View, type TextInputProps } from 'react-native';
 
 import { MIN_TOUCH, useTheme } from '@/theme';
 
@@ -48,6 +48,11 @@ export function TextField({
 
   const showCounter = maxLength != null && value.length >= Math.floor(maxLength * 0.8);
   const borderColor = error ? colors.danger : focused ? colors.accent : colors.ruleInput;
+  const borderWidth = focused || error ? 2 : 1;
+  // iOS draws a single-line TextInput's text below its box when it has a lineHeight (RN bug), so
+  // only multiline fields take the body line height.
+  const { lineHeight, ...bodyFont } = typeScale.body;
+  const font = multiline ? { ...bodyFont, lineHeight } : bodyFont;
 
   return (
     <View style={{ gap: space[1] }}>
@@ -75,15 +80,16 @@ export function TextField({
         }}
         textAlignVertical={multiline ? 'top' : 'center'}
         style={[
-          typeScale.body,
-          styles.input,
+          font,
           {
             color: colors.ink,
             backgroundColor: colors.surface,
             borderColor,
             borderRadius: radius.md,
-            borderWidth: focused || error ? 2 : 1,
-            paddingHorizontal: space[3],
+            borderWidth,
+            // The thicker focus border eats into the padding, so the text never shifts.
+            paddingHorizontal: space[3] - (borderWidth - 1),
+            paddingVertical: 10 - (borderWidth - 1),
             minHeight: multiline ? 112 : MIN_TOUCH,
           },
           style,
@@ -107,7 +113,3 @@ export function TextField({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  input: { paddingVertical: 10 },
-});
