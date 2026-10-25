@@ -54,7 +54,24 @@ work. Each `<script>` tag should carry the nonce from the response's `content-se
 
 `tests/qa-regress.sh` runs the Playwright journeys under `next dev` with dev auth, on Chrome and WebKit.
 
-## Not run, and why
+## Live Supabase checks (project `krmuohxsbmshtgebklme`, 2026-10-25)
+
+Run by hand after `supabase db push` and the `delete-account` v2 deploy. All results as expected:
+
+| Probe | Result |
+|---|---|
+| `consume_password_attempt` EXECUTE | service_role only (anon and authenticated: no) |
+| `harada_private.begin_write()` called directly as authenticated | 42501 "Call the public RPC functions" |
+| `public.update_profile('{}')` as authenticated (wrapper → stack check) | passes the check, then HG400 "Nothing to update" |
+| anon `GET /rest/v1/goals` | 42501 permission denied |
+| anon `POST /rest/v1/rpc/create_goal` | 42501 permission denied |
+| `POST /rest/v1/rpc/begin_write` with `Content-Profile: harada_private` | PGRST106 (schema not exposed) |
+| `pg_graphql` extension | not installed |
+| delete-account: 5 KB body / no user session / preflight from an unlisted origin | 413 / 401 "Please sign in" / 403 |
+
+The cross-user suite (`tests/staging`) still needs `STAGING_DATABASE_URL`. It creates two throwaway users.
+
+
 
 | Check | Why | How to run it |
 |---|---|---|
