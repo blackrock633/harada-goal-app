@@ -35,8 +35,8 @@ All of these run in `.github/workflows/security.yml` on every PR, on pushes to `
 | Trivy | `trivy fs --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --ignore-unfixed --ignorefile .trivyignore --skip-dirs legacy .` | clean (one reviewed ignore: zod 3 in @expo/cli) |
 | CSP / headers | production build + Chrome and WebKit (see below) | hydration OK, 0 violations; injected inline handlers and `srcdoc` scripts refused; HSTS and CSP present; `/_next/image` 404 |
 
-The workflow files were validated locally (YAML parse, pinned action SHAs resolved through the GitHub API,
-release assets exist). **They have not run on GitHub Actions yet**, because the branch has not been pushed.
+Both workflows (`security` and `ci`) ran on GitHub Actions for PR #1 on 2026-10-25, and every job passed:
+`authz-tests`, `npm-audit` (web and mobile), `gitleaks`, `semgrep` (1.182), `trivy`, and `ci` › `web` and `mobile`.
 
 ### CSP check
 

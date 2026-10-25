@@ -130,4 +130,8 @@ before this audit. The policies were already correct; this audit adds regression
 1. `supabase db push`: the new migration must land **before** the Edge Function, which calls `consume_password_attempt`.
 2. `supabase functions deploy delete-account`, and set `ALLOWED_ORIGINS` if the Expo web build is used.
 3. Deploy the web app. Users will need to sign in again only if their cookies were set by the old build without `Secure` over plain HTTP. Normal HTTPS sessions keep working.
-4. Ship the mobile update. Some iOS users may be asked to sign in once (SEC-MOB-01).
+4. Ship the mobile update as a **new EAS build**. The app is now linked to EAS project `@blackrock633/harada`
+   with EAS Update configured (`expo-updates`, runtime policy `appVersion`, channels `preview`/`production` in
+   `mobile/eas.json`). `expo-updates` is a native module, so builds made before it cannot receive OTA updates.
+   Use `eas build --profile preview` first. Later JS-only fixes can then ship with
+   `eas update --channel <channel> --environment <env>`. Some iOS users may be asked to sign in once (SEC-MOB-01).
