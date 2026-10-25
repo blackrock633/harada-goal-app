@@ -1,0 +1,25 @@
+# Weekly grouped update PRs. Review and test each one; nothing auto-merges.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 10
+    groups:
+      prod-minor-patch: { dependency-type: production, update-types: [minor, patch] }
+      dev-minor-patch: { dependency-type: development, update-types: [minor, patch] }
+  - package-ecosystem: npm
+    directory: /mobile
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 10
+    groups:
+      expo: { patterns: ['expo', 'expo-*', '@expo/*', 'react-native', 'react-native-*', '@react-native/*'] }
+      minor-patch: { update-types: [minor, patch] }
+    ignore:
+      # SDK majors go through `npx expo install --fix`, not a version bump.
+      - dependency-name: 'expo'
+        update-types: ['version-update:semver-major']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    groups: { actions: { patterns: ['*'] } }

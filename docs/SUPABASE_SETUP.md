@@ -16,7 +16,12 @@ Then deploy the account-deletion Edge Function (the native app calls it; it hold
 
 ```bash
 npx supabase functions deploy delete-account   # keep "Verify JWT" on (the default)
+# Only if the Expo web build calls it from a browser (native apps need no CORS):
+npx supabase secrets set ALLOWED_ORIGINS=https://<your-web-origin>
 ```
+
+Deploy the function only **after** `db push`: it calls `public.consume_password_attempt` (security migration
+`20261025120000`), and without that function every deletion attempt fails with a 500.
 
 After `db push`, confirm the write path (D-017): `\df+ public.*` shows the 30 RPCs as `security invoker` with
 `search_path=""`, executable by `authenticated` only; every table has an enabled `<table>_write_path` trigger.
@@ -48,6 +53,13 @@ refused in production.
 - **Authentication → SMTP:** configure a real SMTP provider before launch. The built-in sender is heavily
   rate-limited and is for testing only.
 - **Authentication → Passwords:** minimum length 8 (matches the app's validation) or stricter.
+- **Authentication → Rate limits / Bot protection:** keep the sign-in and sign-up limits on and enable CAPTCHA
+  before launch. App-level web throttling is per process only (SECURITY_AUDIT SEC-AUTH-03), and mobile reaches
+  Auth directly, so these limits are the real brute-force control.
+- **Authentication → Sessions:** set an inactivity timeout or a time-box. The web session cookie's own
+  lifetime is fixed at 400 days by `@supabase/ssr`, so the server side is where sessions end.
+- **Authentication → Passwords → leaked password protection:** enable it if your plan includes it.
+- **Keep "Confirm email" on:** with it off, Supabase Auth itself tells sign-up callers which emails exist.
 - **Database → Roles:** the `postgres` role used by `DATABASE_URL` must be able to `SET ROLE authenticated`
   (true by default on Supabase).
 

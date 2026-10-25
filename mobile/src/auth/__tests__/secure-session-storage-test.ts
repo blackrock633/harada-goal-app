@@ -10,6 +10,7 @@ jest.mock('expo-secure-store', () => ({
     mockKeychain.set(k, v);
   }),
   deleteItemAsync: jest.fn(async (k: string) => void mockKeychain.delete(k)),
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
 }));
 
 const KEY = 'sb-projectref-auth-token';
@@ -104,5 +105,17 @@ describe('interrupted writes', () => {
     await expect(secureSessionStorage.setItem(KEY, session(5000))).rejects.toThrow();
     await secureSessionStorage.removeItem(KEY);
     expect(mockKeychain.size).toBe(0);
+  });
+
+  // SEC-MOB-01: session tokens must not migrate to another device through an encrypted iOS backup.
+  it('every keychain call is device-only', async () => {
+    const SecureStore = jest.requireMock('expo-secure-store');
+    await secureSessionStorage.setItem(KEY, session(5000));
+    await secureSessionStorage.getItem(KEY);
+    await secureSessionStorage.removeItem(KEY);
+    for (const fn of [SecureStore.getItemAsync, SecureStore.setItemAsync, SecureStore.deleteItemAsync]) {
+      expect(fn.mock.calls.length).toBeGreaterThan(0);
+      for (const call of fn.mock.calls) expect(call[call.length - 1]).toEqual({ keychainAccessible: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY' });
+    }
   });
 });

@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { DEV_AUTH_COOKIE, isDevAuthEnabled } from '@/infrastructure/auth/mode';
-import { readSupabasePublicEnv } from '@/infrastructure/supabase/env';
+import { readSupabasePublicEnv, supabaseCookieOptions } from '@/infrastructure/supabase/env';
 
 /**
  * Session refresh + a cheap redirect for signed-out visitors.
@@ -16,8 +16,31 @@ function isProtected(pathname: string): boolean {
   return PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
+/**
+ * Strict CSP with a per-request nonce. Next reads the nonce from the request's CSP header and puts it on
+ * its own scripts; anything injected without it is refused. Styles allow 'unsafe-inline' for React style
+ * attributes (no script execution). The browser never talks to Supabase directly, so connect-src is 'self'.
+ */
+export function contentSecurityPolicy(nonce: string, dev = process.env.NODE_ENV === 'development'): string {
+  return [
+    `default-src 'self'`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? ` 'unsafe-eval'` : ''}`,
+    `style-src 'self' 'unsafe-inline'`,
+    `img-src 'self' data: blob:`,
+    `font-src 'self'`,
+    `connect-src 'self'${dev ? ' ws:' : ''}`,
+    `object-src 'none'`,
+    `base-uri 'self'`,
+    `form-action 'self'`,
+    `frame-ancestors 'none'`,
+  ].join('; ');
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const nonce = btoa(crypto.randomUUID());
+  const csp = contentSecurityPolicy(nonce);
+  request.headers.set('content-security-policy', csp);
   let response = NextResponse.next({ request });
   let signedIn = false;
 
@@ -28,6 +51,7 @@ export async function middleware(request: NextRequest) {
     const env = readSupabasePublicEnv();
     if (env) {
       const supabase = createServerClient(env.url, env.anonKey, {
+        cookieOptions: supabaseCookieOptions(),
         cookies: {
           getAll: () => request.cookies.getAll(),
           setAll: (toSet, headers) => {
@@ -60,6 +84,7 @@ export async function middleware(request: NextRequest) {
     for (const c of response.cookies.getAll()) redirect.cookies.set(c);
     return redirect;
   }
+  response.headers.set('content-security-policy', csp);
   return response;
 }
 

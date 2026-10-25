@@ -12,3 +12,20 @@ next-env.d.ts
 .env.*.local
 .DS_Store
 .claude/worktrees/
+
+# --- Secrets: never commit (SECURITY_AUDIT SEC-REPO-01) ----------------------
+.env*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.keystore
+*.mobileprovision
+google-services.json
+GoogleService-Info.plist
+credentials.json
+service-account*.json
+supabase/.temp/
+supabase/.branches/

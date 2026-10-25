@@ -1,9 +1,11 @@
+// Build-time guard: this module reads the service-role key, so bundling it into client code must fail.
+import 'server-only';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { AuthGateway, AuthGatewayError, AuthUser } from '@/application/ports';
+import { AuthGateway, AuthUser } from '@/application/ports';
 import type { Id } from '@/domain/types';
-import { requireServiceRoleKey, requireSupabasePublicEnv } from '../supabase/env';
+import { requireServiceRoleKey, requireSupabasePublicEnv, supabaseCookieOptions } from '../supabase/env';
 import { isNoSessionError, mapSupabaseAuthError } from './map-auth-error';
 
 /**
@@ -17,6 +19,7 @@ export class SupabaseAuthGateway implements AuthGateway {
     const { url, anonKey } = requireSupabasePublicEnv();
     const store = await cookies();
     return createServerClient(url, anonKey, {
+      cookieOptions: supabaseCookieOptions(),
       cookies: {
         getAll: () => store.getAll(),
         setAll: (toSet) => {
@@ -46,9 +49,9 @@ export class SupabaseAuthGateway implements AuthGateway {
     if (error) this.fail(error);
     const user = data.user;
     if (!user) throw new Error('Supabase signUp returned no user');
-    // With email confirmation on, signing up an already-registered address returns an obfuscated user
-    // with no identities instead of an error.
-    if (Array.isArray(user.identities) && user.identities.length === 0) throw new AuthGatewayError('EMAIL_TAKEN');
+    // With email confirmation on, signing up an already-registered address returns an obfuscated user with no
+    // identities instead of an error. Answer exactly as for a new address ("check your email") so sign-up does
+    // not reveal which emails have accounts (SEC-AUTH-02); the mobile app already behaves this way.
     return { user: { id: user.id, email: user.email ?? input.email }, confirmed: data.session !== null };
   }
 

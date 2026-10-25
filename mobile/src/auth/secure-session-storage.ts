@@ -35,13 +35,17 @@ export function splitUtf8(value: string, maxBytes = CHUNK_BYTES): string[] {
   return parts;
 }
 
+/** iOS: readable only while unlocked, and never restored to another device from a backup (SEC-MOB-01).
+ * Must be the same on every get/set/delete or the item is not found. Ignored on Android. */
+const OPTS: SecureStore.SecureStoreOptions = { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY };
+
 // SecureStore keys may only contain alphanumerics, '.', '-' and '_'.
 const safe = (key: string) => key.replace(/[^A-Za-z0-9._-]/g, '_');
 const countKey = (key: string) => `${safe(key)}.n`;
 const partKey = (key: string, i: number) => `${safe(key)}.${i}`;
 
 async function readCount(key: string): Promise<number> {
-  const raw = await SecureStore.getItemAsync(countKey(key));
+  const raw = await SecureStore.getItemAsync(countKey(key), OPTS);
   const n = raw === null ? 0 : Number(raw);
   return Number.isInteger(n) && n > 0 ? n : 0;
 }
@@ -50,8 +54,8 @@ async function readCount(key: string): Promise<number> {
  * the middle can't stop cleanup), then onward while parts still exist (orphans left beyond the
  * count by an interrupted write). No stale token fragment lingers in the keychain. */
 async function sweepParts(key: string, from: number, through = 0): Promise<void> {
-  for (let i = from; i < through || (await SecureStore.getItemAsync(partKey(key, i))) !== null; i++) {
-    await SecureStore.deleteItemAsync(partKey(key, i));
+  for (let i = from; i < through || (await SecureStore.getItemAsync(partKey(key, i), OPTS)) !== null; i++) {
+    await SecureStore.deleteItemAsync(partKey(key, i), OPTS);
   }
 }
 
@@ -61,7 +65,7 @@ export const secureSessionStorage = {
     if (n === 0) return null;
     const parts: string[] = [];
     for (let i = 0; i < n; i++) {
-      const part = await SecureStore.getItemAsync(partKey(key, i));
+      const part = await SecureStore.getItemAsync(partKey(key, i), OPTS);
       if (part === null) {
         // Corrupt/partial session: clear it rather than hand back a truncated token.
         await secureSessionStorage.removeItem(key);
@@ -76,15 +80,15 @@ export const secureSessionStorage = {
     const parts = splitUtf8(value);
     // Invalidate first, publish the count last: an interrupted write reads as signed out instead
     // of splicing old and new parts together.
-    await SecureStore.setItemAsync(countKey(key), '0');
-    for (let i = 0; i < parts.length; i++) await SecureStore.setItemAsync(partKey(key, i), parts[i]!);
-    await SecureStore.setItemAsync(countKey(key), String(parts.length));
+    await SecureStore.setItemAsync(countKey(key), '0', OPTS);
+    for (let i = 0; i < parts.length; i++) await SecureStore.setItemAsync(partKey(key, i), parts[i]!, OPTS);
+    await SecureStore.setItemAsync(countKey(key), String(parts.length), OPTS);
     // A shorter session (or an earlier interrupted write) must not leave stale parts behind.
     await sweepParts(key, parts.length);
   },
 
   async removeItem(key: string): Promise<void> {
     await sweepParts(key, 0, await readCount(key));
-    await SecureStore.deleteItemAsync(countKey(key));
+    await SecureStore.deleteItemAsync(countKey(key), OPTS);
   },
 };

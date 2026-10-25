@@ -86,8 +86,9 @@ export const deleteGoalPermanentlySchema = z.object({
 // ---------- Outcomes ----------
 
 const measure = z.object({
-  target: z.number().finite().positive('Target must be greater than 0'),
-  current: z.number().finite().min(0, 'Cannot be negative').default(0),
+  // 1e12 matches the RPC cap (harada_private.parse_measure), so web and mobile accept the same values.
+  target: z.number().finite().positive('Target must be greater than 0').max(1e12, 'Target is too large'),
+  current: z.number().finite().min(0, 'Cannot be negative').max(1e12, 'Value is too large').default(0),
   unit: text(LIMITS.measureUnit).default(''),
 });
 
@@ -108,7 +109,7 @@ export const updateOutcomeSchema = z.object({
 });
 export const updateMeasureCurrentSchema = z.object({
   outcomeId: id,
-  current: z.number().finite().min(0, 'Cannot be negative'),
+  current: z.number().finite().min(0, 'Cannot be negative').max(1e12, 'Value is too large'),
 });
 export const outcomeIdSchema = z.object({ outcomeId: id });
 export const reorderOutcomesSchema = z.object({

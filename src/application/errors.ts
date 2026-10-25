@@ -27,6 +27,35 @@ function zodFieldErrors(e: ZodError): Record<string, string[]> {
   return out;
 }
 
+type ErrorSummary = { name: string; code?: string; constraint?: string; message?: string; stack?: string[] };
+
+/**
+ * What may be logged about an unexpected error: names, SQLSTATE/driver codes, constraint names and stack
+ * frames along the cause chain. Never messages from query or database errors: drizzle's DrizzleQueryError
+ * embeds the SQL and its params (reflection text, titles, the JWT claims), and Postgres messages can echo
+ * input values. Other messages are kept to their first line and 200 characters.
+ */
+export function safeErrorSummary(e: unknown): ErrorSummary[] | string {
+  if (!(e instanceof Error)) return typeof e;
+  const out: ErrorSummary[] = [];
+  let cur: unknown = e;
+  for (let i = 0; i < 5 && cur instanceof Error; i++) {
+    const c = cur as Error & { code?: unknown; constraint?: unknown; constraint_name?: unknown; query?: unknown; params?: unknown };
+    const code = typeof c.code === 'string' ? c.code : undefined;
+    const isDb = 'query' in c || 'params' in c || (code !== undefined && /^[0-9A-Z]{5}$/.test(code));
+    const constraint = c.constraint ?? c.constraint_name;
+    out.push({
+      name: c.name,
+      ...(code ? { code } : {}),
+      ...(typeof constraint === 'string' ? { constraint } : {}),
+      ...(isDb ? {} : { message: c.message.split('\n')[0]!.slice(0, 200) }),
+      ...(i === 0 && c.stack ? { stack: c.stack.split('\n').filter((l) => /^\s+at /.test(l)).slice(0, 8) } : {}),
+    });
+    cur = c.cause;
+  }
+  return out;
+}
+
 /** The single place where thrown errors become AppErrors. Unexpected errors are logged, never leaked. */
 export function toAppError(e: unknown, logger: Logger): AppError {
   if (e instanceof AppFail) {
@@ -72,9 +101,7 @@ export function toAppError(e: unknown, logger: Logger): AppError {
         return { code: 'UNAVAILABLE', message: 'The service is temporarily unavailable. Please try again.' };
     }
   }
-  logger.error('Unexpected error in use case', {
-    error: e instanceof Error ? { name: e.name, message: e.message, stack: e.stack } : String(e),
-  });
+  logger.error('Unexpected error in use case', { error: safeErrorSummary(e) });
   return { code: 'INTERNAL', message: 'Something went wrong. Please try again.' };
 }
 

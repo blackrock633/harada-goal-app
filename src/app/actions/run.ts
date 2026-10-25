@@ -1,4 +1,5 @@
 import { revalidatePath } from 'next/cache';
+import { safeErrorSummary } from '@/application/errors';
 import { fail, type Ctx, type Result } from '@/application/result';
 import type { Deps } from '@/application/ports';
 import { getDeps } from '@/infrastructure/container';
@@ -14,7 +15,7 @@ export async function runAuthed<T>(fn: (deps: Deps, ctx: Ctx) => Promise<Result<
   try {
     ctx = await getCtx();
   } catch (err) {
-    console.error('session lookup failed', err);
+    console.error('session lookup failed', safeErrorSummary(err));
     return fail('UNAVAILABLE', "Couldn't reach the server.");
   }
   if (!ctx) return fail('UNAUTHENTICATED', 'Please sign in again.');
@@ -24,7 +25,7 @@ export async function runAuthed<T>(fn: (deps: Deps, ctx: Ctx) => Promise<Result<
     const deps = await getDeps();
     result = await fn(deps, ctx);
   } catch (err) {
-    console.error('server action failed', err);
+    console.error('server action failed', safeErrorSummary(err));
     return fail('UNAVAILABLE', "Couldn't reach the server.");
   }
   // Every page reads from the same goal graph, so refresh the whole app tree after a write.

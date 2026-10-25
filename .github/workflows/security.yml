@@ -1,0 +1,92 @@
+# Security checks (docs/SECURITY_TESTING.md). Runs on every PR, on pushes to main, and weekly so new
+# advisories surface even when nothing changes. Third-party actions are pinned to commit SHAs; scanners are
+# downloaded as checksum-verified release binaries rather than through third-party actions.
+name: security
+on:
+  push: { branches: [main] }
+  pull_request:
+  schedule: [{ cron: '17 6 * * 1' }]
+  workflow_dispatch:
+permissions: { contents: read }
+concurrency: { group: 'security-${{ github.ref }}', cancel-in-progress: true }
+env: { GITLEAKS_VERSION: 8.30.1, TRIVY_VERSION: 0.76.1, SEMGREP_VERSION: 1.182.0 }
+
+jobs:
+  # Cross-user isolation, RLS, RPC authorization, auth hardening and log hygiene against the real migrations
+  # on embedded Postgres (PGlite + supabase/tests/auth-shim.sql). Needs no secrets.
+  authz-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run test:security
+
+  npm-audit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { dir: ., level: high }
+          # mobile: every high is inside @expo/cli build tooling with no upstream fix yet (SECURITY_AUDIT
+          # SEC-DEP-03); gate on critical, report the rest. Raise to high once Expo ships a fix.
+          - { dir: mobile, level: critical }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: 24 }
+      - name: Audit production dependencies
+        working-directory: ${{ matrix.dir }}
+        run: npm audit --omit=dev --audit-level=${{ matrix.level }}
+      - name: Audit all dependencies (report only)
+        if: always()
+        working-directory: ${{ matrix.dir }}
+        run: npm audit || true
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0, persist-credentials: false }
+      - name: Install gitleaks (checksum-verified)
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          cd "$RUNNER_TEMP"
+          gh release download "v$GITLEAKS_VERSION" -R gitleaks/gitleaks \
+            -p "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -p "gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          sha256sum -c --ignore-missing "gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          tar -xzf "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" gitleaks
+      - name: Scan full history
+        run: '"$RUNNER_TEMP/gitleaks" git . --config .gitleaks.toml --redact --no-banner --exit-code 1'
+
+  semgrep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - run: >-
+          pipx run "semgrep==$SEMGREP_VERSION" scan --metrics=off --error
+          --config p/typescript --config p/javascript --config p/react --config p/nextjs --config p/secrets
+          --exclude legacy --exclude node_modules
+          src mobile/src supabase scripts
+
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: Install trivy (checksum-verified)
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          cd "$RUNNER_TEMP"
+          gh release download "v$TRIVY_VERSION" -R aquasecurity/trivy \
+            -p "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" -p "trivy_${TRIVY_VERSION}_checksums.txt"
+          sha256sum -c --ignore-missing "trivy_${TRIVY_VERSION}_checksums.txt"
+          tar -xzf "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" trivy
+      - run: >-
+          "$RUNNER_TEMP/trivy" fs --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --ignore-unfixed
+          --ignorefile .trivyignore --skip-dirs legacy --exit-code 1 .
