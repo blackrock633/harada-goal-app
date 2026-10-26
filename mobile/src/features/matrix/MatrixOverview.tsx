@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
-import { ScrollView, View, useWindowDimensions } from 'react-native';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { Platform, ScrollView, View, useWindowDimensions } from 'react-native';
 
 import type { MatrixMutations } from '@/data/mutations';
 import { useTheme } from '@/theme';
@@ -16,7 +16,7 @@ import {
 
 import { ActionEditorSheet, type ActionEditorMode } from './ActionEditorSheet';
 import { MatrixSheet, firstEmptyArea } from './MatrixSheet';
-import { DENSE_BELOW, GoalCell, KeyAreaCell, RuledGrid, useMeasuredWidth } from './SheetGrid';
+import { DENSE_BELOW, GoalCell, HEAVY_RULE, KeyAreaCell, RuledGrid, useMeasuredWidth } from './SheetGrid';
 
 export interface MatrixOverviewProps {
   goal: GoalDetailDTO;
@@ -117,12 +117,50 @@ export function MatrixOverview({ goal, onOpenArea, matrix, onChanged, onReloadLa
       {view === 'areas' ? (
         <KeyAreaGrid m={m} goalTitle={goal.title} onOpenArea={onOpenArea} />
       ) : (
-        <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator accessibilityLabel="Full sheet, scrolls sideways">
+        <ZoomableSheet>
           <MatrixSheet areas={m.areas} goalTitle={goal.title} cellSize={PHONE_SHEET_CELL} {...handlers} />
-        </ScrollView>
+        </ZoomableSheet>
       )}
       <PlanMetrics goal={goal} m={m} />
       {editor}
+    </View>
+  );
+}
+
+/**
+ * The phone's full sheet in a square window. iOS: pinch to zoom out until the whole 9x9 fits the
+ * window, or in to read; drag to pan. Elsewhere (no native zoom) it scrolls sideways as before.
+ */
+function ZoomableSheet({ children }: { children: ReactNode }) {
+  const { space } = useTheme();
+  const [width, onLayout] = useMeasuredWidth();
+  if (Platform.OS !== 'ios') {
+    return (
+      <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator accessibilityLabel="Full sheet, scrolls sideways">
+        {children}
+      </ScrollView>
+    );
+  }
+  const sheetSize = PHONE_SHEET_CELL * 9 + 2 * HEAVY_RULE;
+  return (
+    <View onLayout={onLayout} style={{ gap: space[2] }}>
+      {width > 0 ? (
+        <ScrollView
+          style={{ width, height: width }}
+          minimumZoomScale={Math.min(1, width / sheetSize)}
+          maximumZoomScale={2}
+          bouncesZoom
+          centerContent
+          nestedScrollEnabled
+          directionalLockEnabled={false}
+          accessibilityLabel="Full sheet, pinch to zoom, drag to move"
+        >
+          {children}
+        </ScrollView>
+      ) : null}
+      <Text variant="caption" tone="muted">
+        Pinch to zoom out and see the whole sheet.
+      </Text>
     </View>
   );
 }

@@ -20,6 +20,7 @@ import type {
   updateActionSchema,
   updateGoalSchema,
   updateOutcomeSchema,
+  updateReflectionSchema,
 } from '@shared/application/schemas';
 
 export type Mutation<I, O> = (input: I) => Promise<Result<O>>;
@@ -28,6 +29,8 @@ export interface GoalMutations {
   createGoal: Mutation<z.input<typeof createGoalSchema>, GoalFieldsDTO>;
   updateGoal: Mutation<z.input<typeof updateGoalSchema>, GoalFieldsDTO>;
   activateGoal: Mutation<{ goalId: string }, GoalFieldsDTO>;
+  /** Un-archive: the goal returns to the status it had before (active may need Harada Pro). */
+  restoreGoal: Mutation<{ goalId: string }, GoalFieldsDTO>;
 }
 
 export interface MatrixMutations {
@@ -52,4 +55,6 @@ export interface FocusMutations {
 
 export interface ReviewMutations {
   addReflection: Mutation<z.input<typeof addReflectionSchema>, ReflectionDTO>;
+  /** Edit a past reflection (expectedUpdatedAt guards against overwriting a newer edit). */
+  updateReflection: Mutation<z.input<typeof updateReflectionSchema>, ReflectionDTO>;
 }

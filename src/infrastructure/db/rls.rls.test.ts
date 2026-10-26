@@ -30,6 +30,13 @@ async function as<T>(client: PGlite, who: Who, fn: (tx: Transaction) => Promise<
 }
 
 const TABLES = ['profiles', 'goals', 'outcomes', 'actions', 'routine_checks', 'daily_focus', 'reflections', 'goal_events'];
+/** Feature tables (plans, billing, challenge, sharing, analytics, admin): written only by definer functions or the service role. */
+const FEATURE_TABLES = [
+  'plans', 'plan_features', 'prices', 'subscriptions', 'billing_events', 'plan_grants', 'goal_templates',
+  'challenge_enrollments', 'share_links', 'referrals', 'analytics_events', 'admins',
+];
+/** The public catalogue (plan names, features, active prices) is readable before sign-in, by design. */
+const ANON_READABLE_POLICIES = ['plan_features_read', 'plans_read', 'prices_read'];
 const uuid = (): string => crypto.randomUUID();
 
 describe('row level security', () => {
@@ -122,15 +129,17 @@ describe('row level security', () => {
         `select c.relname, c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace
          where n.nspname = 'public' and c.relkind in ('r','p')`,
       );
-      expect(rows.map((r) => r.relname).sort()).toEqual([...TABLES].sort());
+      expect(rows.map((r) => r.relname).sort()).toEqual([...TABLES, ...FEATURE_TABLES].sort());
       expect(rows.filter((r) => !r.relrowsecurity).map((r) => r.relname)).toEqual([]);
     });
 
-    it('every public table has at least one policy', async () => {
+    it('every public table has a policy, or grants nothing at all to anon/authenticated (server-only tables)', async () => {
       const { rows } = await t.client.query<{ relname: string }>(
         `select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
          where n.nspname = 'public' and c.relkind in ('r','p')
-           and not exists (select 1 from pg_policy p where p.polrelid = c.oid)`,
+           and not exists (select 1 from pg_policy p where p.polrelid = c.oid)
+           and exists (select 1 from unnest(array['anon','authenticated']) r(role), unnest(array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE']) p(priv)
+                       where has_table_privilege(r.role, c.oid, p.priv))`,
       );
       expect(rows.map((r) => r.relname)).toEqual([]);
     });
@@ -138,9 +147,10 @@ describe('row level security', () => {
     it('no policy applies to anon or public', async () => {
       const { rows } = await t.client.query<{ polname: string }>(
         `select polname from pg_policy p join pg_class c on c.oid = p.polrelid join pg_namespace n on n.oid = c.relnamespace
-         where n.nspname = 'public' and (p.polroles = '{0}' or p.polroles @> array[(select oid from pg_roles where rolname='anon')])`,
+         where n.nspname = 'public' and (p.polroles = '{0}' or p.polroles @> array[(select oid from pg_roles where rolname='anon')])
+         order by polname`,
       );
-      expect(rows).toEqual([]);
+      expect(rows.map((r) => r.polname)).toEqual(ANON_READABLE_POLICIES);
     });
   });
 

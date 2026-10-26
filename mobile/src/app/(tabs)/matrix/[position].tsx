@@ -2,6 +2,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 
 import { useMutations } from '@/data/hooks';
+import { hasFeature, usePlan } from '@/data/premium';
 import { KeyAreaView } from '@/features/matrix';
 import { ErrorScreen, LoadingScreen } from '@/screens/queryState';
 import { useGoalScreen } from '@/screens/useGoalScreen';
@@ -36,6 +37,8 @@ export default function KeyAreaScreen() {
 function KeyArea({ index }: { index: number }) {
   const { state, detail, today, noGoals, refetchDetail } = useGoalScreen();
   const mutations = useMutations();
+  // Suggestions appear once the plan is known (Pro: usable; Free: shown as Harada Pro).
+  const plan = usePlan();
   const { width } = useLayout();
   const [banner, setBanner] = useState<string | null>(null);
   // The pager under the header already reads "Key area N of 8"; the header keeps only Back.
@@ -76,6 +79,7 @@ function KeyArea({ index }: { index: number }) {
         onError={setBanner}
         onChanged={() => setBanner(null)}
         onReloadLatest={refetchDetail}
+        aiPlanning={plan.data ? hasFeature(plan.data, 'ai_planning') : undefined}
       />
     </Screen>
   );

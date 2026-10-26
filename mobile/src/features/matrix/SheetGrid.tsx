@@ -215,16 +215,16 @@ export function KeyAreaCell({ area, dense, label, onPress, testID, addStyle = 'm
   }
   return (
     <CellBody testID={testID} label={label} onPress={onPress} padding={padding} focusable={focusable}>
-      <View style={{ flex: 1, justifyContent: 'space-between', gap: space[2] }}>
-        <View style={{ gap: 2, minWidth: 0 }}>
-          <Text variant="caption" tone="faint" tabular>
-            {n}
-          </Text>
+      <View style={{ flex: 1, gap: space[1] }}>
+        <Text variant="caption" tone="faint" tabular>
+          {n}
+        </Text>
+        <View style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}>
           <Text
             variant={dense ? 'caption' : 'headline'}
             weight={dense ? 'semibold' : undefined}
             numberOfLines={dense ? 4 : 3}
-            style={[{ flexShrink: 1 }, dense ? { fontSize: 12, lineHeight: 16 } : null]}
+            style={[{ flexShrink: 1, textAlign: 'center' }, dense ? { fontSize: 12, lineHeight: 16 } : null]}
           >
             {o.title}
           </Text>

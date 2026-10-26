@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { DEV_AUTH_COOKIE, isDevAuthEnabled } from '@/infrastructure/auth/mode';
+import { clientIp, shareLimiter } from '@/infrastructure/http/rate-limit';
 import { readSupabasePublicEnv, supabaseCookieOptions } from '@/infrastructure/supabase/env';
 
 /**
@@ -10,7 +11,10 @@ import { readSupabasePublicEnv, supabaseCookieOptions } from '@/infrastructure/s
  * direct server-action posts). Real enforcement is: server code derives the user from
  * AuthGateway.getUser() (server-verified) and every query runs under Postgres RLS.
  */
-const PROTECTED = ['/today', '/goal', '/settings', '/matrix', '/review'];
+const PROTECTED = ['/today', '/goal', '/settings', '/matrix', '/review', '/account'];
+
+/** Public share pages (/s/<token>): rate limited per IP, never cached or indexed. */
+const isSharePage = (pathname: string) => pathname.startsWith('/s/');
 
 function isProtected(pathname: string): boolean {
   return PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -38,6 +42,17 @@ export function contentSecurityPolicy(nonce: string, dev = process.env.NODE_ENV 
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  if (isSharePage(pathname) && !shareLimiter.consume(clientIp(request.headers))) {
+    return new NextResponse('Too many requests. Please wait a minute and try again.', {
+      status: 429,
+      headers: {
+        'content-type': 'text/plain; charset=utf-8',
+        'retry-after': '60',
+        'cache-control': 'private, no-store',
+        'x-robots-tag': 'noindex, nofollow',
+      },
+    });
+  }
   const nonce = btoa(crypto.randomUUID());
   const csp = contentSecurityPolicy(nonce);
   request.headers.set('content-security-policy', csp);
@@ -85,6 +100,10 @@ export async function middleware(request: NextRequest) {
     return redirect;
   }
   response.headers.set('content-security-policy', csp);
+  if (isSharePage(pathname)) {
+    response.headers.set('cache-control', 'private, no-store');
+    response.headers.set('x-robots-tag', 'noindex, nofollow');
+  }
   return response;
 }
 

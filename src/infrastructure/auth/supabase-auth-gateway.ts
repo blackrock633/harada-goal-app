@@ -38,13 +38,19 @@ export class SupabaseAuthGateway implements AuthGateway {
     throw mapSupabaseAuthError(error) ?? error;
   }
 
-  async signUp(input: { email: string; password: string; displayName: string; timeZone: string }) {
+  async signUp(input: { email: string; password: string; displayName: string; timeZone: string; referralCode?: string }) {
     const supabase = await this.client();
     const { data, error } = await supabase.auth.signUp({
       email: input.email,
       password: input.password,
-      // Read by the on_auth_user_created trigger (public.handle_new_user).
-      options: { data: { display_name: input.displayName, time_zone: input.timeZone } },
+      // Read by the on_auth_user_created trigger (public.handle_new_user), which also attributes the referral.
+      options: {
+        data: {
+          display_name: input.displayName,
+          time_zone: input.timeZone,
+          ...(input.referralCode ? { referral_code: input.referralCode } : {}),
+        },
+      },
     });
     if (error) this.fail(error);
     const user = data.user;

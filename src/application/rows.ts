@@ -18,6 +18,7 @@ import type {
   Reflection,
   ReflectionKind,
   RestorableGoalStatus,
+  ReviewAnswers,
   RoutineCheck,
   Schedule,
   Weekday,
@@ -103,6 +104,8 @@ export interface ReflectionRow {
   went_well: string;
   didnt_go_well: string;
   next_change: string;
+  /** Absent in rows read before the reviews_templates migration. */
+  answers?: ReviewAnswers | null;
   created_at: Instant;
   updated_at: Instant;
 }
@@ -134,7 +137,7 @@ export const SELECT_COLUMNS = {
     'id,goal_id,outcome_id,title,notes,kind,position,due_date,completed_at,schedule_type,schedule_days,schedule_times_per_week,start_date,archived_at,created_at,updated_at',
   routine_checks: 'id,action_id,date,created_at',
   daily_focus: 'id,owner_id,action_id,date,slot,created_at',
-  reflections: 'id,goal_id,date,kind,went_well,didnt_go_well,next_change,created_at,updated_at',
+  reflections: 'id,goal_id,date,kind,went_well,didnt_go_well,next_change,answers,created_at,updated_at',
   goal_events: 'id,goal_id,type,subject_id,summary,data,occurred_at',
   profiles: 'id,display_name,time_zone,created_at,updated_at',
 } as const;
@@ -242,6 +245,7 @@ export function reflectionFromRow(r: ReflectionRow): Reflection {
     wentWell: r.went_well,
     didntGoWell: r.didnt_go_well,
     nextChange: r.next_change,
+    answers: r.answers ?? {},
     createdAt: instant(r.created_at),
     updatedAt: instant(r.updated_at),
   };

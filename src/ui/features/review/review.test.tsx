@@ -10,7 +10,7 @@ import { ReviewView } from './ReviewView';
 afterEach(cleanup);
 
 const refl = (over: Partial<ReflectionDTO> = {}): ReflectionDTO => ({
-  id: 'r1', goalId: 'g1', date: '2026-10-18', kind: 'daily', wentWell: 'Good run', didntGoWell: '', nextChange: '',
+  id: 'r1', goalId: 'g1', date: '2026-10-18', kind: 'daily', wentWell: 'Good run', didntGoWell: '', nextChange: '', answers: {},
   createdAt: '2026-10-18T20:00:00.000Z', updatedAt: '', ...over,
 });
 const ev = (over: Partial<GoalEventDTO> = {}): GoalEventDTO => ({

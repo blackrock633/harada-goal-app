@@ -43,6 +43,21 @@ async function attempt(client: PGlite, who: Who, q: string, params: unknown[] = 
 }
 const uuid = () => crypto.randomUUID();
 const PUBLIC_TABLES = ['profiles', 'goals', 'outcomes', 'actions', 'routine_checks', 'reflections', 'goal_events', 'daily_focus'];
+const FEATURE_TABLES = [
+  'plans', 'plan_features', 'prices', 'subscriptions', 'billing_events', 'plan_grants', 'goal_templates',
+  'challenge_enrollments', 'share_links', 'referrals', 'analytics_events', 'admins',
+];
+/** Callable before sign-in: the public share page and first-party analytics. Both validate everything. */
+const ANON_RPCS = ['get_shared_card', 'track_event'];
+/**
+ * Reviewed SECURITY DEFINER RPCs callable by `authenticated`. Each resolves the caller from auth.uid() itself
+ * and touches only the caller's rows (or the public catalogue); adding one here needs the same review.
+ */
+const DEFINER_RPCS = [
+  'admin_metrics', 'am_i_admin', 'challenge_summary', 'complete_challenge', 'create_share_link', 'get_my_plan',
+  'get_my_referrals', 'get_shared_card', 'get_template', 'goal_history', 'join_challenge', 'leave_challenge',
+  'list_templates', 'preview_share_card', 'revoke_share_link', 'track_event',
+];
 
 describe('RLS / authorization holes (asserting secure behaviour)', () => {
   let t: TestDeps;
@@ -142,9 +157,12 @@ describe('RLS / authorization holes (asserting secure behaviour)', () => {
                 p.prosecdef definer, coalesce('search_path=""' = any(p.proconfig), false) emptypath, p.proconfig::text config
          from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname='public'`,
       );
-      expect(rows.filter((r) => r.anon).map((r) => r.proname), 'anon must execute nothing').toEqual([]);
-      const bad = rows.filter((r) => r.auth && !r.proname.startsWith('owns_') && (r.definer || !r.emptypath));
-      expect(bad.map((r) => `${r.proname} definer=${r.definer} config=${r.config}`), 'executable RPCs must be invoker with empty search_path').toEqual([]);
+      expect(rows.filter((r) => r.anon).map((r) => r.proname).sort(), 'anon executes only the public RPCs').toEqual(ANON_RPCS);
+      const bad = rows.filter((r) => r.auth && !r.proname.startsWith('owns_') && !r.emptypath);
+      expect(bad.map((r) => `${r.proname} config=${r.config}`), 'executable RPCs must pin an empty search_path').toEqual([]);
+      const definers = rows.filter((r) => r.auth && r.definer && !r.proname.startsWith('owns_')).map((r) => r.proname).sort();
+      expect(definers, 'definer RPCs reachable by authenticated must be reviewed').toEqual(DEFINER_RPCS);
+
     });
 
     it('every SECURITY DEFINER function in public pins search_path', async () => {
@@ -170,8 +188,9 @@ describe('RLS / authorization holes (asserting secure behaviour)', () => {
         `select c.relname, c.relrowsecurity, (select count(*)::int from pg_policy p where p.polrelid=c.oid) n
          from pg_class c join pg_namespace s on s.oid=c.relnamespace where s.nspname='public' and c.relkind in ('r','p')`,
       );
-      expect(rows.map((r) => r.relname).sort()).toEqual([...PUBLIC_TABLES].sort());
-      expect(rows.filter((r) => !r.relrowsecurity || r.n === 0)).toEqual([]);
+      expect(rows.map((r) => r.relname).sort()).toEqual([...PUBLIC_TABLES, ...FEATURE_TABLES].sort());
+      expect(rows.filter((r) => !r.relrowsecurity)).toEqual([]);
+      expect(rows.filter((r) => PUBLIC_TABLES.includes(r.relname) && r.n === 0)).toEqual([]);
     });
   });
 

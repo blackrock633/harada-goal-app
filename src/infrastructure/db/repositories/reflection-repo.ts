@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ReflectionRepo } from '@/application/ports';
-import { Reflection, ReflectionKind, Id, LocalDate } from '@/domain/types';
+import { Reflection, ReflectionKind, ReviewAnswers, Id, LocalDate } from '@/domain/types';
 import { PgTransaction } from 'drizzle-orm/pg-core';
 import { reflections, goals } from '../schema';
 import { eq, and, desc, lt, inArray } from 'drizzle-orm';
@@ -95,6 +95,7 @@ export class ReflectionRepoImpl implements ReflectionRepo {
       wentWell: row.wentWell,
       didntGoWell: row.didntGoWell,
       nextChange: row.nextChange,
+      answers: (row.answers ?? {}) as ReviewAnswers,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

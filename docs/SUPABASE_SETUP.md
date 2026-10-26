@@ -20,6 +20,9 @@ npx supabase functions deploy delete-account   # keep "Verify JWT" on (the defau
 npx supabase secrets set ALLOWED_ORIGINS=https://<your-web-origin>
 ```
 
+For Harada Pro (Stripe, planning suggestions), the challenge and sharing, also follow the deploy steps in
+`docs/PREMIUM_SYSTEM.md` §8–9.
+
 Deploy the function only **after** `db push`: it calls `public.consume_password_attempt` (security migration
 `20261025120000`), and without that function every deletion attempt fails with a 500.
 

@@ -5,6 +5,7 @@ import { useSession } from '@/auth/session';
 import { signOut } from '@/data/auth';
 import { errorMessage } from '@/data/errors';
 import { useProfile } from '@/data/hooks';
+import { PlanSection } from '@/features/premium/PlanSection';
 import { deleteAccount } from '@/screens/deleteAccount';
 import { Button, ListRow, Screen, Section, Text, TextField } from '@/ui';
 
@@ -36,6 +37,7 @@ export default function SettingsScreen() {
           <Button title="Sign out" variant="secondary" loading={signingOut} onPress={handleSignOut} />
         </View>
       </Section>
+      <PlanSection />
       <Section
         title="Time zone"
         description="Decides when your day starts and what counts as today."

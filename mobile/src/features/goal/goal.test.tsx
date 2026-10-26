@@ -254,6 +254,30 @@ describe('GoalOnboarding', () => {
     expect(onGoToToday).toHaveBeenCalled();
   });
 
+  it('premium templates carry a Pro label; a locked one explains Harada Pro and is never used', async () => {
+    const { onUseTemplate } = await setup({
+      templates: [
+        { id: 'free1', name: 'Fitness', summary: 'Get fit', outcomeCount: 8, actionCount: 20, tier: 'free', locked: false },
+        { id: 'pro1', name: 'Launch a product', summary: 'Ship it', outcomeCount: 8, actionCount: 64, tier: 'premium', locked: true },
+      ],
+    });
+    expect(screen.getByText('Pro')).toBeOnTheScreen();
+    await press('Use example: Launch a product (Harada Pro)');
+    expect(screen.getByTestId('upgrade-prompt-premium_templates')).toBeOnTheScreen();
+    expect(onUseTemplate).not.toHaveBeenCalled();
+    await press('Use example: Fitness');
+    expect(await screen.findByText('Your goal is created')).toBeOnTheScreen();
+    expect(onUseTemplate).toHaveBeenCalledWith('free1', expect.any(String));
+  });
+
+  it('a template refused with UPGRADE_REQUIRED shows the prompt, not an error', async () => {
+    const onUseTemplate = jest.fn(async () => ({ ok: false as const, error: { code: 'UPGRADE_REQUIRED' as const, message: 'raw' } }));
+    await setup({ onUseTemplate });
+    await press('Use example: Fitness');
+    expect(await screen.findByTestId('upgrade-prompt-premium_templates')).toBeOnTheScreen();
+    expect(screen.queryByText('raw')).toBeNull();
+  });
+
   it('templates never prefill the form; choosing one passes a stable client id', async () => {
     const onUseTemplate = jest
       .fn<Promise<unknown>, [string, string]>()
@@ -363,6 +387,24 @@ describe('GoalOverview', () => {
     await act(async () => resolve(unavailable));
     expect(await screen.findByText(/Couldn't reach the server/)).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Activate goal' })).not.toBeBusy();
+  });
+
+  it('UPGRADE_REQUIRED on activation explains Harada Pro instead of an error, keeping the draft', async () => {
+    const activateGoal = jest.fn(async () => ({
+      ok: false as const,
+      error: { code: 'UPGRADE_REQUIRED' as const, message: 'Free includes one active goal.' },
+    }));
+    const onActivated = jest.fn();
+    await show(detail(), { activateGoal, onActivated });
+    await press('Activate goal');
+    expect(await screen.findByTestId('upgrade-prompt-multiple_goals')).toBeOnTheScreen();
+    expect(screen.getByText(/kept as a draft, with everything you planned/)).toBeOnTheScreen();
+    expect(screen.queryByText('Free includes one active goal.')).toBeNull();
+    expect(onActivated).not.toHaveBeenCalled();
+    // Still a draft: the button stays, so the user can try again after upgrading.
+    expect(screen.getByRole('button', { name: 'Activate goal' })).toBeOnTheScreen();
+    await press('Not now');
+    expect(screen.queryByTestId('upgrade-prompt-multiple_goals')).toBeNull();
   });
 
   it('does not offer activation for an active goal', async () => {

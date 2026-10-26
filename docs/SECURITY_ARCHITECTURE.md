@@ -43,8 +43,11 @@ third-party analytics or error reporting exist.
   only to delete the caller's own auth user, after a password re-check. It is never `NEXT_PUBLIC_`/`EXPO_PUBLIC_`.
 - **Public configuration:** the Supabase URL and anon/publishable key ship in both clients by design. They
   identify the project; they grant nothing beyond what RLS allows an anonymous or authenticated role.
-- **Administrative functionality:** none. There are no admin roles, admin routes or admin RPCs. The dev
-  styleguide route returns 404 in production.
+- **Administrative functionality:** read-only business metrics only. Operators are rows in `public.admins`
+  (inserted by hand in the SQL editor). `admin_metrics()` checks that table on the server; the web page
+  `/admin` answers 404 to everyone else. There is no client-side role flag. The dev styleguide route returns
+  404 in production. Billing state is written only by the Stripe webhook with the service role
+  (`docs/PREMIUM_SYSTEM.md`).
 
 ## Identity and sessions
 

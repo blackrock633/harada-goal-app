@@ -113,7 +113,12 @@ export interface DailyFocus {
 
 // ---------- Reflection ----------
 
-export type ReflectionKind = 'daily' | 'weekly';
+export type ReflectionKind = 'daily' | 'weekly' | 'monthly';
+
+/** The extra questions of the Pro weekly and monthly review (stored in reflections.answers). */
+export const REVIEW_ANSWER_KEYS = ['intended', 'completed', 'obstacles', 'learned', 'priorities', 'strategy'] as const;
+export type ReviewAnswerKey = (typeof REVIEW_ANSWER_KEYS)[number];
+export type ReviewAnswers = Partial<Record<ReviewAnswerKey, string>>;
 
 export interface Reflection {
   id: Id;
@@ -123,6 +128,8 @@ export interface Reflection {
   wentWell: string;
   didntGoWell: string;
   nextChange: string;
+  /** Pro review answers; {} for a basic reflection. */
+  answers: ReviewAnswers;
   createdAt: Instant;
   updatedAt: Instant;
 }

@@ -5,6 +5,7 @@
  */
 import { z } from 'zod';
 import { LIMITS } from '../domain/limits.js';
+import { REVIEW_ANSWER_KEYS } from '../domain/types.js';
 
 const id = z.uuid({ message: 'Invalid id' });
 const localDate = z.iso.date({ message: 'Use a valid date (YYYY-MM-DD)' });
@@ -29,7 +30,10 @@ const timeZone = z.string().trim().min(1).max(64);
 const expectedUpdatedAt = z.iso.datetime().optional();
 const position = z.number().int().min(0).max(7).optional();
 
-export const signUpSchema = z.object({ email, password, displayName, timeZone });
+/** A referrer's code from a share link (?ref=). Optional, and an invalid one is dropped rather than blocking sign-up. */
+const referralCode = z.string().regex(/^[a-f0-9]{10}$/).optional().catch(undefined);
+
+export const signUpSchema = z.object({ email, password, displayName, timeZone, referralCode });
 export const signInSchema = z.object({ email, password: z.string().min(1, 'Required').max(128) });
 export const updateProfileSchema = z
   .object({ displayName: displayName.optional(), timeZone: timeZone.optional() })
@@ -165,6 +169,11 @@ export const reorderActionsSchema = z.object({
 
 // ---------- Reflections ----------
 
+/** Pro review answers: known questions only, each like a reflection field. */
+const reviewAnswers = z
+  .object(Object.fromEntries(REVIEW_ANSWER_KEYS.map((k) => [k, text(LIMITS.reflectionField).optional()])))
+  .strict();
+
 const reflectionFields = {
   wentWell: text(LIMITS.reflectionField).optional(),
   didntGoWell: text(LIMITS.reflectionField).optional(),
@@ -174,15 +183,17 @@ export const addReflectionSchema = z.object({
   id: id.optional(),
   goalId: id,
   date: localDate,
-  kind: z.enum(['daily', 'weekly']),
+  kind: z.enum(['daily', 'weekly', 'monthly']),
   ...reflectionFields,
+  answers: reviewAnswers.optional(),
 });
 export const updateReflectionSchema = z.object({
   reflectionId: id,
   expectedUpdatedAt,
   date: localDate.optional(),
-  kind: z.enum(['daily', 'weekly']).optional(),
+  kind: z.enum(['daily', 'weekly', 'monthly']).optional(),
   ...reflectionFields,
+  answers: reviewAnswers.optional(),
 });
 export const reflectionIdSchema = z.object({ reflectionId: id });
 

@@ -110,6 +110,7 @@ export function reflectionDTO(r: Reflection): ReflectionDTO {
     wentWell: r.wentWell,
     didntGoWell: r.didntGoWell,
     nextChange: r.nextChange,
+    answers: r.answers,
     createdAt: iso(r.createdAt),
     updatedAt: iso(r.updatedAt),
   };

@@ -32,6 +32,8 @@ export const profiles = pgTable('profiles', {
   id: uuid('id').primaryKey().references(() => authUsers.id, { onDelete: 'cascade' }),
   displayName: text('display_name').notNull(),
   timeZone: text('time_zone').notNull().default('UTC'),
+  /** Random, set by the database (sharing_referrals migration). */
+  referralCode: text('referral_code').notNull().default(sql`harada_private.new_referral_code()`),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 });
@@ -149,12 +151,14 @@ export const reflections = pgTable(
     wentWell: text('went_well').notNull().default(''),
     didntGoWell: text('didnt_go_well').notNull().default(''),
     nextChange: text('next_change').notNull().default(''),
+    /** Extra answers of the Pro weekly/monthly review (reviews_templates migration). */
+    answers: jsonb('answers').notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   },
   (table) => ({
     goalDateIdx: index('reflections_goal_date_idx').on(table.goalId, table.date),
-    kindCheck: check('reflections_kind_check', sql`kind in ('daily','weekly')`),
+    kindCheck: check('reflections_kind_check', sql`kind in ('daily','weekly','monthly')`),
   })
 );
 

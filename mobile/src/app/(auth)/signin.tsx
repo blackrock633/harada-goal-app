@@ -5,7 +5,7 @@ import { View } from 'react-native';
 import { signIn } from '@/data/auth';
 import { errorMessage } from '@/data/errors';
 import { useTheme } from '@/theme';
-import { Button, Screen, Text, TextField, useLayout } from '@/ui';
+import { Button, HaradaMark, Screen, Text, TextField, useLayout } from '@/ui';
 
 export default function SignInScreen() {
   const [email, setEmail] = useState('');
@@ -40,12 +40,10 @@ export default function SignInScreen() {
   return (
     <Screen maxWidth={420}>
       <View style={{ gap: space[4], paddingTop: wide ? space[12] : space[4] }}>
-        <View style={{ gap: space[2] }}>
+        <View style={{ alignItems: 'center', gap: space[3], paddingVertical: space[6] }}>
+          <HaradaMark size={64} />
           <Text variant="display" accessibilityRole="header">
             Harada
-          </Text>
-          <Text tone="muted">
-            One goal, eight key areas, sixty-four actions — and today&rsquo;s next step.
           </Text>
         </View>
         <Text variant="title">Sign in</Text>

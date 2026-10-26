@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 
 import type { ActionDTO, NextItemDTO, TodayDTO } from '@shared/application/dto';
@@ -32,6 +32,8 @@ export type TodayViewProps = {
   onActivated?: () => void;
   /** "Reflect on today" link. */
   onOpenReview?: (goalId: string) => void;
+  /** A quiet row under the lists (the 30-Day Challenge entry); loads on its own, never blocks Today. */
+  challengeEntry?: ReactNode;
 };
 
 const TWO_COLUMN_BREAKPOINT = 1024;
@@ -98,6 +100,7 @@ export function TodayView({
   activateGoal,
   onActivated,
   onOpenReview,
+  challengeEntry,
 }: TodayViewProps) {
   const { space } = useTheme();
   const { width } = useLayout();
@@ -450,6 +453,7 @@ export function TodayView({
           <View style={{ flex: 1, gap: space[4] }}>
             {tasksSection}
             {reflect}
+            {challengeEntry}
             {panel}
           </View>
         </View>
@@ -460,6 +464,7 @@ export function TodayView({
           {tasksSection}
           {doneSection}
           {reflect}
+          {challengeEntry}
           {panel}
         </>
       )}

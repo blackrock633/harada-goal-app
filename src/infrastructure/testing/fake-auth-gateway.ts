@@ -37,7 +37,7 @@ export class FakeAuthGateway implements AuthGateway {
     if (f) throw f;
   }
 
-  async signUp(input: { email: string; password: string; displayName: string; timeZone: string }) {
+  async signUp(input: { email: string; password: string; displayName: string; timeZone: string; referralCode?: string }) {
     this.throwPending();
     const email = input.email.trim().toLowerCase();
     if (this.accounts.has(email)) throw new AuthGatewayError('EMAIL_TAKEN');
@@ -46,7 +46,11 @@ export class FakeAuthGateway implements AuthGateway {
     await this.client.query('insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)', [
       id,
       email,
-      JSON.stringify({ display_name: input.displayName, time_zone: input.timeZone }),
+      JSON.stringify({
+        display_name: input.displayName,
+        time_zone: input.timeZone,
+        ...(input.referralCode ? { referral_code: input.referralCode } : {}),
+      }),
     ]);
     this.accounts.set(email, { id, password: input.password });
     const user = { id, email };

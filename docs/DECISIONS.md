@@ -103,3 +103,19 @@ verified before the staging project exists. Revisit once staging confirms those 
 RPCs). `rpc-parity.rls.test.ts` runs the same command script through both and fails on any difference in outcome
 or resulting data; drift remains possible only for paths the script doesn't cover. The event log (`goal_events`) is written only by trusted code, which also closes QA H4 for
 clients. Account deletion needs the service-role key, so it will be a Supabase Edge Function, not an RPC.
+
+## D-018 — Harada Pro: Stripe on the web, entitlements in Postgres · 2026-10-26 · accepted
+**Context:** Freemium with Pro monthly/annual, a 30-Day Challenge, sharing, referrals and first-party analytics,
+on top of D-017 (devices talk to Supabase directly, so the database is the authorization boundary).
+**Decision:** Stripe Checkout/Portal through Supabase Edge Functions; only the signed Stripe webhook writes
+`subscriptions` (service role, idempotent, ordered). One check, `harada_private.plan_of()`, decides Free/Pro;
+limits, features and prices are rows. Premium rules are database triggers or SECURITY DEFINER functions that
+resolve the caller from `auth.uid()`, so the web server path is covered too. New feature tables grant clients
+SELECT on own rows at most. Share links store a server-built snapshot under a random token. AI suggestions
+(Claude, Pro, 20/day) are drafts the user accepts item by item. Details: `docs/PREMIUM_SYSTEM.md`.
+**Alternatives:** RevenueCat/StoreKit in-app purchase (needs a development build, not Expo Go, and App Store
+review); client-side gating (rejected: the device is untrusted); public links pointing at live goal rows
+(rejected: a token would then reach more than the user chose to share).
+**Consequences:** the `begin_write` allow-list became the table `harada_private.write_rpcs`. Structure tests now
+pin explicit allow-lists of feature tables, anon-readable policies and reviewed definer RPCs. iOS distribution
+must settle how web checkout fits App Store rules per storefront.

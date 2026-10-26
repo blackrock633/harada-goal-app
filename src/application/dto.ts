@@ -31,6 +31,7 @@ import type {
   Progress,
   Purpose,
   ReflectionKind,
+  ReviewAnswers,
   Schedule,
 } from '../domain/types.js';
 
@@ -194,6 +195,7 @@ export interface ReflectionDTO {
   wentWell: string;
   didntGoWell: string;
   nextChange: string;
+  answers: ReviewAnswers;
   createdAt: ISO;
   updatedAt: ISO;
 }

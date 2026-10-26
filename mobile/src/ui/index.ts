@@ -18,3 +18,4 @@ export { ListRow, type ListRowProps } from './ListRow';
 export { FocusToggle, type FocusToggleProps } from './FocusToggle';
 export { SegmentedControl, type SegmentedControlProps } from './SegmentedControl';
 export { useReduceMotion } from './use-reduce-motion';
+export { HaradaMark } from './HaradaMark';

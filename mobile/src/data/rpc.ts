@@ -38,10 +38,12 @@ import {
   updateActionSchema,
   updateGoalSchema,
   updateOutcomeSchema,
+  updateReflectionSchema,
 } from '@shared/application/schemas';
 import { instantiateTemplate, TEMPLATES } from '@shared/domain/templates';
 
 import { newClientId } from './errors';
+import type { templatePayload } from './premium';
 import { keys } from './query-client';
 import type { ExecutionMutations, FocusMutations, GoalMutations, MatrixMutations, ReviewMutations } from './mutations';
 import type { Filter } from './reads';
@@ -61,7 +63,11 @@ export type AllMutations = GoalMutations &
   ReviewMutations & {
     /** Creates a draft goal with the template's outcomes and actions in one atomic RPC. */
     createGoalFromTemplate: (templateId: string, clientId: string) => Promise<Result<GoalFieldsDTO>>;
+    /** Same, for a template from the server catalogue (premium.ts templatePayload). */
+    createGoalFromContent: (payload: TemplatePayload) => Promise<Result<GoalFieldsDTO>>;
   };
+
+export type TemplatePayload = ReturnType<typeof templatePayload>;
 
 const fail = (error: AppError): { ok: false; error: AppError } => ({ ok: false, error });
 
@@ -201,6 +207,7 @@ export function createMutations(deps: RpcDeps): AllMutations {
     updateGoal: (input) =>
       run('update_goal', updateGoalSchema, input, goalOfGoalRow, goalDto),
     activateGoal: transition('activate_goal'),
+    restoreGoal: transition('restore_goal'),
 
     addOutcome: (input) =>
       run('add_outcome', addOutcomeSchema, input, (r: OutcomeRow) => r.goal_id, outcomeDto),
@@ -233,9 +240,29 @@ export function createMutations(deps: RpcDeps): AllMutations {
         (r: ReflectionRow) => r.goal_id,
         (row: ReflectionRow) => reflectionDTO(reflectionFromRow(row)),
       ),
+    updateReflection: (input) =>
+      run(
+        'update_reflection',
+        updateReflectionSchema,
+        input,
+        (r: ReflectionRow) => r.goal_id,
+        (row: ReflectionRow) => reflectionDTO(reflectionFromRow(row)),
+      ),
 
+    createGoalFromContent: (payload) => createFromContent(payload),
     createGoalFromTemplate: (templateId, clientId) => createFromTemplate(templateId, clientId),
   };
+
+  /** The core goal fields are validated like any create; the nested plan is checked by create_goal. */
+  async function createFromContent(payload: TemplatePayload): Promise<Result<GoalFieldsDTO>> {
+    const { templateId, outcomes, ...fields } = payload;
+    const core = createGoalSchema.safeParse(fields);
+    if (!core.success) return validationFailure(core.error);
+    const res = await callRpc<GoalRow>('create_goal', { ...core.data, templateId, outcomes });
+    if (!res.ok) return res;
+    await invalidateGoal(res.row.id);
+    return { ok: true, data: goalDto(res.row) };
+  }
 
   async function createFromTemplate(templateId: string, clientId: string): Promise<Result<GoalFieldsDTO>> {
     const template = TEMPLATES.find((t) => t.id === templateId);

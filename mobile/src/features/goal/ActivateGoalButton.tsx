@@ -7,6 +7,8 @@ import { useTheme } from '@/theme';
 import { Button, Text } from '@/ui';
 import type { GoalFieldsDTO } from '@shared/application/dto';
 
+import { UpgradePrompt } from '../premium/UpgradePrompt';
+
 export type ActivateGoalButtonProps = {
   goalId: string;
   activateGoal: GoalMutations['activateGoal'];
@@ -24,6 +26,8 @@ export function ActivateGoalButton({
   const { space } = useTheme();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  // Free allows one active goal: the server refuses a second with UPGRADE_REQUIRED. The goal stays a draft.
+  const [needsPro, setNeedsPro] = useState(false);
   const inFlight = useRef(false);
 
   async function run() {
@@ -31,9 +35,11 @@ export function ActivateGoalButton({
     inFlight.current = true;
     setPending(true);
     setError('');
+    setNeedsPro(false);
     try {
       const res = await activateGoal({ goalId });
       if (res.ok) onActivated?.(res.data);
+      else if (res.error.code === 'UPGRADE_REQUIRED') setNeedsPro(true);
       else setError(errorMessage(res.error));
     } catch {
       setError('Could not activate. Please try again.');
@@ -57,6 +63,14 @@ export function ActivateGoalButton({
         <Text variant="meta" tone="danger" accessibilityRole="alert">
           {error}
         </Text>
+      ) : null}
+      {needsPro ? (
+        <UpgradePrompt
+          feature="multiple_goals"
+          trigger="action"
+          note="You already have an active goal. This one is kept as a draft, with everything you planned."
+          onDismiss={() => setNeedsPro(false)}
+        />
       ) : null}
     </View>
   );

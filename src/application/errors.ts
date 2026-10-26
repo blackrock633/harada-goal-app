@@ -56,6 +56,25 @@ export function safeErrorSummary(e: unknown): ErrorSummary[] | string {
   return out;
 }
 
+/** Messages of the database's entitlement checks (HG402), keyed by the feature they name in the hint. */
+const UPGRADE_MESSAGES: Record<string, string> = {
+  multiple_goals: 'The Free plan has one active goal. Upgrade to Harada Pro to work on several at once.',
+  advanced_reviews: 'Monthly reviews and the full weekly review are part of Harada Pro.',
+};
+
+/** The upgrade message when `e` (or its cause) is an HG402 raised by an entitlement check. */
+function upgradeRequired(e: unknown): string | null {
+  let cur: unknown = e;
+  for (let i = 0; i < 5 && cur instanceof Error; i++) {
+    const c = cur as Error & { code?: unknown; hint?: unknown };
+    if (c.code === 'HG402') {
+      return UPGRADE_MESSAGES[typeof c.hint === 'string' ? c.hint : ''] ?? 'This is part of Harada Pro.';
+    }
+    cur = c.cause;
+  }
+  return null;
+}
+
 /** The single place where thrown errors become AppErrors. Unexpected errors are logged, never leaked. */
 export function toAppError(e: unknown, logger: Logger): AppError {
   if (e instanceof AppFail) {
@@ -78,6 +97,8 @@ export function toAppError(e: unknown, logger: Logger): AppError {
     logger.warn('Database unavailable', { detail: e.detail });
     return { code: 'UNAVAILABLE', message: 'Could not reach the server. Your changes were not saved — please try again.' };
   }
+  const upgrade = upgradeRequired(e);
+  if (upgrade) return { code: 'UPGRADE_REQUIRED', message: upgrade };
   if (e instanceof NotOwnedError) {
     return { code: 'NOT_FOUND', message: 'Not found' };
   }

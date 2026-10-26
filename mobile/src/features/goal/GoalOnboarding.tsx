@@ -4,10 +4,11 @@ import { View } from 'react-native';
 import { errorMessage, newClientId } from '@/data/errors';
 import type { GoalMutations } from '@/data/mutations';
 import { useTheme } from '@/theme';
-import { Button, DateField, ListRow, Section, Text, TextField } from '@/ui';
+import { Badge, Button, DateField, ListRow, Section, Text, TextField } from '@/ui';
 import type { GoalFieldsDTO, TemplateSummaryDTO } from '@shared/application/dto';
 import type { Result } from '@shared/application/result';
 
+import { UpgradePrompt } from '../premium/UpgradePrompt';
 import { DetailsFields } from './GoalFields';
 import {
   FIELD_LIMITS,
@@ -21,9 +22,12 @@ import {
   type GoalDraft,
 } from './goalLogic';
 
+/** A template row: the shipped examples, or the server catalogue (which adds the tier and lock). */
+export type OnboardingTemplate = TemplateSummaryDTO & { tier?: 'free' | 'premium'; locked?: boolean };
+
 export type GoalOnboardingProps = {
   mutations: Pick<GoalMutations, 'createGoal' | 'updateGoal'>;
-  templates: TemplateSummaryDTO[];
+  templates: OnboardingTemplate[];
   /** `clientId` is stable across retries of the same template choice (idempotency). */
   onUseTemplate: (templateId: string, clientId: string) => Promise<Result<GoalFieldsDTO>>;
   onOpenMatrix: (goalId: string) => void;
@@ -51,6 +55,8 @@ export function GoalOnboarding({
   const [formError, setFormError] = useState('');
   const [pending, setPending] = useState(false);
   const [pendingTemplate, setPendingTemplate] = useState<string | null>(null);
+  // A premium example the user tapped without Pro: explain instead of failing.
+  const [lockedTemplate, setLockedTemplate] = useState<string | null>(null);
   const inFlight = useRef(false);
   const createIdRef = useRef<string | null>(null);
   const templateIdRef = useRef<{ templateId: string; id: string } | null>(null);
@@ -136,8 +142,13 @@ export function GoalOnboarding({
 
   async function chooseTemplate(id: string) {
     if (inFlight.current) return;
+    if (templates.find((t) => t.id === id)?.locked) {
+      setLockedTemplate(id);
+      return;
+    }
     inFlight.current = true;
     setFormError('');
+    setLockedTemplate(null);
     setPendingTemplate(id);
     try {
       if (templateIdRef.current?.templateId !== id) templateIdRef.current = { templateId: id, id: newClientId() };
@@ -146,6 +157,8 @@ export function GoalOnboarding({
         templateIdRef.current = null;
         setGoal(res.data);
         setStep('done');
+      } else if (res.error.code === 'UPGRADE_REQUIRED') {
+        setLockedTemplate(id);
       } else {
         setFormError(errorMessage(res.error));
       }
@@ -240,27 +253,39 @@ export function GoalOnboarding({
       {templates.length > 0 ? (
         <Section
           title="Or start from an example"
-          description="An example creates a new goal with ready-made key areas and actions that you can change."
+          description="An example creates a new goal with ready-made key areas and actions. You can change all of it."
         >
           <View>
             {templates.map((t, i) => (
-              <ListRow
-                key={t.id}
-                title={t.name}
-                meta={`${t.summary}\n${t.outcomeCount} key areas · ${t.actionCount} actions`}
-                divider={i < templates.length - 1}
-                trailing={
-                  <Button
-                    title="Use this"
-                    variant="secondary"
-                    size="compact"
-                    accessibilityLabel={`Use example: ${t.name}`}
-                    loading={pendingTemplate === t.id}
-                    disabled={busy}
-                    onPress={() => chooseTemplate(t.id)}
+              <View key={t.id}>
+                <ListRow
+                  title={t.name}
+                  meta={`${t.summary}\n${t.outcomeCount} key areas · ${t.actionCount} actions`}
+                  divider={i < templates.length - 1}
+                  trailing={
+                    <View style={{ alignItems: 'flex-end', gap: space[1] }}>
+                      {t.tier === 'premium' ? <Badge text="Pro" /> : null}
+                      <Button
+                        title="Use this"
+                        variant="secondary"
+                        size="compact"
+                        accessibilityLabel={t.locked ? `Use example: ${t.name} (Harada Pro)` : `Use example: ${t.name}`}
+                        loading={pendingTemplate === t.id}
+                        disabled={busy}
+                        onPress={() => chooseTemplate(t.id)}
+                      />
+                    </View>
+                  }
+                />
+                {lockedTemplate === t.id ? (
+                  <UpgradePrompt
+                    feature="premium_templates"
+                    trigger="action"
+                    note={`“${t.name}” is one of the Harada Pro examples. The free examples and a blank goal work on any plan.`}
+                    onDismiss={() => setLockedTemplate(null)}
                   />
-                }
-              />
+                ) : null}
+              </View>
             ))}
           </View>
         </Section>

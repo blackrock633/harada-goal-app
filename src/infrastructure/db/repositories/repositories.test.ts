@@ -413,6 +413,7 @@ describe('repositories (real Postgres + RLS)', () => {
       wentWell: 'w',
       didntGoWell: 'd',
       nextChange: 'n',
+      answers: {},
       createdAt: now(),
       updatedAt: now(),
       ...over,

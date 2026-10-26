@@ -10,6 +10,15 @@ import { mkAction, mkGoal, mkOutcome, sampleGoal } from './test-fixtures';
 
 const TODAY = '2026-03-01';
 
+const mockSuggestActions = jest.fn();
+const mockSuggestAreas = jest.fn();
+jest.mock('@/data/premium', () => ({
+  ...jest.requireActual('@/data/premium'),
+  suggestActions: (...a: unknown[]) => mockSuggestActions(...a),
+  suggestAreas: (...a: unknown[]) => mockSuggestAreas(...a),
+  track: jest.fn(),
+}));
+
 type Input = Record<string, unknown> & { id?: string; position?: number; outcomeId?: string };
 const mutation = () => jest.fn<Promise<unknown>, [Input]>();
 
@@ -358,5 +367,52 @@ describe('full 9x9 sheet', () => {
     expect(onAddAction).toHaveBeenCalledWith(2, 2);
     // Positions of an empty key area cannot take actions.
     expect(screen.queryByRole('button', { name: 'Add action 1 to key area 1' })).toBeNull();
+  });
+});
+
+describe('planning suggestions in a key area', () => {
+  beforeEach(() => {
+    mockSuggestActions.mockReset();
+    mockSuggestAreas.mockReset();
+  });
+
+  it('are left out while the plan is unknown', async () => {
+    await setup();
+    expect(screen.queryByRole('button', { name: /Suggest actions/ })).toBeNull();
+  });
+
+  it('accepted one by one into the next free positions, never over existing actions', async () => {
+    mockSuggestActions.mockResolvedValue({
+      ok: true,
+      data: { task: 'actions', actions: [{ title: 'Hill repeats', kind: 'routine', cadence: 'weekly' }, { title: 'Book a race', kind: 'task', cadence: null }] },
+    });
+    const { matrix, props } = await setup({ aiPlanning: true });
+    matrix.addAction.mockImplementation(async (i) => ok({ id: i.id }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Suggest actions' }));
+    expect(mockSuggestActions).toHaveBeenCalledWith('Run a marathon', 'Fitness', ['Stretch', 'Buy shoes', 'Run 5k']);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Add suggested action: Hill repeats' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Add suggested action: Book a race' }));
+    expect(matrix.addAction).toHaveBeenCalledTimes(2);
+    expect(matrix.addAction.mock.calls[0]![0]).toMatchObject({ position: 2, title: 'Hill repeats', kind: 'routine', schedule: { type: 'weekly', timesPerWeek: 1 } });
+    expect(matrix.addAction.mock.calls[1]![0]).toMatchObject({ position: 3, title: 'Book a race', kind: 'task' });
+    expect(matrix.updateAction).not.toHaveBeenCalled();
+    expect(props.onChanged).toHaveBeenCalledTimes(2);
+  });
+
+  it('an empty key area offers key area suggestions that fill this slot first', async () => {
+    mockSuggestAreas.mockResolvedValue({ ok: true, data: { task: 'areas', measurableOutcome: null, areas: [{ title: 'Nutrition', why: 'Fuel' }] } });
+    const { matrix } = await setup({ aiPlanning: true, position: 0 });
+    matrix.addOutcome.mockImplementation(async (i) => ok({ id: i.id }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Suggest key areas' }));
+    expect(mockSuggestAreas).toHaveBeenCalledWith('Run a marathon', expect.any(String), ['Fitness', 'Sleep']);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Add suggested key area: Nutrition' }));
+    expect(matrix.addOutcome.mock.calls[0]![0]).toMatchObject({ position: 0, title: 'Nutrition' });
+  });
+
+  it('Free: the button explains Harada Pro', async () => {
+    await setup({ aiPlanning: false });
+    await fireEvent.press(screen.getByRole('button', { name: 'Suggest actions (Harada Pro)' }));
+    expect(screen.getByTestId('upgrade-prompt-ai_planning')).toBeOnTheScreen();
+    expect(mockSuggestActions).not.toHaveBeenCalled();
   });
 });

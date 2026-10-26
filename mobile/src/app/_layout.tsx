@@ -62,6 +62,15 @@ function RootNavigator() {
     },
   };
 
+  // Header style shared by the stacked screens (same as Settings).
+  const pushed = {
+    headerShown: true,
+    headerTitleStyle: { fontFamily: theme.fontFamily.display, fontSize: theme.typeScale.heading.fontSize, color: colors.ink },
+    headerShadowVisible: false,
+    headerStyle: { backgroundColor: colors.paper },
+    headerTintColor: colors.ink,
+  } as const;
+
   return (
     <ThemeProvider value={navTheme}>
       <StatusBar style="auto" />
@@ -84,6 +93,11 @@ function RootNavigator() {
             headerTintColor: colors.ink,
           }}
         />
+          {/* Harada Pro, history, the 30-Day Challenge and sharing (premium.ts). */}
+          <Stack.Screen name="upgrade" options={{ ...pushed, presentation: 'modal', title: 'Harada Pro' }} />
+          <Stack.Screen name="insights" options={{ ...pushed, title: 'Progress history' }} />
+          <Stack.Screen name="share" options={{ ...pushed, presentation: 'modal', title: 'Share progress' }} />
+          <Stack.Screen name="challenge" />
         </Stack.Protected>
       </Stack>
     </ThemeProvider>
