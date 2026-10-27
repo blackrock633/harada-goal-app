@@ -16,7 +16,10 @@ export class ReflectionRepoImpl implements ReflectionRepo {
       .innerJoin(goals, eq(reflections.goalId, goals.id))
       .where(and(eq(reflections.id, reflectionId), eq(goals.ownerId, ownerId)));
 
-    if (rows.length === 0) return null;
+    if (rows.length === 0) {
+      await this.tx.execute(sql`select harada_private.check_reflection_access(${reflectionId}::uuid)`);
+      return null;
+    }
     return this.mapToDomain(rows[0]!.reflection);
   }
 

@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { Platform, ScrollView, View, useWindowDimensions } from 'react-native';
+import { PanResponder, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
 
 import type { MatrixMutations } from '@/data/mutations';
 import { useTheme } from '@/theme';
-import { ProgressBar, SegmentedControl, Text, useLayout } from '@/ui';
+import { IconButton, ProgressBar, SegmentedControl, Text, useLayout } from '@/ui';
 import type { GoalDetailDTO } from '@shared/application/dto';
 import {
   AREA_COUNT,
@@ -127,40 +127,164 @@ export function MatrixOverview({ goal, onOpenArea, matrix, onChanged, onReloadLa
   );
 }
 
+const MIN_ZOOM = 0.35;
+const MAX_ZOOM = 2.25;
+const ZOOM_STEP = 0.25;
+
+function clamp(v: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, v));
+}
+
+function touchDistance(e: GestureResponderEvent): number | null {
+  const touches = e.nativeEvent.touches;
+  if (!touches || touches.length < 2) return null;
+  const dx = (touches[0]!.pageX ?? 0) - (touches[1]!.pageX ?? 0);
+  const dy = (touches[0]!.pageY ?? 0) - (touches[1]!.pageY ?? 0);
+  return Math.hypot(dx, dy);
+}
+
 /**
- * The phone's full sheet in a square window. iOS: pinch to zoom out until the whole 9x9 fits the
- * window, or in to read; drag to pan. Elsewhere (no native zoom) it scrolls sideways as before.
+ * The phone's full 9x9 sheet in an interactive viewport: pinch to zoom in or out, and drag/scroll
+ * horizontally (left to right) and vertically once zoomed in or out.
  */
 function ZoomableSheet({ children }: { children: ReactNode }) {
-  const { space } = useTheme();
+  const { colors, radius, space } = useTheme();
   const [width, onLayout] = useMeasuredWidth();
-  if (Platform.OS !== 'ios') {
-    return (
-      <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator accessibilityLabel="Full sheet, scrolls sideways">
-        {children}
-      </ScrollView>
-    );
-  }
   const sheetSize = PHONE_SHEET_CELL * 9 + 2 * HEAVY_RULE;
+  const fitScale = width > 0 ? clamp(width / sheetSize, MIN_ZOOM, 1) : 1;
+  const [scale, setScale] = useState(1);
+  const scaleRef = useRef(1);
+  scaleRef.current = scale;
+
+  const pinchStartDist = useRef<number | null>(null);
+  const pinchStartScale = useRef(1);
+
+  const applyScale = (next: number) => {
+    const clamped = Math.round(clamp(next, Math.min(MIN_ZOOM, fitScale), MAX_ZOOM) * 100) / 100;
+    scaleRef.current = clamped;
+    setScale(clamped);
+  };
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: (e) => (e.nativeEvent.touches?.length ?? 0) >= 2,
+        onMoveShouldSetPanResponder: (e) => (e.nativeEvent.touches?.length ?? 0) >= 2,
+        onPanResponderGrant: (e) => {
+          const dist = touchDistance(e);
+          if (dist !== null && dist > 0) {
+            pinchStartDist.current = dist;
+            pinchStartScale.current = scaleRef.current;
+          }
+        },
+        onPanResponderMove: (e) => {
+          const dist = touchDistance(e);
+          if (dist !== null && dist > 0) {
+            if (pinchStartDist.current === null) {
+              pinchStartDist.current = dist;
+              pinchStartScale.current = scaleRef.current;
+            } else {
+              applyScale(pinchStartScale.current * (dist / pinchStartDist.current));
+            }
+          }
+        },
+        onPanResponderRelease: () => {
+          pinchStartDist.current = null;
+        },
+        onPanResponderTerminate: () => {
+          pinchStartDist.current = null;
+        },
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fitScale],
+  );
+
+  const scaledSize = Math.ceil(sheetSize * scale);
+  const viewportHeight = width > 0 ? Math.min(Math.max(width, 320), Math.max(width, scaledSize)) : 360;
+
   return (
-    <View onLayout={onLayout} style={{ gap: space[2] }}>
-      {width > 0 ? (
+    <View onLayout={onLayout} style={{ gap: space[2] }} {...panResponder.panHandlers}>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: space[2],
+        }}
+      >
+        <Text variant="caption" tone="muted" style={{ flex: 1 }}>
+          Pinch to zoom in or out, and swipe left or right to move across the sheet.
+        </Text>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: colors.ruleStrong,
+            borderRadius: radius.sm,
+          }}
+        >
+          <IconButton
+            icon="remove"
+            accessibilityLabel="Zoom out"
+            onPress={() => applyScale(scaleRef.current - ZOOM_STEP)}
+          />
+          <Text
+            variant="caption"
+            tabular
+            accessibilityLabel={`Zoom ${Math.round(scale * 100)}%`}
+            onPress={() => applyScale(scale === 1 && fitScale < 1 ? fitScale : 1)}
+            style={{ paddingHorizontal: space[1] }}
+          >
+            {`${Math.round(scale * 100)}%`}
+          </Text>
+          <IconButton
+            icon="add"
+            accessibilityLabel="Zoom in"
+            onPress={() => applyScale(scaleRef.current + ZOOM_STEP)}
+          />
+        </View>
+      </View>
+
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        directionalLockEnabled={false}
+        showsHorizontalScrollIndicator
+        bounces
+        contentContainerStyle={{ minWidth: width > 0 ? width : undefined }}
+        accessibilityLabel="Full sheet, pinch to zoom, drag to move"
+      >
         <ScrollView
-          style={{ width, height: width }}
-          minimumZoomScale={Math.min(1, width / sheetSize)}
-          maximumZoomScale={2}
-          bouncesZoom
-          centerContent
           nestedScrollEnabled
           directionalLockEnabled={false}
-          accessibilityLabel="Full sheet, pinch to zoom, drag to move"
+          showsVerticalScrollIndicator
+          bounces
+          style={Platform.OS === 'web' ? undefined : { maxHeight: viewportHeight }}
         >
-          {children}
+          <View
+            style={{
+              width: scaledSize,
+              height: scaledSize,
+              overflow: 'hidden',
+            }}
+          >
+            <View
+              style={{
+                width: sheetSize,
+                height: sheetSize,
+                transform: [
+                  { translateX: (scaledSize - sheetSize) / 2 },
+                  { translateY: (scaledSize - sheetSize) / 2 },
+                  { scale },
+                ],
+              }}
+            >
+              {children}
+            </View>
+          </View>
         </ScrollView>
-      ) : null}
-      <Text variant="caption" tone="muted">
-        Pinch to zoom out and see the whole sheet.
-      </Text>
+      </ScrollView>
     </View>
   );
 }

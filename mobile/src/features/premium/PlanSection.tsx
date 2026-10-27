@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { View } from 'react-native';
 
 import { usePlan } from '@/data/premium';
-import { messageFor } from '@/screens/queryState';
+import { messageFor, SkeletonLines } from '@/screens/queryState';
 import { useTheme } from '@/theme';
 import { Button, ListRow, Section, Text } from '@/ui';
 
@@ -20,9 +20,7 @@ export function PlanSection() {
   if (plan.isPending) {
     return (
       <Section title="Plan & billing">
-        <Text tone="muted" accessibilityRole="progressbar">
-          Loading your plan…
-        </Text>
+        <SkeletonLines label="Loading your plan" widths={['45%', '68%']} />
       </Section>
     );
   }

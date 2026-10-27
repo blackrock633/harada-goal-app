@@ -34,6 +34,9 @@ const TABLES = ['profiles', 'goals', 'outcomes', 'actions', 'routine_checks', 'd
 const FEATURE_TABLES = [
   'plans', 'plan_features', 'prices', 'subscriptions', 'billing_events', 'plan_grants', 'goal_templates',
   'challenge_enrollments', 'share_links', 'referrals', 'analytics_events', 'admins',
+  'social_profiles', 'goal_visibility', 'social_follows', 'social_blocks', 'social_posts',
+  'social_likes', 'social_comments', 'social_hidden_posts', 'social_reports', 'social_notifications',
+  'social_rate_limits',
 ];
 /** The public catalogue (plan names, features, active prices) is readable before sign-in, by design. */
 const ANON_READABLE_POLICIES = ['plan_features_read', 'plans_read', 'prices_read'];

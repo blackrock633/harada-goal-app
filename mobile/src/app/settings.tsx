@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useRef, useState } from 'react';
 import { View } from 'react-native';
 
@@ -31,7 +32,14 @@ export default function SettingsScreen() {
       <Section title="Account" ruled={false}>
         <View>
           <ListRow title="Name" meta={profile.data?.displayName ?? '—'} />
-          <ListRow title="Email" meta={email ?? '—'} divider={false} />
+          <ListRow title="Email" meta={email ?? '—'} />
+          <ListRow
+            title="Community & Profile"
+            meta="Follow people, share milestones, and manage public goals"
+            chevron
+            divider={false}
+            onPress={() => router.push('/community')}
+          />
         </View>
         <View style={{ alignItems: 'flex-start' }}>
           <Button title="Sign out" variant="secondary" loading={signingOut} onPress={handleSignOut} />

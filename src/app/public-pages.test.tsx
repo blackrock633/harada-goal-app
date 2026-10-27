@@ -287,3 +287,27 @@ describe('/pricing', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
+
+describe('/challenge', () => {
+  async function page() {
+    const { default: ChallengePage } = await import('./challenge/page');
+    return ChallengePage();
+  }
+
+  it('shows the Harada Pro upgrade prompt for signed-out or Free users', async () => {
+    await renderPage(page());
+    expect(screen.getByTestId('upgrade-prompt-challenge')).toHaveTextContent('Commit to 30 Days of Progress.');
+    expect(screen.getAllByRole('link', { name: 'See Harada Pro' })[0]!.getAttribute('href')).toBe('/pricing');
+  });
+
+  it('hides the upgrade prompt and links to Today for Pro users', async () => {
+    getCtx.mockResolvedValue({ userId: 'u', now: new Date(), today: '2026-10-26' });
+    rpc.mockResolvedValue({
+      data: { plan: 'pro', features: ['challenge'], maxActiveGoals: null, activeGoals: 1, overLimit: false, subscription: null, grant: null },
+      error: null,
+    });
+    await renderPage(page());
+    expect(screen.queryByTestId('upgrade-prompt-challenge')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Go to Today' }).getAttribute('href')).toBe('/today');
+  });
+});

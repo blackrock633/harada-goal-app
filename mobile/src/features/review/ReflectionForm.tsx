@@ -8,6 +8,7 @@ import { errorMessage, newClientId } from '@/data/errors';
 import type { ReviewMutations } from '@/data/mutations';
 import { useTheme } from '@/theme';
 import { Button, DateField, SegmentedControl, Text, TextField } from '@/ui';
+import { openUpgrade } from '../premium/routes';
 import { UpgradePrompt } from '../premium/UpgradePrompt';
 import { formatLocalDate } from '../today/format';
 import { QUESTIONS, answerOf, isFieldKey, questionsFor, type FieldKey, type QuestionKey } from './questions';
@@ -85,10 +86,9 @@ export function ReflectionForm({
   const clientId = useRef<string | null>(null);
   const inFlight = useRef(false);
 
-  // Editing keeps the entry's kind. On Free, a monthly entry or a full weekly review is edited
-  // through its three basic answers; the Pro answers are left exactly as they were (not sent).
+  // Editing keeps the entry's kind. Weekly and monthly reflections require Harada Pro.
   const questions = questionsFor(kind, advanced);
-  const locked = !editing && kind === 'monthly' && !advanced;
+  const locked = (kind === 'weekly' || kind === 'monthly') && !advanced;
   const value = (k: QuestionKey) => values[k] ?? '';
 
   async function submit() {
@@ -164,6 +164,7 @@ export function ReflectionForm({
       } else if (res.error.code === 'UPGRADE_REQUIRED') {
         // Kept as typed; the prompt explains why it can't be saved on this plan.
         setNeedsPro(true);
+        openUpgrade('advanced_reviews', 'Your answers are still here, but this review needs Harada Pro to save.');
       } else {
         const fe: Record<string, string> = {};
         for (const [k, v] of Object.entries(res.error.fieldErrors ?? {})) if (v[0]) fe[k] = v[0];
@@ -197,7 +198,17 @@ export function ReflectionForm({
           options={KINDS}
           value={kind}
           onChange={(k) => {
-            if (!saving) setKind(k);
+            if (!saving) {
+              setKind(k);
+              if ((k === 'weekly' || k === 'monthly') && !advanced) {
+                openUpgrade(
+                  'advanced_reviews',
+                  k === 'monthly'
+                    ? 'Monthly reviews are part of Harada Pro. Daily reflections stay free.'
+                    : 'Weekly reflections are part of Harada Pro. Daily reflections stay free.',
+                );
+              }
+            }
           }}
         />
       )}
@@ -209,7 +220,11 @@ export function ReflectionForm({
         <UpgradePrompt
           feature="advanced_reviews"
           trigger="gate"
-          note="Monthly reviews are part of Harada Pro. Daily and weekly reflections stay free."
+          note={
+            kind === 'monthly'
+              ? 'Monthly reviews are part of Harada Pro. Daily reflections stay free.'
+              : 'Weekly reflections are part of Harada Pro. Daily reflections stay free.'
+          }
         />
       ) : (
         <>

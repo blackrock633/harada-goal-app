@@ -26,6 +26,7 @@ export function Sheet({ visible, onClose, title, children, footer }: SheetProps)
   const { colors, radius, space } = useTheme();
   const insets = useSafeAreaInsets();
   const reduceMotion = useReduceMotion();
+  if (!visible) return null;
   return (
     <Modal
       testID="sheet-modal"

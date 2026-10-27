@@ -7,6 +7,7 @@ import { suggestActions, suggestAreas, track } from '@/data/premium';
 import { useTheme } from '@/theme';
 import { Badge, Button, Text } from '@/ui';
 
+import { openUpgrade } from './routes';
 import { UpgradePrompt } from './UpgradePrompt';
 
 export type SuggestedArea = { title: string; why: string };
@@ -80,6 +81,7 @@ export function PlanSuggestions(props: PlanSuggestionsProps) {
     if (inFlight.current) return;
     if (!enabled) {
       setLocked(true);
+      openUpgrade('ai_planning');
       return;
     }
     inFlight.current = true;
@@ -113,8 +115,10 @@ export function PlanSuggestions(props: PlanSuggestionsProps) {
   }
 
   function fail(e: AppError) {
-    if (e.code === 'UPGRADE_REQUIRED') setLocked(true);
-    else setError(suggestionErrorMessage(e));
+    if (e.code === 'UPGRADE_REQUIRED') {
+      setLocked(true);
+      openUpgrade('ai_planning');
+    } else setError(suggestionErrorMessage(e));
   }
 
   async function add(item: Item) {

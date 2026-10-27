@@ -184,6 +184,9 @@ describe('TypeScript use cases and SQL RPCs stay in step', () => {
     t = await createTestDeps();
     users.ts = await t.createUser({ displayName: 'Web' });
     users.rpc = await t.createUser({ displayName: 'Native' });
+    for (const u of [users.ts, users.rpc]) {
+      await t.client.query(`insert into plan_grants (user_id, plan_id, reason) values ($1, 'pro', 'test')`, [u]);
+    }
     const d = (await t.client.query<{ today: string; future: string }>(
       `select to_char(d, 'YYYY-MM-DD') as today, to_char(d + 1, 'YYYY-MM-DD') as future from (select (now() at time zone 'UTC')::date as d) x`,
     )).rows[0]!;

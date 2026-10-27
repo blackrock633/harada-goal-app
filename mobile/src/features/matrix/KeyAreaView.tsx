@@ -66,10 +66,20 @@ export function KeyAreaView({
   const pos = wrap(Number.isFinite(position) ? position : 0);
   const model = useMemo(() => buildMatrix(goal), [goal]);
   const area = model.areas[pos]!;
-  const outcome = area.outcome;
 
   const [overrides, setOverrides] = useState<Record<string, ActionDTO>>({});
   const [outcomeOverride, setOutcomeOverride] = useState<OutcomePatch | null>(null);
+  const outcome: OutcomeFieldsDTO | null = area.outcome ?? (outcomeOverride ? {
+    id: outcomeOverride.id,
+    goalId: goal.id,
+    title: outcomeOverride.title,
+    description: outcomeOverride.description,
+    measure: null,
+    position: pos,
+    archivedAt: null,
+    createdAt: '',
+    updatedAt: outcomeOverride.updatedAt,
+  } : null);
   const inFlight = useRef(new Set<string>());
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [editorOpen, setEditorOpen] = useState(false);
@@ -95,6 +105,7 @@ export function KeyAreaView({
   // A different key area is a different draft.
   useEffect(() => {
     setEditorOpen(false);
+    setOutcomeOverride(null);
     setPendingNav(null);
     setSheetOpen(false);
     claimedSlots.current.clear();
@@ -483,7 +494,7 @@ export function KeyAreaView({
       )}
 
       <KeyAreaEditor
-        key={`${resetKey}:${outcome ? 'edit' : 'create'}:${pos}`}
+        key={`${resetKey}:${pos}`}
         mode={
           outcome
             ? {
@@ -503,7 +514,8 @@ export function KeyAreaView({
         onDirtyChange={setAreaDirty}
         onReloadLatest={onReloadLatest}
         onDone={(o) => {
-          if (outcome) setOutcomeOverride({ id: o.id, title: o.title, description: o.description, updatedAt: o.updatedAt });
+          setOutcomeOverride({ id: o.id, title: o.title, description: o.description, updatedAt: o.updatedAt });
+          setEditorOpen(false);
           onChanged?.();
         }}
       />

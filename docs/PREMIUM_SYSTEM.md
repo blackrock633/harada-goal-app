@@ -34,17 +34,17 @@ How the premium system is built, what it enforces where, and what a deploy needs
 |---|---|---|---|
 | Goals | 1 active (drafts unlimited) | unlimited active | trigger `goals_active_limit` (HG402) |
 | Matrix 1 + 8 + 64, daily tracking, basic progress | yes | yes | — |
-| Daily and weekly reflection (3 questions) | yes | yes | — |
-| Full weekly review (7 questions), monthly review | — | yes | trigger `reflections_review_entitlement` |
+| Daily reflection (3 questions) | yes | yes | — |
+| Weekly and monthly reviews | — | yes | trigger `reflections_review_entitlement`, RLS `reflections_select_own` |
 | Progress history and trends | — | yes | `goal_history()` |
 | Templates | 4 free | + 5 premium | `get_template()` |
 | Planning suggestions (Claude) | — | yes, 20/day | `ai-plan` Edge Function |
-| 30-Day Challenge, progress cards, share links | yes | yes | — |
+| 30-Day Challenge | — | yes | `join_challenge()`, `leave_challenge()`, `complete_challenge()`, `challenge_summary()`, RLS `challenge_select_own` |
+| Progress cards, share links | yes | yes (`challenge` card is Pro) | `build_card()` |
 
-**Downgrades never touch data.** Goals, reviews and history stay readable and editable. A user over the Free
+**Downgrades never touch data.** Goals, weekly/monthly reviews and challenge enrollments stay stored and untouched. A user over the Free
 limit sees `overLimit: true` and picks one goal with `choose_active_goal()`; the others are archived (not
-deleted) and can be restored as active again with Pro. Original answers of an advanced review stay editable;
-only new advanced answers or new monthly reviews need Pro.
+deleted) and can be restored as active again with Pro. Existing weekly/monthly reflections and challenge enrollments remain intact and become accessible again when the user upgrades to Pro.
 
 **Subscription states** (`plan_of`):
 

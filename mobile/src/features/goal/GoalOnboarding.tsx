@@ -8,6 +8,7 @@ import { Badge, Button, DateField, ListRow, Section, Text, TextField } from '@/u
 import type { GoalFieldsDTO, TemplateSummaryDTO } from '@shared/application/dto';
 import type { Result } from '@shared/application/result';
 
+import { openUpgrade } from '../premium/routes';
 import { UpgradePrompt } from '../premium/UpgradePrompt';
 import { DetailsFields } from './GoalFields';
 import {
@@ -142,8 +143,13 @@ export function GoalOnboarding({
 
   async function chooseTemplate(id: string) {
     if (inFlight.current) return;
-    if (templates.find((t) => t.id === id)?.locked) {
+    const picked = templates.find((t) => t.id === id);
+    const tplNote = picked
+      ? `“${picked.name}” is one of the Harada Pro examples. The free examples and a blank goal work on any plan.`
+      : undefined;
+    if (picked?.locked) {
       setLockedTemplate(id);
+      openUpgrade('premium_templates', tplNote);
       return;
     }
     inFlight.current = true;
@@ -159,6 +165,7 @@ export function GoalOnboarding({
         setStep('done');
       } else if (res.error.code === 'UPGRADE_REQUIRED') {
         setLockedTemplate(id);
+        openUpgrade('premium_templates', tplNote);
       } else {
         setFormError(errorMessage(res.error));
       }

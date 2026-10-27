@@ -1,4 +1,4 @@
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { MIN_TOUCH, useTheme } from '@/theme';
 
@@ -46,7 +46,15 @@ export function CheckCircle({ checked, accessibilityLabel, onPress, busy = false
         ]}
       >
         {busy ? (
-          <ActivityIndicator size="small" color={checked ? colors.accentInk : colors.accent} />
+          <View
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: shape === 'circle' ? 5 : 2,
+              backgroundColor: checked ? colors.accentInk : colors.accent,
+              opacity: 0.5,
+            }}
+          />
         ) : checked ? (
           <Icon name="check" size={15} color={colors.accentInk} weight="semibold" />
         ) : null}

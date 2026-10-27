@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -7,7 +6,7 @@ import { useTheme } from '@/theme';
 import { Button, Text } from '@/ui';
 
 import { FEATURE_COPY } from './copy';
-import { upgradeHref } from './routes';
+import { openUpgrade } from './routes';
 
 /** Features whose passive prompt the user dismissed with "Not now" in this app session. */
 const dismissed = new Set<Feature>();
@@ -74,7 +73,7 @@ export function UpgradePrompt({ feature, note, trigger = 'passive', onDismiss, t
           variant="secondary"
           size="compact"
           accessibilityLabel={`See Harada Pro: ${copy.title}`}
-          onPress={() => router.push(upgradeHref(feature))}
+          onPress={() => openUpgrade(feature, note)}
         />
         {trigger === 'gate' ? null : (
           <Button

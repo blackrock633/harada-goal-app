@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { formatPrice, track, usePlan, usePrices, type Feature, type PlanInfo, type Price } from '@/data/premium';
-import { ErrorScreen, LoadingScreen } from '@/screens/queryState';
+import { ErrorScreen, LoadingScreen, SkeletonLines } from '@/screens/queryState';
 import { useTheme } from '@/theme';
 import { Button, Icon, Screen, Section, SegmentedControl, Text } from '@/ui';
 
@@ -12,6 +12,8 @@ import { FEATURE_COPY, FREE_INCLUDES, PRO_INCLUDES, RENEWAL_TERMS, VALUE_PROPOSI
 export type UpgradeViewProps = {
   /** The feature that brought the user here (from ?feature=), shown first. */
   feature?: Feature;
+  /** Optional contextual note explaining why the user was brought here. */
+  note?: string;
 };
 
 const INTERVALS = [
@@ -23,7 +25,7 @@ const INTERVALS = [
  * What Harada Pro is, what it costs and how it renews, or, for a Pro user, the plan's state and the
  * way to Billing. Prices come from the database; the plan shown is always the server's.
  */
-export function UpgradeView({ feature }: UpgradeViewProps) {
+export function UpgradeView({ feature, note }: UpgradeViewProps) {
   const plan = usePlan();
 
   useEffect(() => {
@@ -35,12 +37,12 @@ export function UpgradeView({ feature }: UpgradeViewProps) {
 
   return (
     <Screen refreshing={plan.isRefetching} onRefresh={() => void plan.refetch()}>
-      {plan.data.plan === 'pro' ? <ProStatus plan={plan.data} /> : <FreeOffer feature={feature} />}
+      {plan.data.plan === 'pro' ? <ProStatus plan={plan.data} /> : <FreeOffer feature={feature} note={note} />}
     </Screen>
   );
 }
 
-function FreeOffer({ feature }: { feature?: Feature }) {
+function FreeOffer({ feature, note }: { feature?: Feature; note?: string }) {
   const { space } = useTheme();
   const focus = feature ? FEATURE_COPY[feature] : null;
   return (
@@ -55,6 +57,11 @@ function FreeOffer({ feature }: { feature?: Feature }) {
 
       {focus ? (
         <View style={{ gap: space[1] }} testID="upgrade-focus">
+          {note ? (
+            <Text variant="meta" tone="muted">
+              {note}
+            </Text>
+          ) : null}
           <Text variant="headline">{focus.title}</Text>
           <Text variant="meta" tone="muted">
             {focus.body}
@@ -84,9 +91,7 @@ function Purchase() {
   if (prices.isPending) {
     return (
       <Section title="Price">
-        <Text tone="muted" accessibilityRole="progressbar">
-          Loading prices…
-        </Text>
+        <SkeletonLines label="Loading prices" widths={['55%', '75%']} />
       </Section>
     );
   }

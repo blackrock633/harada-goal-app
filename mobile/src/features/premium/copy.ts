@@ -11,6 +11,7 @@ export const FEATURES: readonly Feature[] = [
   'premium_templates',
   'ai_planning',
   'insights',
+  'challenge',
 ];
 
 /** A `feature` search param, or undefined when it is missing or not a known feature. */
@@ -22,16 +23,16 @@ export function parseFeature(raw: string | string[] | undefined): Feature | unde
 /** What a feature does for the user, used wherever that feature is locked. */
 export const FEATURE_COPY: Record<Feature, { title: string; body: string }> = {
   multiple_goals: {
-    title: 'Work on more than one goal',
-    body: 'Free includes one active goal. Harada Pro lets you keep several goals active at once, each with its own matrix.',
+    title: 'More Goals. More Possibilities.',
+    body: 'Work toward multiple ambitions simultaneously. Unlock multiple active goals with Harada Pro.',
   },
   progress_history: {
     title: 'See your weeks side by side',
     body: 'Harada Pro shows your activity week by week: tasks due and done, routine days checked and reflections, over up to 26 weeks.',
   },
   advanced_reviews: {
-    title: 'The full weekly and monthly review',
-    body: 'Harada Pro adds a seven-question weekly review and a monthly review that asks whether your strategy still fits.',
+    title: 'Reflect. Learn. Improve.',
+    body: "Weekly reflections help you evaluate your progress, identify what's holding you back, and adjust your approach. Unlock weekly reflections with Harada Pro.",
   },
   premium_templates: {
     title: 'More example plans',
@@ -45,6 +46,10 @@ export const FEATURE_COPY: Record<Feature, { title: string; body: string }> = {
     title: 'Completion by key area',
     body: 'Harada Pro shows how far each key area’s tasks have come, next to your weekly history.',
   },
+  challenge: {
+    title: 'Commit to 30 Days of Progress.',
+    body: 'Turn your goal into a structured daily practice with the Harada 30-Day Challenge. Unlock the full challenge with Harada Pro.',
+  },
 };
 
 export const VALUE_PROPOSITION = 'Harada helps you turn ambitious goals into structured plans and consistent action.';
@@ -53,15 +58,15 @@ export const FREE_INCLUDES = [
   'One active goal',
   'The full matrix: 8 key areas, 64 actions',
   'Daily tracking of tasks and routines',
-  'Weekly reflection',
+  'Daily reflection',
   'A basic progress card to share',
-  'The 30-Day Challenge',
 ];
 
 export const PRO_INCLUDES: { feature: Feature | null; text: string }[] = [
   { feature: 'multiple_goals', text: 'Multiple active goals' },
+  { feature: 'advanced_reviews', text: 'Weekly and monthly reviews' },
+  { feature: 'challenge', text: 'The 30-Day Challenge' },
   { feature: 'progress_history', text: 'Progress history and trends' },
-  { feature: 'advanced_reviews', text: 'Full weekly and monthly reviews' },
   { feature: 'premium_templates', text: 'Premium example plans' },
   { feature: 'ai_planning', text: 'Planning suggestions for key areas and actions' },
   { feature: 'insights', text: 'Deeper insights by key area' },

@@ -7,17 +7,18 @@ import { annualBreakdown, annualDifference, formatMoney } from './money';
 export const FEATURE_LABELS: Record<string, string> = {
   multiple_goals: 'Several active goals at once',
   progress_history: 'Full progress history for every goal',
-  advanced_reviews: 'Monthly reviews and the full weekly review',
+  advanced_reviews: 'Weekly and monthly reviews',
   premium_templates: 'Premium starter templates',
   ai_planning: 'Optional suggested plan drafts (you accept each item yourself)',
   insights: 'Insights on how your execution is going',
+  challenge: 'The 30-Day Challenge',
 };
 
 /** What every account gets. Describes the product, not prices, so it is safe to show without the database. */
 const FREE_BASICS = [
   'The full Harada sheet: one goal, 8 key areas, 64 actions',
   'Today list of due tasks and routines',
-  'Weekly reflection',
+  'Daily reflection',
   'Keep as many draft and archived goals as you like',
 ];
 

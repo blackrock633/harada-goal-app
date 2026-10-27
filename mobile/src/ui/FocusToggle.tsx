@@ -1,4 +1,4 @@
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { MIN_TOUCH, useTheme } from '@/theme';
 
@@ -53,7 +53,15 @@ export function FocusToggle({ on, onPress, actionTitle, busy = false, disabled =
       ]}
       >
       {busy ? (
-        <ActivityIndicator size="small" color={fg} />
+        <View
+          style={{
+            width: 12,
+            height: 12,
+            borderRadius: 6,
+            backgroundColor: fg,
+            opacity: 0.45,
+          }}
+        />
       ) : (
         // On shows a check, off shows the sun: the state reads by shape, not only by fill.
         <Icon name={on ? 'focusOn' : 'focus'} size={15} color={fg} weight={on ? 'semibold' : 'medium'} />
