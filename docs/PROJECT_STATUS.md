@@ -1,280 +1,212 @@
 # Project Status Report
 
 **Project:** Harada Goal App
-**Last updated:** 2026-10-20, evening (data/backend orchestrator; data/supabase at the native write/read path)
-**Overall status:** Active. Engineering gates are mostly green; the release is blocked on verification environments.
-**Development stage:** MVP / release candidate for R1. Not deployed and not yet run against a real Supabase project.
+**Last updated:** 2026-10-26 (refreshed by the session that built the premium system; previous version: 2026-10-20)
+**Current commit:** `fc58b29` (branch `security/hardening`; local `main` was fast-forwarded to it by another session)
+**Overall status:** Active, **at risk**: the backend is live, but the product has never been seen on a device or run against real Stripe or Claude, and a second session's uncommitted work in the main checkout (§6) has not been committed or deployed.
+**Development stage:** pre-release. A Supabase project is live; the mobile app runs only in Expo Go; nothing is deployed to the web or the stores.
 
-> **How to read this.** This file summarises the project's state and links to the authoritative detail.
-> `QA_REPORT.md` is the independent QA ledger: per-gate results, open defects and journey evidence. When the
-> two disagree on a test result, QA_REPORT wins. Status words: **VERIFIED** (executed and passed),
-> **FAILED**, **NOT TESTED**, **BLOCKED**, **Implemented, unverified**.
+> **How to read this.** Status words: **VERIFIED** (executed and passed, evidence given), **Implemented, unverified**,
+> **NOT TESTED**, **BLOCKED**. `QA_REPORT.md` (independent QA ledger) was last updated **2026-10-20** and predates the
+> native app, the security audit and the premium system; where it disagrees with this file on anything after that
+> date, this file is newer. Detail lives in: `PREMIUM_SYSTEM.md` (premium), `SECURITY_AUDIT.md` /
+> `SECURITY_ARCHITECTURE.md` / `SECURITY_TESTING.md` (security), `DECISIONS.md`, `SUPABASE_SETUP.md`.
 
 ## 1. Executive summary
 
-- **Platform change (user decision, 2026-10-20):** the client is being rebuilt as a native **Expo/React Native** app (`mobile/`, frontend session). The device talks to Supabase directly: reads under RLS, writes only through Postgres RPCs (D-017). The Next.js web app still exists and still works.
-- **What the app is:** a Harada Method app for phones.
-  - One goal with its purpose, and 8 key areas (outcomes) of 8 actions each (the 1 + 8 + 64 matrix).
-  - Daily execution: complete tasks, check routines, pick up to 5 "today's focus" actions.
-  - Reflections and progress tracking.
-- **Data and security:**
-  - All data lives in Supabase Postgres under row-level security (RLS). Auth is Supabase Auth.
-  - Every server query runs as the signed-in user, so the database itself enforces ownership.
-- **Verified locally:** the core workflow works end to end.
-  - Setup: dev auth, embedded Postgres (PGlite) with the real migrations and RLS, Chrome phone emulation.
-  - Covered: create a goal, build the matrix, reload without loss, complete and reopen, see separate progress metrics, two-user isolation, honest errors, retries without duplicates.
-  - Evidence: 490 unit, integration and RLS tests pass; the journey results are in §9.
-- **Biggest gaps (not code defects):**
-  - **Supabase:** never run against a real Supabase project; none is configured.
-  - **Devices:** never run on a real phone or in real iOS Safari.
-  - **WebKit:** journeys are still unstable in WebKit (Safari's engine) on the latest code.
-- **Immediate priority:** the user provides the Supabase staging project (they said they will); then `db push`, deploy `delete-account`, and run QA's RLS/RPC suites and the native journeys against it. The web e2e run on main remains open for the web app.
+- **What it is:** a Harada Method app: one goal, 8 key areas, 64 actions, daily execution and reviews. The client is a native **Expo / React Native** app (`mobile/`, user decision 2026-10-20) talking straight to Supabase (reads under RLS, writes only through Postgres RPCs, D-017). A Next.js web app (`src/`) still exists and now also serves the public pages.
+- **Since the last report (2026-10-20):**
+  - The native app was built and wired to real data; a security audit was run and fixed (2026-10-24/25).
+  - A real Supabase project (`krmuohxsbmshtgebklme`) is linked, with all 13 migrations applied and the `delete-account` function deployed.
+  - The premium system (Free/Pro plans, Stripe billing, 30-Day Challenge, sharing, referrals, analytics, admin metrics, AI planning suggestions) was built and committed in `fc58b29`.
+  - Four UI fixes were requested and made: logo-only login, centred key-area names, distinct daily/weekly reviews, pinch-zoom on the full sheet.
+- **Verified today (2026-10-26):** web typecheck clean; 739 vitest tests passed (15 skipped, 55 files); mobile typecheck clean; 389 jest tests passed (28 suites). Evidence in §9.
+- **Biggest gaps:**
+  1. **Nothing premium has run for real:** no Stripe keys, no Anthropic key, and the billing/AI Edge Functions are not deployed.
+  2. **No screen has been checked on a device or in a browser** since the premium work. The user saw Today fail ("Something went wrong") before the migrations were applied; whether it loads now has not been confirmed.
+  3. **Parallel uncommitted work** in the main checkout (§6): Pro-only challenge and weekly reviews (user-approved 2026-10-26, now a new migration, not yet deployed) and a large community/social feature (not reviewed by this session).
+  4. The older gaps stand: web e2e not re-run since 2026-10-20; the cross-user suite against the live project has not been run.
+- **Immediate priority:** commit the main-checkout work in reviewable pieces and deploy migration `20261026170000` (note: `db push` would also apply the unreviewed social migration `…160000`), then confirm the app loads on the phone and run one Stripe test-mode purchase end to end.
 
 ## 2. Project objectives
 
-- **Primary objective:** help a person reach one long-term goal with the Harada Method.
-  - Plan: purpose, 8 key areas, 64 actions.
-  - Execute: daily tasks and routines.
-  - Review: reflections, and progress that does not overstate achievement.
-- **Intended users:** individuals on their phone. A desktop layout is secondary.
-- **Primary acceptance criterion (QA_REPORT §1):**
-  - Create a goal, build and edit the matrix, and save securely to Supabase.
-  - Reopen without losing data, complete daily actions, and see accurate progress on a real mobile device.
-- **Constraints set by the user and the backend brief:**
-  - Supabase with RLS on every table; security enforced in the database or on the trusted server, never by hidden UI.
-  - No service-role key on any client. Never destructively migrate user data.
-  - Matrix initialisation is atomic and idempotent; empty positions are absent rows.
-  - Planning completeness, action completion and goal attainment are kept separate.
-- **Platform:** decided 2026-10-20: native Expo/React Native (`mobile/`), confirmed by the user directly. The Next.js web app remains. Data path: D-017.
+- **Primary objective:** help a person reach one long-term goal with the Harada Method (plan, execute, review), with progress that never overstates achievement.
+- **Intended users:** individuals on their phone. Whether coaches or teachers take part is undecided; the app is single-user.
+- **Core requirements:** `mobile/PRODUCT.md`, `HARADA_SPEC.md`. Planning completeness, action completion and goal attainment stay separate metrics (D-015). No gamification; AI only as optional, labelled suggestions accepted item by item.
+- **Business model (brief of 2026-10-26):** freemium. Free must be genuinely useful: one active goal, the full matrix, daily tracking and daily reflection, basic progress card. Pro ($7.99/month or $49.99/year, configurable) adds multiple goals, history, weekly and monthly reviews, the 30-Day Challenge, premium templates, AI suggestions. Downgrades never delete data. **User decision 2026-10-26:** weekly reviews and the 30-Day Challenge are Pro (the brief had them Free); the `challenge` card is Pro too.
+- **Definition of success:** a user can plan, act, review, upgrade when useful and share progress; security is enforced by the database (D-017); nothing claims success it has not verified.
+- **Constraints:** RLS on every table; no service-role key on any client; no destructive migrations; a new migration for every schema change (applied migration files must not be edited).
 
 ## 3. Current state
 
 | Area | Status | Evidence |
 |---|---|---|
-| Schema, constraints, RLS, exact grants | VERIFIED locally (PGlite + auth shim); NOT TESTED on Supabase | `src/infrastructure/db/rls.rls.test.ts`, `tests/integration/rls-adversarial.test.ts` (81 + 1 accepted) |
-| Matrix 1 + 8 + 64, empty slots, atomic template create, idempotent creates | VERIFIED | `matrix-structure`, `data-integrity` tests; e2e #2, #6b |
-| Progress metrics (planning / tasks / routines / attainment / pace) | VERIFIED | `progress-metrics` (11), domain tests, e2e #4 |
-| Today: complete/reopen, routine checks, daily focus (≤ 5) | VERIFIED in Chrome | e2e #3; `daily-focus-repo` + application tests |
-| Reflections, export, settings, account deletion | Implemented. Use cases tested; account deletion via Supabase Admin API NOT TESTED | `application.test.ts` |
-| Auth: sign-up / sign-in / sign-out / redirects | VERIFIED with dev auth; Supabase Auth NOT TESTED | e2e #8, #10 |
-| Session ends mid-edit (AUTH-01 fix) | **VERIFIED in Chrome**; WebKit inconclusive (failed in setup) | §9 |
-| Typing before hydration (HYD-01 fix, 682ee11) | Implemented, unverified by QA | e2e #11 not yet rerun on main |
-| Reflection date label (A11Y-01 fix, e3cb1ab) | Implemented, unverified by QA | e2e #12 not yet rerun |
-| Real Supabase project, real phone / iOS Safari | NOT TESTED (no project configured; no device or simulator) | — |
+| Core app (goal, matrix, today, reviews) on PGlite + shim | VERIFIED | vitest 739 passed; RLS and adversarial suites; mobile jest 389 |
+| Live Supabase schema | VERIFIED: `supabase migration list --linked` shows all 13 local migrations applied remotely (2026-10-26) | CLI output |
+| Live Supabase security probes | VERIFIED 2026-10-25 (before the premium migrations); partly re-probed 2026-10-26 as anon only | `SECURITY_TESTING.md`; see §9 |
+| Cross-user suite against the live project (`tests/staging`) | NOT TESTED (skips without `STAGING_DATABASE_URL`) | `SECURITY_TESTING.md` |
+| Premium database layer (plans, entitlements, reviews, templates, history, challenge, sharing, referrals, analytics, admin) | VERIFIED on PGlite; applied to live; behaviour on live not exercised as a signed-in user | `tests/integration/premium-features.test.ts` (20 tests) |
+| Stripe checkout, portal, webhook | Implemented, unverified: logic tested with mocks (13 tests); **not deployed, no keys, price ids unset** | `billing-functions.test.ts` |
+| AI planning (`ai-plan`) | Implemented, unverified: handler tested with a mocked model (6 tests); **not deployed, no API key**; the call to the Claude API has never been made | `ai-plan-function.test.ts` |
+| Mobile screens (upgrade, plan/billing, goal switcher, reviews, history, suggestions, challenge, share) | Implemented, unverified on a device: tests pass, nothing seen on screen | mobile jest |
+| Web pages (landing, pricing, challenge, `/s/<token>`, billing, `/admin`) | Implemented; `next build` passes; checked with `curl` and unit tests only, never in a browser | web agent report; build |
+| iOS app on the phone | Runs through Expo Go over Wi-Fi (works); no EAS build verified | user screenshots |
+| Web deployment / `EXPO_PUBLIC_WEB_URL` | NOT DONE | — |
 
 ## 4. Architecture and technology
 
-Details: `ARCHITECTURE.md`, `DATABASE.md`, `API_CONTRACTS.md`, `DOMAIN_MODEL.md`, `SUPABASE_SETUP.md`.
-
-- **Stack:**
-  - Next.js 15 (App Router, server components, server actions), React 19, strict TypeScript, Tailwind.
-  - Node 20. The Supabase packages are pinned (`@supabase/ssr` 0.12.0, `@supabase/supabase-js` 2.109.0), because newer releases need Node 22.
-- **Layers** (enforced by ESLint import boundaries):
-  - `src/domain`: pure rules, metrics and the Today derivation.
-  - `src/application`: use cases, queries, ports, Zod schemas, DTOs, `Result` errors.
-  - `src/infrastructure`: Drizzle repositories, auth gateways, container.
-  - `src/app` (routes and server actions) and `src/ui` (features and primitives).
-- **Data:**
-  - The schema of record is `supabase/migrations/*.sql`: 8 tables, RLS on all, exact grants, a routine-only trigger.
-  - `db/schema.ts` is a Drizzle mirror, guarded by `schema-sync.test.ts`.
-  - `UnitOfWork.run(userId, fn)` runs each transaction as the `authenticated` role with the user's JWT `sub`, so RLS also governs server queries.
-- **Auth:**
-  - Supabase Auth via `@supabase/ssr` cookies. `requireCtx()` gets the user from `auth.getUser()` (verified server-side).
-  - Middleware only refreshes sessions and redirects page loads (GET/HEAD); it is not the authorisation boundary.
-  - Dev gateway: only with `AUTH_PROVIDER=dev`, NODE_ENV development or test, and a local database URL.
-- **Environments:**
-
-  | Environment | Database | Auth |
-  |---|---|---|
-  | Local dev | PGlite with `supabase/tests/auth-shim.sql` | dev auth |
-  | Tests | in-memory PGlite with shim and all migrations | `FakeAuthGateway` (mocked) |
-  | Production (planned) | Supabase pooler | Supabase Auth |
-
-- **Integrations:** Supabase only. No AI features (D-006). No email provider other than Supabase's (SMTP is configured in its dashboard).
-- **Deployment:** none yet. `next build` passes (1f5d2fb, 2026-10-20; 14 dynamic routes + middleware, built without Supabase env vars).
-  - **Deploys need the four Supabase env vars** (`SUPABASE_SETUP.md` §2), set before `next build`.
-  - Without them the app fails closed by design: `/signin` returns 500 "Supabase is not configured" under `next start` (observed by the frontend session).
-- **Testing:**
-  - Vitest: domain, application, infrastructure and `tests/integration`.
-  - Playwright: `tests/e2e`, Chrome plus WebKit with an iPhone user agent.
-  - QA runner: `tests/qa-regress.sh` (count guard, snapshot mode).
+- **Stack:** Expo SDK 58 / React Native 0.88, Expo Router, TanStack Query, supabase-js (mobile); Next.js 15, React 19, TypeScript, Tailwind, Drizzle (web); Supabase Postgres + Auth; Deno Edge Functions. Node 24 is the default (`nvm alias default 24`); Expo 58 needs ≥ 22.13.
+- **Layers (web):** `src/domain` → `src/application` → `src/infrastructure` → `src/app` / `src/ui`, enforced by ESLint. Mobile imports `src/domain` and `src/application` via `@shared/*`.
+- **Authorization:** the database. The device is untrusted; RLS, exact grants, a write-guard trigger and SECURITY INVOKER RPCs (D-017). Premium rules are triggers or SECURITY DEFINER functions resolving the caller from `auth.uid()` (D-018), so the web server's direct-write path is covered too.
+- **Entitlements:** `harada_private.plan_of(user)` decides Free/Pro from `subscriptions` (written only by the Stripe webhook, service role) and `plan_grants` (operator comps). Limits, features and prices are rows.
+- **Edge Functions:** `delete-account` (deployed, v2), `billing-checkout`, `billing-portal`, `stripe-webhook`, `ai-plan` (written, not deployed). Pure handlers live in `supabase/functions/_shared/` and are unit-tested under Node; the Deno wiring (`index.ts`, `*-deps.ts`) has **never been executed**.
+- **Environments:** local = PGlite + auth shim; tests = in-memory PGlite; live = one Supabase project (no separate staging project exists, so "run the staging suite against staging" has no target).
+- **Delivery:** CI workflows `ci.yml`, `security.yml`; EAS project linked and EAS Update configured (06cc578); no EAS build or update is verified. `fc58b29` is not pushed (`origin/security/hardening` is one commit behind).
+- **Details:** `ARCHITECTURE.md`, `PREMIUM_SYSTEM.md`, `SECURITY_ARCHITECTURE.md`.
 
 ## 5. Completed work
 
-The data/backend items were each verified by QA re-runs recorded in QA_REPORT §4.
-
-| Item | Where | Verification | Limits |
+| Item | Where | Verification | Known limits |
 |---|---|---|---|
-| Supabase schema + RLS + exact grants (QA H1–H3) | `supabase/migrations/2026101912…`, `…13…`, `…14…` | RLS suite 63, adversarial 81 + 1 accepted, TRUNCATE denied | Shim only; `\dp public.*` on a real project pending |
-| Supabase Auth gateway, dev gateway allow-list (H2), auth error mapping | `src/infrastructure/auth/*` | unit tests; e2e #8/#10 (dev auth) | GoTrue behaviour only mocked |
-| Repositories, use cases and queries for every API_CONTRACTS operation | `src/application`, `src/infrastructure/db/repositories` | application + repo tests | — |
-| Idempotent creates (client uuid), optimistic concurrency (`expectedUpdatedAt`) | schemas + use cases | tests (row count = 1, `CONFLICT`); e2e #6b | `expectedUpdatedAt` optional (M-08b) |
-| Separate metrics (D-015; QA P-1..P-6) | `src/domain/progress.ts` | `progress-metrics` 11/11, e2e #4 | Attainment needs outcome measures; else "Not measured yet" |
-| Daily focus, ≤ 5 per day (D-016) | `daily_focus` migration, `addToToday/removeFromToday`, Today UI | repo + RLS tests; UI suite | — |
-| DB errors mapped to typed results (`CONFLICT`, `NOT_FOUND`, `UNAVAILABLE`) | `src/infrastructure/db/pg-errors.ts` | `pg-errors.test.ts`, data-integrity 3a–3c | — |
-| AUTH-01: server actions answer `UNAUTHENTICATED` instead of being redirected | `src/middleware.ts` (20e7ecc, on main via b595460) | e2e #9 Chrome passed (run 20261020-133527) | WebKit not confirmed |
-| UI: all routes, matrix editor, Today, review, settings, onboarding | `src/ui`, `src/app` | UI suite 121/121 (frontend report); e2e #1–#8 | AUTH-02 open |
-| UI fixes U-01..03, U-08, HYD-01 (682ee11), A11Y-01 (e3cb1ab) | `src/ui` | U-*: QA VERIFIED; HYD-01/A11Y-01: frontend-tested only | Pending QA rerun |
+| Supabase schema, RLS, exact grants, write-path RPCs, security hardening | `supabase/migrations/20261019…`–`20261025…` | RLS 82, adversarial and cross-user suites; live probes 2026-10-25 | Cross-user suite not run on live |
+| Security audit and fixes (1 critical fixed; GitHub-settings item open) | `SECURITY_AUDIT.md` | regression tests per fix | Audit predates the premium work (§8) |
+| Native app wired to real data | `mobile/` | jest 389 | Never on a real project beyond Expo Go checks by the user |
+| Premium database layer (6 migrations: plans, reviews, templates, history, challenge, sharing, referrals, analytics, admin) | `supabase/migrations/20261026*` | `premium-features.test.ts` 20; structure tests pinned to explicit allow-lists | As Free/Pro user on live: not exercised |
+| Billing handlers (checkout, portal, signed idempotent webhook) | `supabase/functions/_shared/billing.ts` | 13 tests incl. real HMAC signatures | Not deployed; Stripe never called |
+| AI planning handler (Pro, 20/day, validated output) | `_shared/ai-plan.ts` | 6 tests | Not deployed; never called the API; `fallbacks: "default"` is behind a `@ts-expect-error` (SDK typing) |
+| Mobile premium UI (upgrade, plan, reviews, history, suggestions, templates, over-limit chooser) | `mobile/src/features/premium`, `review`, `goal`, `matrix` | jest, 25 + 8 + 4 + … tests | Not seen on a device |
+| Mobile challenge and sharing UI | `mobile/src/features/challenge`, `sharing` | jest 31 | Image export sizes unverified; no web export |
+| Web pages (landing, pricing, challenge, share, billing, admin) | `src/app/*`, `src/ui/features/marketing` | 61 new vitest tests; `next build` | Not viewed in a browser |
+| UI fixes (login, key-area centring, daily/weekly prompts, pinch-zoom) | `mobile/src/…` | jest; **pinch-zoom never tried on a device** | iOS only; Android scrolls sideways |
+| Archived-goals-only restore path on the goal tab | `mobile/src/app/(tabs)/goal/index.tsx` | existing suite passes; no dedicated test | — |
 
 ## 6. Work in progress
 
-| Task | Owner | State | Done when |
+| Task | Current state | Remaining | Blockers |
 |---|---|---|---|
-| QA re-verification of main (AUTH-01 in WebKit, HYD-01 #11, A11Y-01 #12) | QA | Running on main `682ee11`+. Two e2e runs at 13:35–13:37 were both killed (exit 143, cause unknown) | One complete e2e run on current main, recorded in QA_REPORT §2 |
-| Status/docs consistency | data orchestrator | This report; ARCHITECTURE and D-016 refreshed (33d951e) | `ACCEPTANCE_CRITERIA.md` auth rows updated by QA |
+| **Uncommitted work in the main checkout (`/Users/noahdockery/harada-goal-app`, branch `main`)** | `main` was fast-forwarded to `fc58b29` by another session, which left ~65 modified and ~14 untracked files. Two bodies of work: (1) **Pro gating** of the challenge and weekly/monthly reviews (mobile + web screens, tests); (2) a **community/social feature** (`social_*` tables, `20261026160000_social_community.sql` of 2165 lines, `/community`, `/u/…`, `src/application/social.ts`, …). | Review and commit in pieces; deploy; verify on a device | Owner's intent; Pro gating needs deploy approval |
+| **Pro gating migration (this session, 2026-10-26)** | The other session had edited five *already-applied* migrations. Per the user ("keep the edits") the change was re-expressed as **`supabase/migrations/20261026170000_gate_challenge_and_weekly_reviews.sql`** (generated from the edited bodies: new `challenge` feature, weekly/monthly reflections and challenge enrollments hidden by RLS and refused by RPCs without Pro, `challenge` share cards gated) and the five applied files were restored to their committed content. A backup of the pre-change diff is in the session scratchpad (`main-checkout-uncommitted.patch`). **Uncommitted; not applied to the live project.** | Commit; deploy (below); verify as Free and Pro user on live | Deploy approval |
+
+Verified on the main checkout's combined tree after the change: `vitest` **764 passed, 15 skipped** (57 files + 1 skipped); root and mobile `tsc` clean; mobile `jest` **392 passed** (28 suites). The tests apply the migrations in order from scratch, i.e. the same path the live project takes (original files, then `…160000`, then `…170000`).
+
+**Deploy caveat:** `supabase db push` applies every pending migration, so it would also apply the community migration (`…160000`, 2165 lines, which this session has not reviewed). Review it first, or move it aside for the push.
 
 ## 7. Outstanding tasks
 
-| P | Task | Reason | Depends on | Acceptance | Status |
+| P | Task | Why | Depends on | Acceptance | Status |
 |---|---|---|---|---|---|
-| P1 | A complete e2e run on current main, both engines | No full run on main since HYD-01/AUTH-01 merged | — | #1–#12 + mobile shell pass, or each failure filed | In progress (QA) |
-| P1 | Diagnose WebKit e2e failures #3 and #9 | Failed on b2a34e2 (see §8). Possibly fixed by HYD-01 | rerun above | Pass on WebKit, or a filed defect with cause | Planned |
-| P1 | Create and link a Supabase project; `supabase db push` | Primary acceptance criterion requires real Supabase | **User** (account, project, secrets) | Migrations applied; `\dp public.*` shows exact grants | Blocked on user |
-| P1 | Run the journeys against hosted Supabase (real GoTrue, session expiry) | Auth flows only mocked; expiry NOT TESTED | previous row | Journeys #1–#10 pass with `AUTH_PROVIDER` unset | Blocked |
-| P1 | Real phone or iOS Safari check | Acceptance says "real mobile device" | **User** (device or deployed URL) | Journeys 1–4 manually on a phone | Blocked on user |
-| P2 | Deployment target + preview deploy | Build passes locally; no host chosen | user (host choice), Supabase env vars | Deployed preview over HTTPS with all four Supabase env vars | Planned |
-| P2 | AUTH-02: sign-in action + return-to after session ends | Dead end after expiry | — | Link with `?next=`; e2e | Open (frontend) |
-| P2 | M-08b: make `expectedUpdatedAt` required on updates | Clients that omit it get last-write-wins | UI editors already send it | Schema requires it; tests | Proposed |
-| P2 | Update `ACCEPTANCE_CRITERIA.md` B-AUTH / AC-AUTH-01 | Still describe argon2 + `hga_session` | — | Rows describe Supabase Auth | Open (QA's file) |
-| P3 | Audit use cases for owner-scoped load before `ReflectionRepo.update/deleteById`, `GoalEventRepo` | QA pending audit; RLS already backstops | — | Audit noted in QA_REPORT | Planned |
-| P3 | `exportData` N+1, events for routine checks/reflections, per-process rate limiter | Known limitations | — | — | Proposed |
+| **P0** | Review and deploy the Pro-gating migration `20261026170000`; decide what to do with the community migration `…160000` that `db push` will carry along | Without the deploy the live database still serves the challenge and weekly reviews to Free users | User approval to push; review of `…160000` | `supabase migration list --linked` shows 15 applied; as a Free user `join_challenge` → HG402 and weekly reflections are hidden; as Pro both work | Migration written and tested locally; **not deployed** |
+| **P1** | Confirm the app loads on the phone after the migrations (Today, Goal, Settings, Challenge) | The user's last observation was a failure caused by the then-missing schema | User | Screenshots/confirmation; any error investigated | Waiting on user |
+| P1 | Stripe test-mode purchase end to end | The only real proof of billing; today only mocks | Stripe account + test keys; price ids on `prices`; functions deployed | Checkout → webhook → `get_my_plan` says pro → portal cancel → free at period end | Blocked on user (keys) |
+| P1 | Deploy `billing-checkout`, `billing-portal`, `stripe-webhook`, `ai-plan`; set secrets | Premium UI says "not available yet" until then | Keys, `APP_URL`, `ANTHROPIC_API_KEY` | `supabase functions list` shows 5 ACTIVE; one successful call each | Blocked on user (keys) |
+| P1 | Run the live cross-user suite (`tests/staging`) | New tables/RPCs were never attacked on the real project | A **non-production** project (none exists) | 15 tests pass | Needs a staging project |
+| P1 | Look at every new screen on a device and in a browser (375 pt, dark mode, 200 % text) | Layout was reviewed in code only | Phone/browser | Defects filed or none found | Open |
+| P2 | Decide App Store position on web checkout | Apple rules vary by storefront | User | Written decision in `DECISIONS.md` | Open |
+| P2 | Deploy the web app; set `EXPO_PUBLIC_WEB_URL` | Public share/invite links and referral are hidden without it | Host choice | `/s/<token>` reachable over HTTPS | Open |
+| P2 | Extend the security audit to the premium surface; push `fc58b29` so CI runs | CI and audit have not seen it | Push approval | CI green; audit appendix | Open |
+| P2 | Pin `npm:@anthropic-ai/sdk` in `ai-plan/index.ts`; confirm `fallbacks: "default"` against the live API | Unpinned import; typing suppressed | Anthropic key | One real call succeeds | Open |
+| P2 | Re-run web Playwright e2e on current code | Last run 2026-10-20; web changed heavily | — | #1–#13 per engine | Open |
+| P3 | Export (`exportData`) to include challenges and share links | Incomplete data export | — | Export lists them | Proposed |
+| P3 | Web: choose-active-goal after downgrade; copy-link button; image export on web | Parity gaps | — | — | Proposed |
 
 ## 8. Known bugs and limitations
 
-- **WebKit e2e #9 and #3 failures** (run 20261020-133527, on the b2a34e2 snapshot, which predates HYD-01). Status: open, cause unconfirmed.
-  - **#9:** `page.goto /matrix/0` was "interrupted by another navigation to /today" during setup, so the session check never ran.
-  - **#3:** the "Reopen" button never appeared after Complete, and an alert was shown.
-  - **Hypothesis (unconfirmed):** pre-hydration interaction (HYD-01) or setup timing in WebKit under `next dev`.
-- **AUTH-02 (P3):** after a session ends there is no sign-in action and no return-to.
-- **H4 (accepted):** `goal_events.subject_id` is an untrusted label and may name another user's id. It is never used for authorisation or joins.
-- **By design:**
-  - Rate limiting is in-memory and per process.
-  - Email confirmation, password reset and SMTP are configured in the Supabase dashboard (not done yet).
-  - Attainment is "Not measured yet" until outcome measures are set.
-- **Two e2e runs killed with exit 143** at about 13:35–13:37 (mine and QA's ran concurrently). Cause unknown; possibly contention or an external kill.
+- **Premium behaviour on the live database as a signed-in user is unexercised.** Only anon probes were run after migration (prices readable; `get_my_plan` and the challenge table refuse anon).
+- **Billing and AI never reached their providers.** Checkout refuses until `prices.stripe_price_id` is set; AI answers "not available" without a key.
+- **Rate limiting is in-memory per process** (web share page, tracking, sign-in): ineffective across restarts or instances.
+- **Web checkout needs JavaScript** (CSP `form-action 'self'`).
+- **Mobile:** card image export fails on web (optional `html2canvas` peer missing); no copy-to-clipboard; tapping Edit on a past reflection fills the form but does not scroll to it; restoring an archived goal on Free may be refused with the upgrade prompt (intended).
+- **Web:** no choose-active-goal after a downgrade (told to use the app).
+- **Pinch-zoom** on the full sheet is iOS only; unverified on a device.
+- **Older, unresolved from 2026-10-20 (not re-run since):** WebKit e2e #3 and #9 failures (cause unconfirmed), AUTH-02 (no return-to after session expiry), H4 (accepted: `goal_events.subject_id` is an untrusted label).
+- **Security audit open items:** GitHub repository settings (needs the repo owner); sign-in throttling design (`SECURITY_AUDIT.md`).
 
 ## 9. Testing and verification
 
-| Gate | Result | Run |
-|---|---|---|
-| typecheck | VERIFIED, 0 errors | b2a34e2 (qa-regress 20261020-133527); 5fe2f97 (QA 133725); 33d951e (`npx tsc --noEmit`, merged as 5f02816) |
-| lint | FAILED on b2a34e2 (5 errors, all in one-off generator scripts); **PASS on QA's 5fe2f97** after b858b2f deleted them (0 errors, 5 `no-console` warnings) | same |
-| vitest | **VERIFIED 489 + 1 expected-fail of 490** (36 files) on b2a34e2; 492 + 1 of 493 on QA's 5fe2f97 (adds journey-helper tests) | count guard passed |
-| routes (`next dev`) | VERIFIED `/` 307, `/styleguide` 200, `/api/health` 200 | both runs |
-| routes (`next start`, prod) | `/styleguide` 404 (281a5ab: `(dev)` layout calls `notFound()` in production), `/today` 307, `/api/health` 200; `/signin` 500 without Supabase env (intended fail-closed) | reported by the frontend session on main; not re-run by me |
-| e2e Chrome, b2a34e2 | **#1–#10 + 6b VERIFIED (incl. #9 AUTH-01)**, mobile shell 15/15; #11 FAILED (expected: snapshot predates HYD-01) | 20261020-133527 |
-| e2e WebKit, b2a34e2 | #1, 2, 4–8, 6b, 10 VERIFIED; **#3, #9 FAILED** (§8); #11 FAILED (pre-HYD-01); run killed before completion | same |
-| e2e on current main | NOT TESTED to completion | QA rerunning |
-| UI suite | 121/121 (reported by the frontend session; part of the vitest total) | — |
-| production build (`npx next build`) | **VERIFIED**, exit 0; 0 lint errors, 5 `no-console` warnings in `logger.ts` | 1f5d2fb (= main 682ee11 + data/supabase 33d951e) |
-| Supabase (hosted), real device | NOT TESTED | — |
+Run 2026-10-26 on `fc58b29` (clean working tree in the `security` worktree):
 
-- **Reproduce:**
-  - Regression run on a checkout's committed HEAD: `SNAPSHOT=1 bash tests/qa-regress.sh <checkout>`.
-  - Quick gates: `npm run typecheck && npx eslint . && npx vitest run`.
-- **What is mocked versus real:**
-  - Mocked: Supabase Auth (GoTrue) in every test.
-  - Real: Postgres engine, constraints, triggers and RLS (PGlite with the shim emulating `auth.uid()` and the roles).
+| Check | Command | Result |
+|---|---|---|
+| Web typecheck | `npx tsc --noEmit` | 0 errors |
+| Web/DB/integration tests | `npx vitest run` | **739 passed, 15 skipped**, 55 files passed + 1 skipped |
+| Mobile typecheck | `cd mobile && npx tsc --noEmit` | 0 errors |
+| Mobile tests | `cd mobile && npx jest` | **389 passed**, 28 suites |
+| Web lint | `npx eslint .` | 0 errors, 3 `no-console` warnings (pre-existing, `logger.ts`) |
+| Web production build | `NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy npx next build` | succeeds |
+| Live migrations | `supabase migration list --linked` | 13 of 13 applied remotely |
+| Live functions | `supabase functions list` | only `delete-account` (v2, ACTIVE) |
+| Live API as anon | `curl` to `/rest/v1/...` | `prices` readable; `reflections`, `challenge_enrollments` and `get_my_plan` refuse anon (42501) |
+
+(Lint and build were run earlier the same day, before the last mobile-only edit; the web code has not changed since.)
+
+**Not run:** Playwright e2e; `tests/staging`; any Maestro/device flow; Stripe; the Claude API; the Deno wiring of any Edge Function; the dirty main checkout. **Mocked:** Supabase Auth in every test; Stripe and the model in the function tests. **Real:** Postgres engine, constraints, triggers, RLS (PGlite).
 
 ## 10. Technical debt
 
 | Issue | Consequence | P | Remediation |
 |---|---|---|---|
-| Drizzle mirror of the SQL schema | Drift risk | P3 | Guarded by `schema-sync.test.ts`; switch to generated types once a project is linked |
-| `drizzle-kit` devDependency unused (script removed in 33d951e) | Keeps a dev-only `esbuild` advisory | P3 | Remove the dependency in a lockfile-touching change |
-| In-memory rate limiter | Ineffective across instances | P2 before multi-instance deploy | Supabase Auth rate limits + a shared store |
-| `exportData` N+1 per goal | Slow export for many goals | P3 | Batch queries |
-| `.data/` in main checkout is 501 MB (ENV-01) | Disk use; may contain the dev DB | P3 | User prunes `.data/test-*` (not `.data/dev`) |
+| Domain rules exist in TypeScript and in SQL | Drift risk (the parity test found 3 bugs) | P2 | `rpc-parity.rls.test.ts`; long-term, web writes through the RPCs |
+| Deno wiring never executed | A broken `index.ts` would only show at deploy | P2 | Deploy to the live project behind keys; smoke each function |
+| `fallbacks` typing suppressed; SDK unpinned in `ai-plan` | Breaks silently on an SDK change | P2 | Pin; remove the suppression when typings catch up |
+| In-memory rate limiter | See §8 | P2 | Shared store before multi-instance deploy |
+| Free templates duplicated (TS file and DB rows) | Drift | P3 | `templates-sync` test guards it |
+| Mobile has no ESLint config | Lint not enforced there | P3 | Add config |
 
 ## 11. Architecture and technical decisions
 
-Recorded in `DECISIONS.md`. The ones future work most often touches:
-
-- **D-013:** Supabase Postgres and Auth; RLS is the ownership boundary; server queries run as `authenticated`. Final. Revisit only if leaving Supabase.
-- **D-014:** matrix positions 0..7; empty cells are absent rows; client uuid for idempotency. Final.
-- **D-015:** planning, execution and attainment are separate metrics, and pace uses attainment only. Final. A user-designated success-criteria measure was declined for R1 (product decision P-5).
-- **D-016 (revised 2026-10-19):** daily focus is an explicit table (≤ 5 per date); the rest of Today is derived.
-- **Package pins:** `@supabase/*` stay pinned while the project is on Node 20. Revisit on Node 22.
+`DECISIONS.md`. Current: **D-013** Supabase + RLS as the boundary; **D-014** matrix positions; **D-015** separate metrics; **D-016** daily focus; **D-017** device reads under RLS, writes through RPCs; **D-018** Harada Pro: Stripe on the web, entitlements in Postgres (2026-10-26).
+- **Tension to resolve:** D-006 removed "the AI assistant" and `PRODUCT.md` says "no AI". The planning suggestions are optional, labelled "Suggested" and accepted item by item, which is the exception `PRODUCT.md` allows, but D-006 was never amended. Provisional until the user confirms.
+- **New rule recorded here:** applied migrations are immutable; changes go in a new file.
 
 ## 12. Risks and dependencies
 
 | Risk | Impact | Likelihood | Mitigation | Status |
 |---|---|---|---|---|
-| Hosted Supabase differs from the shim (grants, GoTrue, pooler) | Auth or RLS surprises at launch | Medium | `SUPABASE_SETUP.md` checklist, `\dp public.*`, journeys against the project | Open; needs user |
-| Supabase default privileges re-granted by a dashboard action or a future migration | TRUNCATE etc. reopened for app roles | Low | Exact-grant migration; the privilege test fails on drift; check `\dp` after each push | Mitigated locally |
-| WebKit/iOS behaviour (hydration, navigation) | Broken flows for iPhone users | Medium | WebKit journeys; real-device pass | Open |
-| Service-role key leakage | Full DB access | Low | Server-only env var; never `NEXT_PUBLIC_`; used only for account deletion | Mitigated |
-| Native vs web unconfirmed | Rework if a native app is expected | Unknown | Ask the user (§15). The data model and RLS already suit a supabase-js mobile client | Open |
-| Multiple agents on one repo | Lost or overwritten work | Medium | Worktrees per role; merges to main by the frontend session; explicit-path commits | Managed |
+| Repo and live DB diverge | Wrong behaviour in production that tests do not show | Was high (applied migrations had been edited); addressed 2026-10-26 by restoring them and adding `…170000` | Keep applied migrations immutable; check `migration list` before each push | Mitigated; confirm after deploy |
+| Large unreviewed community feature in the working tree | A 2165-line migration and new public surface reach production via `db push` | Medium | Review before pushing; `rls-adversarial` allow-lists already updated by its author | Open |
+| Two sessions editing one repository | Lost or contradictory work | Happening now | One owner per checkout; say who is working where | Open |
+| Premium never exercised end to end | First real purchase fails | Medium | Stripe test-mode run | Open |
+| Only one Supabase project (no staging) | Attack/QA suites would run against production data | Medium | Create a staging project before running `tests/staging` | Open |
+| App Store rejection for web payments | iOS release blocked | Medium | Policy decision (§15) | Open |
+| Hosted Supabase differs from the shim (GoTrue, pooler) | Auth surprises | Low–Medium | `tests/staging`, journeys against live | Partly mitigated (probes 2026-10-25) |
+| Secrets (Stripe, Anthropic, service role) | Leakage | Low | Edge-function secrets only; scan of the `fc58b29` diff found none | Mitigated |
 
 ## 13. Potential future improvements (not approved)
 
-See the QA_REPORT §7 roadmap. Candidates:
-
-- **Reminders for routines (R2):** web push or email; needs a notification permission flow.
-- **Progress history (R2):** built from `goal_events` and routine checks.
-- **Milestones (R2):** need a schema change.
-- **AI-assisted decomposition:** not in R1. It sends goal text off the device, so it needs consent, and AI suggestions must be stored separately from the user's own entries.
+Reminders and notifications; Android parity for pinch-zoom; a coach/teacher view (undecided); in-app purchase via StoreKit if web checkout is not acceptable; a shared-store rate limiter; stronger analytics views. Each needs a decision before work.
 
 ## 14. Recommended next steps
 
-1. **One complete e2e run on current main, Chrome and WebKit (QA).**
-   - Why first: three fixes (AUTH-01, HYD-01, A11Y-01) are merged but not confirmed together, and the last two runs were killed before finishing.
-   - Avoid running two suites at once.
-   - Done when: QA_REPORT §2 shows #1–#12 per engine on the main SHA.
-2. **Triage the WebKit #3/#9 failures** if they persist after HYD-01. Done when: they pass, or a defect is filed with a confirmed cause.
-3. **User: create a Supabase project** and follow `SUPABASE_SETUP.md` (link, `db push`, env vars, auth URLs, SMTP).
-   - Then confirm the grants with `\dp public.*` and run the journeys with real Supabase Auth.
-   - Done when: QA records hosted-Supabase journey results.
-4. **A preview deployment** (the build already passes), then test on a real phone (journeys 1–4 manually).
-5. **AUTH-02, then M-08b.**
+1. **Commit the main-checkout work in reviewable pieces and deploy `…170000` (P0).** Review the community migration first because `db push` carries it. *Done when:* §7 P0 acceptance passes and the repo's applied migrations still equal the live versions.
+2. **Confirm the phone loads the app** and report anything broken. *Done when:* Today, My Goal, Settings and the challenge open without errors.
+3. **Stripe test mode + Anthropic key → deploy the four functions → one purchase.** *Done when:* §7 P1 acceptance passes.
+4. **Create a staging Supabase project** and run `tests/staging`.
+5. **Look at the new screens** on the device and in a browser, then push the branch so CI runs.
 
-### Native data path (D-017), data/backend status 2026-10-20
-
-| Item | Status | Evidence |
-|---|---|---|
-| 30 write RPCs + guard trigger (`20261020120000_rpc_write_path.sql`) | VERIFIED on PGlite + shim; NOT TESTED on Supabase | `rpc.rls.test.ts` 43/43: guard, catalog, every RPC, user B with A's ids → NOT_FOUND and nothing changed |
-| Shared read model + row mappers (`read-model.ts`, `rows.ts`) | VERIFIED on PGlite | `native-read.rls.test.ts` 2/2: rows → DTOs equal the web server's `getGoalDetail`/`getToday` |
-| `delete-account` Edge Function | Handler VERIFIED with mocked Auth (5/5); Deno wiring NOT TESTED (no Deno locally) | `delete-account-function.test.ts` |
-| QA suite updates for D-017 | Done by QA (qa/system bb91e6f); staging suite written (0be12fc, skips without creds) | vitest at 4d26535: 548 passed, 15 skipped, 0 failed |
-| QA SEC-01: write-path flag outlived the RPC within a transaction (P2, own rows only) | Fixed in edab51d (flag spans one RPC; generic conflict errors; input caps) | regression test in `rpc.rls.test.ts` |
-| GraphQL surface | Open: user must disable `pg_graphql` (dashboard), see SUPABASE_SETUP | QA staging check fails until done (intended) |
-| Risk: domain rules duplicated in TS and SQL | Mitigated by a drift guard: `rpc-parity.rls.test.ts` runs one 68-step script (29 ops, 24 expected failures) through both paths and compares every outcome and the final rows/events. On first run it found 3 real bugs, all fixed 2026-10-21: web `updateGoal` blanked omitted purpose quadrants (schema defaults); web `updateAction` crashed (INTERNAL) on `schedule: null` for a routine; RPC `restore_action` skipped the archived-key-area check for live actions | still two implementations until the web app writes through the RPCs |
+Step 1 comes first: until it is deployed, the live database serves Free users what the app now says is Pro.
 
 ## 15. Decisions or input needed (user)
 
-- **Supabase project:** create one and provide the project ref and keys via env, never in chat or git. Steps 3–4 are blocked without it.
-- ~~Platform~~: decided, native Expo (2026-10-20).
-- **Web app's future:** keep the Next.js web app alongside the native app, or retire it. If kept, it should eventually write through the same RPCs so domain rules live in one place (D-017 consequence).
-- **Hosting target** for the Next.js app (e.g. Vercel), needed for a device test over HTTPS.
+- ~~Pro-only challenge and weekly reviews~~: **decided 2026-10-26, keep the edits** (Pro). Still open: **may `db push` carry the community migration `…160000`**, or should it be reviewed/held back first? Recommendation: review it before any push.
+- **Stripe account and test keys; Anthropic API key** (set as Edge Function secrets, never in chat or git).
+- **App Store policy for web checkout** (US external link vs in-app purchase elsewhere).
+- **Confirm AI suggestions are acceptable** under the "no AI" product rule, so D-006 can be amended.
+- **A staging Supabase project** (needed for the attack suites) and a **web hosting target**.
+- **Push `fc58b29` to GitHub?** (CI and the audit have not seen it.)
 
-## 16. Recent changes (2026-10-19 → 2026-10-20)
+## 16. Recent changes (2026-10-21 → 2026-10-26)
 
-- **Stack:** Supabase migration completed and merged to main: schema, RLS, grants hardening, Supabase Auth, daily focus.
-- **Defects fixed:**
-  - On main: AUTH-01 (20e7ecc → b595460), HYD-01 (682ee11), A11Y-01 (e3cb1ab).
-  - Generator scripts removed with user approval (b858b2f).
-- **This refresh (33d951e → 5f02816):**
-  - `db:migrate` is PGlite-only and points to `supabase db push`; the stale `db:generate` was removed.
-  - ARCHITECTURE describes Supabase Auth and RLS; D-016 matches `daily_focus`.
-- **ui/integration** is superseded; the frontend now works on main.
-- **Corrected claims from the previous version of this file:**
-  - Phases 3–5 are no longer "not started".
-  - The test count is 490, not 242.
-  - "Daily priorities are not stored" is wrong; see D-016.
+- Native app wired to data; redesign around the printed sheet; pull-to-refresh.
+- Security audit 2026-10-24/25, fixes and CI; live Supabase linked, `db push`, `delete-account` v2 deployed, probes recorded; EAS linked.
+- 2026-10-26: UI fixes (logo-only login, centred key areas, daily vs weekly prompts, pinch-zoom); premium system built by this session and three UI agents; migrations `20261026120000`–`150000` applied to the live project after the app failed with "Something went wrong" on a missing column; all committed as `fc58b29`.
+- Corrections to the previous version of this file: "never run against a real Supabase project" and "490 tests" were out of date; the web app is no longer the only client; AI is no longer absent (see §11).
+- Discovered: `main` fast-forwarded and ~65 uncommitted edits plus a community/social feature in the main checkout (§6).
+- Decided by the user: keep the Pro-only challenge/weekly-review edits. Done by this session: `20261026170000_gate_challenge_and_weekly_reviews.sql` added, the five applied migrations restored, full suites re-run (§6).
 
 ## 17. Status confidence and unknowns
 
-- **Verified directly by me** (data orchestrator, 2026-10-20):
-  - typecheck, vitest 490 and Chrome e2e #1–#10 on b2a34e2;
-  - typecheck and eslint on 33d951e;
-  - the `db:migrate` refusal for a postgres URL (exit 1);
-  - `next build` on 1f5d2fb (exit 0).
-- **From QA_REPORT:**
-  - the RLS and adversarial results, H1–H4, U-* fixes and journey evidence;
-  - the 5fe2f97 gates (lint 0 errors, vitest 493).
-- **Reported by peers, not re-run by me:** UI suite 121/121, HYD-01 and A11Y-01 fixes, and the route list.
-- **Unknown:**
-  - behaviour on hosted Supabase and on iOS Safari or a real device;
-  - the cause of the exit-143 kills;
-  - the WebKit #3/#9 root cause.
+- **Verified directly by this session today:** §9 results; the migration and function lists; the anon probes; the diff of the main-checkout migration edits (read in full).
+- **Supported by tests only (mocked or PGlite):** all premium behaviour, billing logic, AI handler, mobile and web screens.
+- **From documents, not re-checked:** the security audit findings and the 2026-10-25 live probes; QA's 2026-10-20 e2e results.
+- **Verified by this session on the main checkout's combined tree (2026-10-26, after the migration change):** vitest 764 passed / 15 skipped, `tsc` clean (root and mobile), jest 392 passed. The community feature and the Pro-gated screens were **not** reviewed or seen, only tested by their author's tests.
+- **Unknown:** whether the phone app now loads; the author's intent for the community feature; behaviour of Stripe, Claude, the Deno functions and the screens on real devices; WebKit e2e state; GitHub CI result for `fc58b29`.
