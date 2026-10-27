@@ -216,7 +216,7 @@ describe('cross-user isolation: user A attacking user B', () => {
 
     it('a create replaying B id is a conflict, not an overwrite', async () => {
       expect(await code('create_goal', () => ({ id: b.goal, title: 'pwned' }))).toBe('HG409');
-      expect(await code('add_reflection', () => ({ id: b.reflection, goalId: a.goal, date: today, kind: 'weekly', wentWell: 'x' }))).toBe('HG409');
+      expect(await code('add_reflection', () => ({ id: b.reflection, goalId: a.goal, date: today, kind: 'daily', wentWell: 'x' }))).toBe('HG409');
     });
   });
 

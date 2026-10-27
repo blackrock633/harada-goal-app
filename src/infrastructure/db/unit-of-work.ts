@@ -11,6 +11,7 @@ import { RoutineCheckRepoImpl } from './repositories/routine-check-repo';
 import { DailyFocusRepoImpl } from './repositories/daily-focus-repo';
 import { ReflectionRepoImpl } from './repositories/reflection-repo';
 import { GoalEventRepoImpl } from './repositories/goal-event-repo';
+import { SocialRepoImpl } from './repositories/social-repo';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -40,6 +41,7 @@ export function createUnitOfWork(db: Database): UnitOfWork {
             focus: new DailyFocusRepoImpl(tx),
             reflections: new ReflectionRepoImpl(tx),
             events: new GoalEventRepoImpl(tx),
+            social: new SocialRepoImpl(tx),
           };
           return fn(repos);
         });

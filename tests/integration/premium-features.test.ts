@@ -97,11 +97,35 @@ describe('premium features (database)', () => {
       expect(await code(as(c, 'anon', (tx) => tx.query(`select stripe_price_id from prices`)))).toBe('42501');
     });
 
-    it('Free: activating a second goal over RPC raises HG402 and leaves it a draft', async () => {
-      const { user } = await userWithGoal();
+    it('Free: activating a second goal over RPC raises HG402 and leaves it a draft; completing or archiving the first allows activating the second', async () => {
+      const { user, goal } = await userWithGoal();
       const g2 = await call<{ id: string }>(c, { sub: user }, 'create_goal', { title: 'Second', outcomes: [{ title: 'A', actions: [{ title: 'T', kind: 'task' }] }] });
       expect(await code(call(c, { sub: user }, 'activate_goal', { goalId: g2.id }))).toBe('HG402');
       expect((await c.query<{ status: string }>(`select status from goals where id = $1`, [g2.id])).rows[0]!.status).toBe('draft');
+
+      // Completing the first active goal frees the single active-goal slot on Free.
+      await call(c, { sub: user }, 'mark_goal_achieved', { goalId: goal });
+      await call(c, { sub: user }, 'activate_goal', { goalId: g2.id });
+      expect((await c.query<{ status: string }>(`select status from goals where id = $1`, [g2.id])).rows[0]!.status).toBe('active');
+      // Reopening the achieved goal while g2 is active is also blocked by the limit.
+      expect(await code(call(c, { sub: user }, 'reopen_goal', { goalId: goal }))).toBe('HG402');
+
+      // Archiving g2 allows reopening the first goal.
+      await call(c, { sub: user }, 'archive_goal', { goalId: g2.id });
+      await call(c, { sub: user }, 'reopen_goal', { goalId: goal });
+      expect((await c.query<{ status: string }>(`select status from goals where id = $1`, [goal])).rows[0]!.status).toBe('active');
+    });
+
+    it('Free: concurrent activation attempts allow at most one active goal', async () => {
+      const { user, goal } = await userWithGoal(false);
+      const g2 = await call<{ id: string }>(c, { sub: user }, 'create_goal', { title: 'Second', outcomes: [{ title: 'A', actions: [{ title: 'T', kind: 'task' }] }] });
+      const results = await Promise.all([
+        code(call(c, { sub: user }, 'activate_goal', { goalId: goal })),
+        code(call(c, { sub: user }, 'activate_goal', { goalId: g2.id })),
+      ]);
+      expect(results.sort()).toEqual(['HG402', undefined]);
+      const activeCount = (await c.query<{ n: number }>(`select count(*)::int as n from goals where owner_id = $1 and status = 'active'`, [user])).rows[0]!.n;
+      expect(activeCount).toBe(1);
     });
 
     it('Pro via a Stripe subscription: several active goals; the plan reports the subscription without Stripe ids', async () => {
@@ -185,25 +209,41 @@ describe('premium features (database)', () => {
   });
 
   describe('advanced reviews', () => {
-    it('Free: daily and weekly reflections; monthly and advanced answers need Pro; existing ones stay editable', async () => {
+    it('Free: only daily reflections are allowed; weekly and monthly require Pro; downgrade preserves data and re-upgrade restores access', async () => {
       const { user, goal } = await userWithGoal();
-      await call(c, { sub: user }, 'add_reflection', { goalId: goal, date: today, kind: 'weekly', wentWell: 'ok' });
+      const daily = await call<{ id: string }>(c, { sub: user }, 'add_reflection', { goalId: goal, date: today, kind: 'daily', wentWell: 'ok' });
+      expect(await code(call(c, { sub: user }, 'add_reflection', { goalId: goal, date: today, kind: 'weekly', wentWell: 'ok' }))).toBe('HG402');
       expect(await code(call(c, { sub: user }, 'add_reflection', { goalId: goal, date: today, kind: 'monthly', wentWell: 'ok' }))).toBe('HG402');
       expect(await code(call(c, { sub: user }, 'add_reflection', { goalId: goal, date: today, kind: 'weekly', answers: { learned: 'x' } }))).toBe('HG402');
+      expect(await code(call(c, { sub: user }, 'update_reflection', { reflectionId: daily.id, kind: 'weekly' }))).toBe('HG402');
 
       await grantPro(user);
       const r = await call<{ id: string; answers: Record<string, string> }>(c, { sub: user }, 'add_reflection', {
         goalId: goal, date: today, kind: 'weekly', wentWell: 'Shipped', answers: { intended: ' Plan ', learned: 'Lesson', priorities: '' },
       });
       expect(r.answers).toEqual({ intended: 'Plan', learned: 'Lesson' });
+      const editedPro = await call<{ went_well: string; answers: Record<string, string> }>(c, { sub: user }, 'update_reflection', {
+        reflectionId: r.id, wentWell: 'Shipped v2',
+      });
+      expect(editedPro).toMatchObject({ went_well: 'Shipped v2', answers: { intended: 'Plan', learned: 'Lesson' } });
       await call(c, { sub: user }, 'add_reflection', { goalId: goal, date: today, kind: 'monthly', answers: { strategy: 'Keep going' } });
       expect(await code(call(c, { sub: user }, 'add_reflection', { goalId: goal, date: today, kind: 'weekly', answers: { secret: 'x' } }))).toBe('HG400');
 
       await c.query(`delete from plan_grants where user_id = $1`, [user]);
-      // After the downgrade: the advanced review is still there and its original answers can be edited.
-      const edited = await call<{ went_well: string; answers: Record<string, string> }>(c, { sub: user }, 'update_reflection', { reflectionId: r.id, wentWell: 'Shipped v2' });
-      expect(edited).toMatchObject({ went_well: 'Shipped v2', answers: { intended: 'Plan', learned: 'Lesson' } });
+      // After downgrade: Free cannot edit or delete weekly/monthly reflections, and SELECT returns only daily reflections.
+      expect(await code(call(c, { sub: user }, 'update_reflection', { reflectionId: r.id, wentWell: 'Tamper' }))).toBe('HG402');
       expect(await code(call(c, { sub: user }, 'update_reflection', { reflectionId: r.id, answers: { learned: 'changed' } }))).toBe('HG402');
+      expect(await code(call(c, { sub: user }, 'delete_reflection', { reflectionId: r.id }))).toBe('HG402');
+      const freeVisible = await as(c, { sub: user }, async (tx) => (await tx.query<{ kind: string }>(`select kind from public.reflections where goal_id = $1`, [goal])).rows);
+      expect(freeVisible.map((x) => x.kind)).toEqual(['daily']);
+
+      // All weekly and monthly reflections remain intact in the database and become accessible again on re-upgrade.
+      const storedCount = (await c.query<{ n: number }>(`select count(*)::int as n from reflections where goal_id = $1`, [goal])).rows[0]!.n;
+      expect(storedCount).toBe(3);
+      await grantPro(user);
+      const proVisible = await as(c, { sub: user }, async (tx) => (await tx.query<{ id: string; kind: string; went_well: string }>(`select id, kind, went_well from public.reflections where goal_id = $1`, [goal])).rows);
+      expect(proVisible.map((x) => x.kind).sort()).toEqual(['daily', 'monthly', 'weekly']);
+      expect(proVisible.find((x) => x.id === r.id)?.went_well).toBe('Shipped v2');
     });
   });
 
@@ -255,9 +295,12 @@ describe('premium features (database)', () => {
   });
 
   describe('30-day challenge', () => {
-    it('join needs a commitment and an active own goal; a double tap is idempotent; a second challenge is refused', async () => {
+    it('requires Pro; join needs a commitment and an active own goal; a double tap is idempotent; a second challenge is refused', async () => {
       const { user, goal } = await userWithGoal();
       const id = uuid();
+      // Free users cannot enroll in a challenge.
+      expect(await code(call(c, { sub: user }, 'join_challenge', { id, goalId: goal, committed: true }))).toBe('HG402');
+      await grantPro(user);
       expect(await code(call(c, { sub: user }, 'join_challenge', { id, goalId: goal }))).toBe('HG400');
       const e1 = await call<{ id: string; start_date: string; end_date: string; status: string }>(c, { sub: user }, 'join_challenge', { id, goalId: goal, committed: true });
       const e2 = await call<{ id: string }>(c, { sub: user }, 'join_challenge', { id, goalId: goal, committed: true });
@@ -268,13 +311,16 @@ describe('premium features (database)', () => {
       expect((await c.query(`select 1 from challenge_enrollments where user_id = $1`, [user])).rows).toHaveLength(1);
 
       const other = await userWithGoal();
+      await grantPro(other.user);
       expect(await code(call(c, { sub: other.user }, 'join_challenge', { id: uuid(), goalId: goal, committed: true }))).toBe('HG404');
       const draft = await userWithGoal(false);
+      await grantPro(draft.user);
       expect(await code(call(c, { sub: draft.user }, 'join_challenge', { id: uuid(), goalId: draft.goal, committed: true }))).toBe('HG422');
     });
 
-    it('the summary reflects stored activity only; completion waits for day 30; leaving keeps the record', async () => {
+    it('the summary reflects stored activity only; completion waits for day 30; downgrade preserves enrollment and re-upgrade restores access', async () => {
       const { user, goal } = await userWithGoal();
+      await grantPro(user);
       const id = uuid();
       await call(c, { sub: user }, 'join_challenge', { id, goalId: goal, committed: true });
       let s = await call<Record<string, unknown>>(c, { sub: user }, 'challenge_summary', id);
@@ -287,7 +333,23 @@ describe('premium features (database)', () => {
       expect((s.milestones as { title: string }[]).map((m) => m.title)).toEqual(['Task one']);
       expect(await code(call(c, { sub: user }, 'complete_challenge', { enrollmentId: id }))).toBe('HG422');
       const other = await t.createUser();
+      await grantPro(other);
       expect(await code(call(c, { sub: other }, 'challenge_summary', id))).toBe('HG404');
+
+      // Downgrade: enrollment and progress remain intact, but challenge endpoints and selects are gated.
+      await c.query(`delete from plan_grants where user_id = $1`, [user]);
+      expect(await code(call(c, { sub: user }, 'challenge_summary', id))).toBe('HG402');
+      expect(await code(call(c, { sub: user }, 'complete_challenge', { enrollmentId: id }))).toBe('HG402');
+      expect(await code(call(c, { sub: user }, 'leave_challenge', { enrollmentId: id }))).toBe('HG402');
+      expect(await code(call(c, { sub: user }, 'preview_share_card', { goalId: goal, kind: 'challenge', show: { stats: true } }))).toBe('HG402');
+      const freeEnrollments = await as(c, { sub: user }, async (tx) => (await tx.query(`select * from public.challenge_enrollments`)).rows);
+      expect(freeEnrollments).toEqual([]);
+      expect((await c.query(`select 1 from challenge_enrollments where id = $1`, [id])).rows).toHaveLength(1);
+
+      // Re-upgrade restores full access to the existing enrollment and progress.
+      await grantPro(user);
+      const proEnrollments = await as(c, { sub: user }, async (tx) => (await tx.query(`select * from public.challenge_enrollments`)).rows);
+      expect(proEnrollments).toHaveLength(1);
 
       // Day 30 reached (moved back in time): completion records the user's words.
       await c.query(`update challenge_enrollments set start_date = start_date - 29, end_date = end_date - 29 where id = $1`, [id]);

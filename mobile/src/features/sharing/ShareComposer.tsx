@@ -5,6 +5,7 @@ import { captureRef } from 'react-native-view-shot';
 
 import { errorMessage } from '@/data/errors';
 import { previewCard, track, webOrigin, type Card, type CardKind } from '@/data/premium';
+import { SkeletonLines } from '@/screens/queryState';
 import { useTheme } from '@/theme';
 import { Button, Screen, Section, SegmentedControl, Text, TextField, useLayout } from '@/ui';
 import { CheckRow } from '@/features/challenge/controls';
@@ -117,9 +118,9 @@ export function ShareComposer({ goalId, kind }: { goalId: string; kind: CardKind
               <ShareCard ref={cardRef} card={card} format={format} width={drawWidth} />
             </View>
           ) : previewError ? null : (
-            <Text variant="meta" tone="muted" accessibilityRole="progressbar">
-              Preparing the preview…
-            </Text>
+            <View style={{ width: drawWidth, paddingVertical: space[4] }}>
+              <SkeletonLines label="Preparing the preview" widths={['64%', '42%', '78%']} />
+            </View>
           )}
           <Text variant="caption" tone="muted" tabular>
             {`${FORMATS[format].width} × ${FORMATS[format].height}${card && !current && !previewError ? ' · updating…' : ''}`}

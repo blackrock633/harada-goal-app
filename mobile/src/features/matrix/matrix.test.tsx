@@ -368,6 +368,43 @@ describe('full 9x9 sheet', () => {
     // Positions of an empty key area cannot take actions.
     expect(screen.queryByRole('button', { name: 'Add action 1 to key area 1' })).toBeNull();
   });
+
+  it('supports zooming in, zooming out, and resetting zoom on the Full sheet view', async () => {
+    await render(<MatrixOverview goal={sampleGoal()} onOpenArea={jest.fn()} />);
+    await fireEvent.press(screen.getByRole('radio', { name: 'Full sheet' }));
+    expect(screen.getByText(/Pinch to zoom in or out/)).toBeOnTheScreen();
+    expect(screen.getByLabelText('Zoom 100%')).toBeOnTheScreen();
+    const zoomIn = screen.getByRole('button', { name: 'Zoom in' });
+    const zoomOut = screen.getByRole('button', { name: 'Zoom out' });
+    await fireEvent.press(zoomIn);
+    expect(screen.getByLabelText('Zoom 125%')).toBeOnTheScreen();
+    await fireEvent.press(zoomOut);
+    await fireEvent.press(zoomOut);
+    expect(screen.getByLabelText('Zoom 75%')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByLabelText('Zoom 75%'));
+    expect(screen.getByLabelText('Zoom 100%')).toBeOnTheScreen();
+  });
+
+  it('transitions cleanly after creating a key area without leaving a stuck modal', async () => {
+    const { matrix, props } = await setup({ position: 0 });
+    matrix.addOutcome.mockResolvedValue(
+      ok({
+        id: '00000000-0000-4000-8000-000000000099',
+        position: 0,
+        title: 'Recovery',
+        description: 'Rest well',
+        updatedAt: '2026-03-01T00:00:00.000Z',
+      }),
+    );
+    await fireEvent.press(screen.getByRole('button', { name: 'Add key area 1' }));
+    await fireEvent.changeText(screen.getByLabelText('Key area title'), 'Recovery');
+    await fireEvent.press(screen.getByRole('button', { name: 'Create key area' }));
+    await act(async () => {});
+    expect(props.onChanged).toHaveBeenCalled();
+    expect(screen.getByText('Recovery')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Add action 1 of 8' })).toBeOnTheScreen();
+    expect(screen.queryByTestId('sheet-modal')).toBeNull();
+  });
 });
 
 describe('planning suggestions in a key area', () => {

@@ -5,6 +5,7 @@ import type { TodayDTO } from '@shared/application/dto';
 import { errorMessage, newClientId } from '@/data/errors';
 import type { ExecutionMutations, ReviewMutations } from '@/data/mutations';
 import { leaveChallenge, track, type ChallengeSummary } from '@/data/premium';
+import { SkeletonLines } from '@/screens/queryState';
 import { useTheme } from '@/theme';
 import { Badge, Button, ListRow, Screen, Section, Sheet, Text, TextField } from '@/ui';
 import { CalendarStrip } from './CalendarStrip';
@@ -117,9 +118,7 @@ export function ChallengeDashboard({
         {todayData ? (
           <ChallengeToday data={todayData} goalId={s.goal.id} mutations={mutations} onChanged={changed} onOpenToday={onOpenToday} />
         ) : (
-          <Text variant="body" tone="muted">
-            Loading today&apos;s actions…
-          </Text>
+          <SkeletonLines label="Loading today's actions" widths={['70%', '50%']} />
         )}
       </Section>
 

@@ -1,12 +1,17 @@
 import type { Metadata } from 'next';
+import { fetchMyPlan } from '@/infrastructure/supabase/public-data';
+import { userSupabase } from '@/infrastructure/supabase/server';
+import { getCtx } from '@/app/lib/session';
 import { PublicShell } from '@/ui/features/marketing';
 import { ButtonLink } from '@/ui/primitives';
 import { routes } from '@/ui/routes';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: '30-Day Challenge',
   description:
-    'Thirty days of steady action on one goal: something small every day and a short review each week. Free for everyone.',
+    'Commit to 30 Days of Progress. Turn your goal into a structured daily practice with the Harada 30-Day Challenge. Unlock the full challenge with Harada Pro.',
 };
 
 const SECTIONS: { id: string; title: string; body: React.ReactNode }[] = [
@@ -15,8 +20,8 @@ const SECTIONS: { id: string; title: string; body: React.ReactNode }[] = [
     title: 'What it is',
     body: (
       <p>
-        Thirty consecutive days of working on one goal from your Harada plan, counted in your own time zone. It’s free
-        for everyone. Progress comes from what you actually do on the goal — tasks completed, routines checked,
+        Thirty consecutive days of working on one goal from your Harada plan, counted in your own time zone. Available
+        with Harada Pro. Progress comes from what you actually do on the goal — tasks completed, routines checked,
         reflections written — so there’s nothing extra to log.
       </p>
     ),
@@ -74,15 +79,39 @@ const SECTIONS: { id: string; title: string; body: React.ReactNode }[] = [
   },
 ];
 
-export default function ChallengePage() {
+export default async function ChallengePage() {
+  const ctx = await getCtx().catch(() => null);
+  const plan = ctx ? await fetchMyPlan(await userSupabase()) : null;
+  const isPro = plan?.plan === 'pro' || (plan?.features.includes('challenge') ?? false);
+
   return (
     <PublicShell>
       <div className="mx-auto w-full max-w-[720px] px-4 py-10 md:px-8 md:py-14">
-        <p className="text-sm font-medium text-accent">Free for everyone</p>
+        <p className="text-sm font-medium text-accent">Harada Pro</p>
         <h1 className="mt-1 font-serif text-3xl font-medium text-ink md:text-4xl">The 30-Day Challenge</h1>
         <p className="mt-3 text-lg text-ink-muted">
           One goal, thirty days, something small every day and a short review every week.
         </p>
+
+        {!isPro && (
+          <div
+            role="region"
+            aria-label="Harada Pro required"
+            data-testid="upgrade-prompt-challenge"
+            className="mt-6 space-y-3 rounded-[var(--radius-md)] border border-accent/40 bg-surface-sunken/60 p-5"
+          >
+            <p className="font-serif text-xl font-medium text-ink">Commit to 30 Days of Progress.</p>
+            <p className="text-ink-muted">
+              Turn your goal into a structured daily practice with the Harada 30-Day Challenge. Unlock the full
+              challenge with Harada Pro.
+            </p>
+            <div className="pt-1">
+              <ButtonLink href={routes.pricing} className="w-full sm:w-auto">
+                See Harada Pro
+              </ButtonLink>
+            </div>
+          </div>
+        )}
 
         <div className="mt-10 space-y-10">
           {SECTIONS.map((s) => (
@@ -95,13 +124,21 @@ export default function ChallengePage() {
           <section aria-labelledby="challenge-join" className="border-t border-rule pt-4">
             <h2 id="challenge-join" className="font-serif text-xl text-ink md:text-2xl">How to join</h2>
             <ol className="mt-2 list-decimal space-y-1 pl-5 text-ink-muted">
-              <li>Create a free account and set up a goal with at least a few actions, then activate it.</li>
+              <li>Upgrade to Harada Pro and set up a goal with at least a few actions, then activate it.</li>
               <li>In the Harada app, open Challenge, choose the goal and tick the commitment.</li>
               <li>Choose “Start the challenge”. Day one is today or tomorrow.</li>
             </ol>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <ButtonLink href={routes.signUp} className="w-full sm:w-auto">Create a free account</ButtonLink>
-              <ButtonLink href={routes.signIn} variant="secondary" className="w-full sm:w-auto">Sign in</ButtonLink>
+              {isPro ? (
+                <ButtonLink href={routes.today} className="w-full sm:w-auto">Go to Today</ButtonLink>
+              ) : (
+                <>
+                  <ButtonLink href={routes.pricing} className="w-full sm:w-auto">See Harada Pro</ButtonLink>
+                  {!ctx && (
+                    <ButtonLink href={routes.signIn} variant="secondary" className="w-full sm:w-auto">Sign in</ButtonLink>
+                  )}
+                </>
+              )}
             </div>
           </section>
         </div>

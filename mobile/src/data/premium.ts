@@ -21,7 +21,14 @@ import { getSupabase } from './supabase';
 // Types
 // ---------------------------------------------------------------------------------------------------------
 
-export type Feature = 'multiple_goals' | 'progress_history' | 'advanced_reviews' | 'premium_templates' | 'ai_planning' | 'insights';
+export type Feature =
+  | 'multiple_goals'
+  | 'progress_history'
+  | 'advanced_reviews'
+  | 'premium_templates'
+  | 'ai_planning'
+  | 'insights'
+  | 'challenge';
 
 export interface PlanInfo {
   plan: 'free' | 'pro';
@@ -318,15 +325,16 @@ export async function loadEnrollments(): Promise<Enrollment[]> {
   return (data as EnrollmentRow[]).map(enrollmentFromRow);
 }
 
-export const useEnrollments = () => useQuery({ queryKey: premiumKeys.enrollments, queryFn: loadEnrollments });
+export const useEnrollments = (enabled = true) =>
+  useQuery({ queryKey: premiumKeys.enrollments, queryFn: loadEnrollments, enabled });
 
 export async function loadChallengeSummary(id: string): Promise<ChallengeSummary> {
   const s = await read<Omit<ChallengeSummary, 'enrollment'> & { enrollment: EnrollmentRow }>('challenge_summary', { p_enrollment_id: id });
   return { ...s, enrollment: enrollmentFromRow({ ...s.enrollment }) };
 }
 
-export const useChallengeSummary = (id: string | undefined) =>
-  useQuery({ queryKey: premiumKeys.challenge(id ?? ''), queryFn: () => loadChallengeSummary(id!), enabled: !!id });
+export const useChallengeSummary = (id: string | undefined, enabled = true) =>
+  useQuery({ queryKey: premiumKeys.challenge(id ?? ''), queryFn: () => loadChallengeSummary(id!), enabled: enabled && !!id });
 
 /** Idempotent on `clientId`: a double tap or a retry never creates a second enrollment. */
 export const joinChallenge = (clientId: string, goalId: string, startDate?: string) =>

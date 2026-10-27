@@ -69,6 +69,15 @@ export function GoalOverview({ goal, today, activateGoal, onActivated }: GoalOve
           <Link className="inline-flex min-h-[44px] items-center text-accent underline underline-offset-2" href={routes.goalEdit(goal.id)}>Edit goal</Link>
           <Link className="inline-flex min-h-[44px] items-center text-accent underline underline-offset-2" href={routes.matrix(goal.id)}>Open matrix</Link>
           <Link className="inline-flex min-h-[44px] items-center text-accent underline underline-offset-2" href={routes.review(goal.id)}>Review</Link>
+          <Link
+            className="inline-flex min-h-[44px] items-center text-accent underline underline-offset-2"
+            href={routes.communityShare({
+              goalId: goal.id,
+              type: goal.status === 'achieved' ? 'goal_completed' : 'progress_update',
+            })}
+          >
+            {goal.status === 'achieved' ? 'Celebrate completion' : 'Share progress'}
+          </Link>
         </nav>
         {goal.status === 'draft' && (
           <ActivateGoalButton goalId={goal.id} activateGoal={activateGoal} onActivated={onActivated} />

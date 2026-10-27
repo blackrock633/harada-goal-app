@@ -32,6 +32,10 @@ export default function ReviewScreen() {
   if (state.error) return <ErrorScreen error={state.error} onRetry={state.refetch} />;
   if (state.loading || !summary || !detail || !today || !review?.data) return <LoadingScreen />;
 
+  const visibleReflections = advanced
+    ? review.data.reflections
+    : review.data.reflections.filter((r) => r.kind === 'daily');
+
   // ReviewView supplies its own Screen scroll area.
   return (
     <ReviewView
@@ -49,7 +53,7 @@ export default function ReviewScreen() {
       }
       completedThisWeek={summary.completedThisWeek}
       outcomes={detail.outcomes}
-      reflections={review.data.reflections}
+      reflections={visibleReflections}
       events={review.data.events}
       refreshing={state.refreshing}
       onRefresh={state.refetch}

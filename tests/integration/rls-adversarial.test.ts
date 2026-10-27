@@ -46,6 +46,9 @@ const PUBLIC_TABLES = ['profiles', 'goals', 'outcomes', 'actions', 'routine_chec
 const FEATURE_TABLES = [
   'plans', 'plan_features', 'prices', 'subscriptions', 'billing_events', 'plan_grants', 'goal_templates',
   'challenge_enrollments', 'share_links', 'referrals', 'analytics_events', 'admins',
+  'social_profiles', 'goal_visibility', 'social_follows', 'social_blocks', 'social_posts',
+  'social_likes', 'social_comments', 'social_hidden_posts', 'social_reports',
+  'social_notifications', 'social_rate_limits',
 ];
 /** Callable before sign-in: the public share page and first-party analytics. Both validate everything. */
 const ANON_RPCS = ['get_shared_card', 'track_event'];
@@ -54,9 +57,15 @@ const ANON_RPCS = ['get_shared_card', 'track_event'];
  * and touches only the caller's rows (or the public catalogue); adding one here needs the same review.
  */
 const DEFINER_RPCS = [
-  'admin_metrics', 'am_i_admin', 'challenge_summary', 'complete_challenge', 'create_share_link', 'get_my_plan',
-  'get_my_referrals', 'get_shared_card', 'get_template', 'goal_history', 'join_challenge', 'leave_challenge',
-  'list_templates', 'preview_share_card', 'revoke_share_link', 'track_event',
+  'add_post_comment', 'admin_metrics', 'am_i_admin', 'block_user', 'challenge_summary',
+  'complete_challenge', 'create_share_link', 'create_social_post', 'delete_post_comment',
+  'delete_social_post', 'discover_users', 'follow_user', 'get_goal_visibility', 'get_my_plan',
+  'get_my_referrals', 'get_shared_card', 'get_social_feed', 'get_social_post',
+  'get_social_profile', 'get_template', 'goal_history', 'hide_or_report_post', 'join_challenge',
+  'leave_challenge', 'list_follow_connections', 'list_social_notifications', 'list_templates',
+  'mark_notifications_read', 'preview_share_card', 'revoke_share_link', 'set_goal_visibility',
+  'toggle_post_like', 'track_event', 'unblock_user', 'unfollow_user', 'update_social_post',
+  'update_social_profile',
 ];
 
 describe('RLS / authorization holes (asserting secure behaviour)', () => {

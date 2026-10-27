@@ -9,6 +9,7 @@ import { useTheme } from '@/theme';
  */
 const ICONS = {
   add: { ios: 'plus', android: 'add' },
+  remove: { ios: 'minus', android: 'remove' },
   edit: { ios: 'pencil', android: 'edit' },
   close: { ios: 'xmark', android: 'close' },
   check: { ios: 'checkmark', android: 'check' },

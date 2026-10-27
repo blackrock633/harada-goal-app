@@ -1,19 +1,41 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
+import { View } from 'react-native';
 
-import { useChallengeSummary, useEnrollments } from '@/data/premium';
+import { hasFeature, useChallengeSummary, useEnrollments, usePlan } from '@/data/premium';
 import { ChallengeReport, activeEnrollment } from '@/features/challenge';
-import { combine, Gate } from '@/screens/queryState';
-import { EmptyState, Screen } from '@/ui';
+import { UpgradePrompt } from '@/features/premium/UpgradePrompt';
+import { combine, ErrorScreen, Gate, LoadingScreen } from '@/screens/queryState';
+import { useTheme } from '@/theme';
+import { EmptyState, Screen, Text } from '@/ui';
 
 /** The report of one challenge (`?id=`), or of the running one when no id is given. */
 export default function ChallengeCompleteScreen() {
+  const { space } = useTheme();
   const qc = useQueryClient();
+  const plan = usePlan();
+  const allowed = hasFeature(plan.data ?? undefined, 'challenge');
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const requested = (Array.isArray(params.id) ? params.id[0] : params.id) || undefined;
-  const enrollments = useEnrollments();
+  const enrollments = useEnrollments(allowed);
   const id = requested ?? activeEnrollment(enrollments.data)?.id;
-  const summary = useChallengeSummary(id);
+  const summary = useChallengeSummary(id, allowed);
+
+  if (plan.isPending) return <LoadingScreen label="Loading challenge" />;
+  if (!plan.data) return <ErrorScreen error={plan.error} onRetry={() => void plan.refetch()} />;
+
+  if (!allowed) {
+    return (
+      <Screen>
+        <View style={{ gap: space[4] }}>
+          <Text variant="title" accessibilityRole="header">
+            The 30-Day Challenge
+          </Text>
+          <UpgradePrompt feature="challenge" trigger="gate" />
+        </View>
+      </Screen>
+    );
+  }
 
   if (!requested && enrollments.data && !id) {
     return (

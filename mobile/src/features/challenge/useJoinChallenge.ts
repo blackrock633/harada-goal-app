@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 
 import { errorMessage, newClientId } from '@/data/errors';
 import { joinChallenge } from '@/data/premium';
+import { openUpgrade } from '@/features/premium/routes';
 
 /**
  * Join with one client id per attempt: a double tap is dropped while a call is in flight, and a retry
@@ -13,6 +14,7 @@ export function useJoinChallenge(onJoined: (row: { id: string }) => void) {
   const inFlight = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsPro, setNeedsPro] = useState(false);
 
   const join = useCallback(
     async (goalId: string) => {
@@ -20,11 +22,15 @@ export function useJoinChallenge(onJoined: (row: { id: string }) => void) {
       inFlight.current = true;
       setBusy(true);
       setError(null);
+      setNeedsPro(false);
       if (!attempt.current || attempt.current.goalId !== goalId) attempt.current = { id: newClientId(), goalId };
       try {
         const res = await joinChallenge(attempt.current.id, goalId);
         if (res.ok) onJoined(res.data);
-        else setError(errorMessage(res.error));
+        else if (res.error.code === 'UPGRADE_REQUIRED') {
+          setNeedsPro(true);
+          openUpgrade('challenge');
+        } else setError(errorMessage(res.error));
       } catch {
         setError(errorMessage({ code: 'UNAVAILABLE', message: '' }));
       } finally {
@@ -35,5 +41,5 @@ export function useJoinChallenge(onJoined: (row: { id: string }) => void) {
     [onJoined],
   );
 
-  return { join, busy, error };
+  return { join, busy, error, needsPro };
 }

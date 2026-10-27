@@ -11,7 +11,7 @@ import { readSupabasePublicEnv, supabaseCookieOptions } from '@/infrastructure/s
  * direct server-action posts). Real enforcement is: server code derives the user from
  * AuthGateway.getUser() (server-verified) and every query runs under Postgres RLS.
  */
-const PROTECTED = ['/today', '/goal', '/settings', '/matrix', '/review', '/account'];
+const PROTECTED = ['/today', '/goal', '/settings', '/matrix', '/review', '/account', '/community', '/u'];
 
 /** Public share pages (/s/<token>): rate limited per IP, never cached or indexed. */
 const isSharePage = (pathname: string) => pathname.startsWith('/s/');

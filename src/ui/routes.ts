@@ -15,6 +15,16 @@ export const routes = {
   /** Key-area detail. `position` is the outcome slot 0..7 (works for empty slots too). */
   keyArea: (goalId: string, position: number) => withGoal(`/matrix/${position}`, goalId),
   review: (goalId?: string) => withGoal('/review', goalId),
+  community: '/community',
+  communityShare: (opts?: { goalId?: string; type?: string }) => {
+    const q = new URLSearchParams();
+    q.set('tab', 'feed');
+    q.set('compose', '1');
+    if (opts?.goalId) q.set('goalId', opts.goalId);
+    if (opts?.type) q.set('type', opts.type);
+    return `/community?${q.toString()}`;
+  },
+  profile: (username: string) => `/u/${encodeURIComponent(username)}`,
   settings: '/settings',
   signIn: '/signin',
   signUp: '/signup',

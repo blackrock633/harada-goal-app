@@ -46,6 +46,13 @@ export function KeyAreaEditor({ mode, mutations, visible, onClose, onDone, onDir
 
   const dirty = title !== baseline.title || description !== baseline.description;
   useEffect(() => {
+    if (mode.type === 'edit' && !dirty) {
+      setBaseline({ title: mode.outcome.title, description: mode.outcome.description });
+      setTitle(mode.outcome.title);
+      setDescription(mode.outcome.description);
+    }
+  }, [mode, dirty]);
+  useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);

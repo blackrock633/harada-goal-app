@@ -76,7 +76,7 @@ describe('ReflectionForm', () => {
     expect(screen.queryByText('Reflection saved.')).toBeNull();
   });
 
-  it('shows the three prompts, daily/weekly choice and date defaulting to today', async () => {
+  it('shows the three daily prompts and date defaulting to today; weekly requires Pro on Free', async () => {
     await render(<ReflectionForm goalId={G} today="2026-10-19" addReflection={jest.fn()} />);
     for (const l of ['What did you get done today?', 'What got in the way?', "What's your first step tomorrow?"])
       expect(screen.getByLabelText(l)).toBeTruthy();
@@ -85,11 +85,9 @@ describe('ReflectionForm', () => {
     expect(screen.getByRole('radio', { name: 'Daily' })).toBeChecked();
     await fireEvent.press(screen.getByRole('radio', { name: 'Weekly' }));
     expect(screen.getByRole('radio', { name: 'Weekly' })).toBeChecked();
-    // Weekly asks about the week, not the day, and dates the week by its last day.
-    for (const l of ['What went well this week?', "What didn't go to plan?", 'What will you change next week?'])
-      expect(screen.getByLabelText(l)).toBeTruthy();
+    expect(screen.getByTestId('upgrade-prompt-advanced_reviews')).toBeTruthy();
     expect(screen.queryByLabelText('What did you get done today?')).toBeNull();
-    expect(screen.getByRole('button', { name: /^Week ending: .*2026/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save reflection' })).toBeNull();
   });
 
   it('saves, sends the chosen kind/date, clears, and uses a fresh id next time', async () => {
@@ -99,10 +97,10 @@ describe('ReflectionForm', () => {
     >(async () => ({ ok: true, data: saved() }));
     const onSaved = jest.fn();
     await render(
-      <ReflectionForm goalId={G} today="2026-10-19" addReflection={add} onSaved={onSaved} />,
+      <ReflectionForm goalId={G} today="2026-10-19" addReflection={add} onSaved={onSaved} advanced />,
     );
     await fireEvent.press(screen.getByRole('radio', { name: 'Weekly' }));
-    await fireEvent.changeText(screen.getByLabelText('What went well this week?'), '  Good  ');
+    await fireEvent.changeText(screen.getByLabelText('3. What worked well?'), '  Good  ');
     await fireEvent.press(screen.getByRole('button', { name: 'Save reflection' }));
     expect(await screen.findByText('Reflection saved.')).toBeTruthy();
     expect(add.mock.calls[0]![0]).toMatchObject({
@@ -112,9 +110,9 @@ describe('ReflectionForm', () => {
       wentWell: 'Good',
     });
     expect(onSaved).toHaveBeenCalled();
-    expect(screen.getByLabelText('What went well this week?').props.value).toBe('');
+    expect(screen.getByLabelText('3. What worked well?').props.value).toBe('');
 
-    await fireEvent.changeText(screen.getByLabelText("What didn't go to plan?"), 'Again');
+    await fireEvent.changeText(screen.getByLabelText('4. What prevented progress?'), 'Again');
     await fireEvent.press(screen.getByRole('button', { name: 'Save reflection' }));
     await screen.findByText('Reflection saved.');
     expect(add.mock.calls[1]![0].id).not.toBe(add.mock.calls[0]![0].id);
@@ -246,13 +244,15 @@ describe('Harada Pro reviews', () => {
   type Update = ReviewMutations['updateReflection'];
   const okAdd = () => jest.fn<ReturnType<Add>, Parameters<Add>>(async () => ({ ok: true, data: reflection() }));
 
-  it('Free: weekly keeps the three prompts with a passive Pro note; monthly is locked, never an error', async () => {
+  it('Free: weekly and monthly are locked behind Harada Pro with the upgrade prompt, never an error', async () => {
     const add = okAdd();
     await render(<ReflectionForm goalId={G} today="2026-10-19" addReflection={add} />);
     await fireEvent.press(screen.getByRole('radio', { name: 'Weekly' }));
-    expect(screen.getByLabelText('What went well this week?')).toBeTruthy();
-    expect(screen.queryByLabelText(/What did you intend/)).toBeNull();
     expect(screen.getByTestId('upgrade-prompt-advanced_reviews')).toBeTruthy();
+    expect(screen.getByText('Reflect. Learn. Improve.')).toBeTruthy();
+    expect(screen.getByText(/Weekly reflections are part of Harada Pro/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save reflection' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Not now' })).toBeNull();
 
     await fireEvent.press(screen.getByRole('radio', { name: 'Monthly' }));
     expect(screen.getByText(/Monthly reviews are part of Harada Pro/)).toBeTruthy();
@@ -351,15 +351,13 @@ describe('Harada Pro reviews', () => {
     });
   });
 
-  it('Free editing a full review touches only the three basic answers', async () => {
+  it('Free cannot edit a weekly reflection and sees the upgrade gate instead', async () => {
     const past = reflection({ id: R9, kind: 'weekly', answers: { intended: 'Keep me' }, updatedAt: '2026-10-12T09:00:00.000Z' });
     const update = jest.fn<ReturnType<Update>, Parameters<Update>>(async () => ({ ok: true, data: past }));
     await render(<ReflectionForm goalId={G} today="2026-10-19" addReflection={jest.fn()} updateReflection={update} editing={past} />);
-    expect(screen.queryByLabelText(/What did you intend/)).toBeNull();
-    await fireEvent.changeText(screen.getByLabelText("What didn't go to plan?"), 'Rain');
-    await fireEvent.press(screen.getByRole('button', { name: 'Save changes' }));
-    await waitFor(() => expect(update).toHaveBeenCalled());
-    expect(update.mock.calls[0]![0]).not.toHaveProperty('answers');
+    expect(screen.getByTestId('upgrade-prompt-advanced_reviews')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('past entries show how many questions were answered, mark the empty ones, and offer Edit', async () => {

@@ -8,6 +8,7 @@ import { useTheme } from '@/theme';
 import { Badge, Button, ListRow, Section, Text } from '@/ui';
 import type { GoalSummaryDTO } from '@shared/application/dto';
 
+import { openUpgrade } from './routes';
 import { UpgradePrompt } from './UpgradePrompt';
 
 export type GoalsPanelProps = {
@@ -49,7 +50,14 @@ export function GoalsPanel({ goals, currentId, plan, restoreGoal, onOpenGoal, on
     try {
       const res = await restoreGoal({ goalId });
       if (!res.ok) {
-        setRestoreError({ goalId, upgrade: res.error.code === 'UPGRADE_REQUIRED', message: errorMessage(res.error) });
+        const upgrade = res.error.code === 'UPGRADE_REQUIRED';
+        setRestoreError({ goalId, upgrade, message: errorMessage(res.error) });
+        if (upgrade) {
+          openUpgrade(
+            'multiple_goals',
+            'Restoring this goal would make it active again, next to your current one. It stays archived, with nothing lost.',
+          );
+        }
       }
     } catch {
       setRestoreError({ goalId, upgrade: false, message: errorMessage({ code: 'UNAVAILABLE', message: '' }) });

@@ -115,6 +115,10 @@ export interface GoalEventRepo {
   listByGoal(goalId: Id, opts: { limit: number; before?: Instant }): Promise<GoalEvent[]>;
 }
 
+export interface SocialRepo {
+  callRpc<T>(name: string, input?: Record<string, unknown>): Promise<T>;
+}
+
 export interface Repos {
   profiles: ProfileRepo;
   goals: GoalRepo;
@@ -124,6 +128,7 @@ export interface Repos {
   focus: DailyFocusRepo;
   reflections: ReflectionRepo;
   events: GoalEventRepo;
+  social: SocialRepo;
 }
 
 export interface UnitOfWork {

@@ -3,6 +3,7 @@ import { View } from 'react-native';
 
 import type { GoalSummaryDTO } from '@shared/application/dto';
 import type { Enrollment } from '@/data/premium';
+import { UpgradePrompt } from '@/features/premium/UpgradePrompt';
 import { useTheme } from '@/theme';
 import { Badge, Button, ListRow, Screen, Section, Text } from '@/ui';
 import { CheckRow, RadioRow } from './controls';
@@ -49,7 +50,7 @@ export function ChallengeLanding({
   const [picked, setPicked] = useState<string | null>(active.length === 1 ? active[0]!.id : null);
   const goalId = picked && active.some((g) => g.id === picked) ? picked : null;
   const [committed, setCommitted] = useState(false);
-  const { join, busy, error } = useJoinChallenge(onJoined);
+  const { join, busy, error, needsPro } = useJoinChallenge(onJoined);
   const { start, end } = challengeWindow(today);
   const titleOf = (id: string) => goals.find((g) => g.id === id)?.title ?? 'A goal';
 
@@ -104,6 +105,7 @@ export function ChallengeLanding({
           </Text>
         </View>
         <CheckRow label={COMMITMENT} selected={committed} onPress={() => setCommitted((c) => !c)} divider={false} />
+        {needsPro ? <UpgradePrompt feature="challenge" trigger="gate" /> : null}
         {error ? (
           <Text variant="body" tone="danger" accessibilityRole="alert">
             {error}

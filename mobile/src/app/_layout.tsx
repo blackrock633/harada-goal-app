@@ -94,9 +94,10 @@ function RootNavigator() {
           }}
         />
           {/* Harada Pro, history, the 30-Day Challenge and sharing (premium.ts). */}
-          <Stack.Screen name="upgrade" options={{ ...pushed, presentation: 'modal', title: 'Harada Pro' }} />
+          <Stack.Screen name="upgrade" options={{ ...pushed, title: 'Harada Pro' }} />
           <Stack.Screen name="insights" options={{ ...pushed, title: 'Progress history' }} />
           <Stack.Screen name="share" options={{ ...pushed, presentation: 'modal', title: 'Share progress' }} />
+          <Stack.Screen name="community" options={{ ...pushed, title: 'Community' }} />
           <Stack.Screen name="challenge" />
         </Stack.Protected>
       </Stack>

@@ -46,6 +46,32 @@ export function messageFor(error: unknown): string {
     : errorMessage({ code: 'UNAVAILABLE', message: '' });
 }
 
+/** A still, ruled skeleton of a block or section (no spinner). */
+export function SkeletonLines({
+  widths = ['72%', '48%'] as const,
+  label = 'Loading',
+}: {
+  widths?: readonly `${number}%`[];
+  label?: string;
+}) {
+  const { colors, radius, space } = useTheme();
+  return (
+    <View accessibilityRole="progressbar" accessibilityLabel={label} style={{ gap: space[2], paddingVertical: space[1] }}>
+      {widths.map((w, i) => (
+        <View
+          key={`${w}-${i}`}
+          style={{
+            width: w,
+            height: i === 0 ? 16 : 12,
+            borderRadius: radius.sm,
+            backgroundColor: colors.surfaceSunken,
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
 /** A still, ruled outline of a screen (title + rows): the form before it is filled in. No shimmer. */
 export function LoadingScreen({ label = 'Loading' }: { label?: string }) {
   const { colors, radius, space } = useTheme();

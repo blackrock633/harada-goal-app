@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { clsx } from 'clsx';
-import { CalendarCheck, Target, Grid3x3, NotebookPen, Settings, LogOut, User } from 'lucide-react';
+import { CalendarCheck, Target, Grid3x3, NotebookPen, Settings, LogOut, User, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { MenuRoot, MenuTrigger, MenuContent, MenuItem, MenuSeparator } from '../primitives/Menu';
 import { primaryTabs, routes } from '../routes';
@@ -46,6 +46,7 @@ export function AppShell({ user, focusedGoalId, signOutAction, children }: AppSh
     active: isActivePath(pathname, tab.key),
   }));
   const settingsActive = isActivePath(pathname, 'settings');
+  const communityActive = isActivePath(pathname, 'community') || isActivePath(pathname, 'u');
 
   return (
     <div className="flex min-h-dvh flex-col bg-paper text-ink lg:flex-row">
@@ -59,34 +60,54 @@ export function AppShell({ user, focusedGoalId, signOutAction, children }: AppSh
       {/* Phone / tablet top bar */}
       <header className="sticky top-0 z-40 flex min-h-14 items-center justify-between border-b border-rule bg-paper px-4 pt-[env(safe-area-inset-top)] lg:hidden">
         <span className="font-serif text-lg font-semibold tracking-tight">Harada</span>
-        <MenuRoot>
-          <MenuTrigger asChild>
-            <button
-              type="button"
-              className={clsx(
-                'flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-ink hover:bg-surface-sunken',
-                focusRing
-              )}
-            >
-              <User className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
-              <span className="sr-only">Account menu</span>
-            </button>
-          </MenuTrigger>
-          <MenuContent align="end" className="w-56">
-            <div className="truncate px-2 py-1.5 text-sm font-medium">{user.displayName}</div>
-            <MenuSeparator />
-            <MenuItem asChild className="min-h-11">
-              <Link href={routes.settings}>
-                <Settings className="mr-2 h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                Settings
-              </Link>
-            </MenuItem>
-            <MenuItem className="min-h-11" onSelect={() => void signOutAction()}>
-              <LogOut className="mr-2 h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-              Sign out
-            </MenuItem>
-          </MenuContent>
-        </MenuRoot>
+        <div className="flex items-center gap-1">
+          <Link
+            href={routes.community}
+            aria-current={communityActive ? 'page' : undefined}
+            className={clsx(
+              'flex h-11 items-center gap-1.5 rounded-full px-3 text-sm font-medium',
+              focusRing,
+              communityActive ? 'bg-accent-soft text-ink' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink'
+            )}
+          >
+            <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            <span>Community</span>
+          </Link>
+          <MenuRoot>
+            <MenuTrigger asChild>
+              <button
+                type="button"
+                className={clsx(
+                  'flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-ink hover:bg-surface-sunken',
+                  focusRing
+                )}
+              >
+                <User className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                <span className="sr-only">Account menu</span>
+              </button>
+            </MenuTrigger>
+            <MenuContent align="end" className="w-56">
+              <div className="truncate px-2 py-1.5 text-sm font-medium">{user.displayName}</div>
+              <MenuSeparator />
+              <MenuItem asChild className="min-h-11">
+                <Link href={routes.community}>
+                  <Users className="mr-2 h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                  Community &amp; Profile
+                </Link>
+              </MenuItem>
+              <MenuItem asChild className="min-h-11">
+                <Link href={routes.settings}>
+                  <Settings className="mr-2 h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                  Settings
+                </Link>
+              </MenuItem>
+              <MenuItem className="min-h-11" onSelect={() => void signOutAction()}>
+                <LogOut className="mr-2 h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                Sign out
+              </MenuItem>
+            </MenuContent>
+          </MenuRoot>
+        </div>
       </header>
 
       {/* Desktop left rail */}
@@ -112,6 +133,18 @@ export function AppShell({ user, focusedGoalId, signOutAction, children }: AppSh
           ))}
         </nav>
         <div className="space-y-1 border-t border-rule p-3">
+          <Link
+            href={routes.community}
+            aria-current={communityActive ? 'page' : undefined}
+            className={clsx(
+              'flex min-h-11 items-center gap-3 rounded-[var(--radius-sm)] px-3 text-sm font-medium',
+              focusRing,
+              communityActive ? 'bg-accent-soft text-ink' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink'
+            )}
+          >
+            <Users className="h-5 w-5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            Community
+          </Link>
           <Link
             href={routes.settings}
             aria-current={settingsActive ? 'page' : undefined}

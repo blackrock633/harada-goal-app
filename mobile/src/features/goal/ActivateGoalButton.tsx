@@ -7,6 +7,7 @@ import { useTheme } from '@/theme';
 import { Button, Text } from '@/ui';
 import type { GoalFieldsDTO } from '@shared/application/dto';
 
+import { openUpgrade } from '../premium/routes';
 import { UpgradePrompt } from '../premium/UpgradePrompt';
 
 export type ActivateGoalButtonProps = {
@@ -39,8 +40,11 @@ export function ActivateGoalButton({
     try {
       const res = await activateGoal({ goalId });
       if (res.ok) onActivated?.(res.data);
-      else if (res.error.code === 'UPGRADE_REQUIRED') setNeedsPro(true);
-      else setError(errorMessage(res.error));
+      else if (res.error.code === 'UPGRADE_REQUIRED') {
+        const upgradeNote = 'You already have an active goal. This one is kept as a draft, with everything you planned.';
+        setNeedsPro(true);
+        openUpgrade('multiple_goals', upgradeNote);
+      } else setError(errorMessage(res.error));
     } catch {
       setError('Could not activate. Please try again.');
     } finally {
