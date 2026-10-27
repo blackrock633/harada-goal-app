@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from 'react';
-import { ScrollView, View, useWindowDimensions } from 'react-native';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { PanResponder, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
 
 import type { MatrixMutations } from '@/data/mutations';
 import { useTheme } from '@/theme';
-import { ProgressBar, SegmentedControl, Text, useLayout } from '@/ui';
+import { IconButton, ProgressBar, SegmentedControl, Text, useLayout } from '@/ui';
+import { useSwipeLock } from '@/ui/navigation';
 import type { GoalDetailDTO } from '@shared/application/dto';
 import {
   AREA_COUNT,
@@ -16,7 +17,7 @@ import {
 
 import { ActionEditorSheet, type ActionEditorMode } from './ActionEditorSheet';
 import { MatrixSheet, firstEmptyArea } from './MatrixSheet';
-import { DENSE_BELOW, GoalCell, KeyAreaCell, RuledGrid, useMeasuredWidth } from './SheetGrid';
+import { DENSE_BELOW, GoalCell, HEAVY_RULE, KeyAreaCell, RuledGrid, useMeasuredWidth } from './SheetGrid';
 
 export interface MatrixOverviewProps {
   goal: GoalDetailDTO;
@@ -117,12 +118,223 @@ export function MatrixOverview({ goal, onOpenArea, matrix, onChanged, onReloadLa
       {view === 'areas' ? (
         <KeyAreaGrid m={m} goalTitle={goal.title} onOpenArea={onOpenArea} />
       ) : (
-        <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator accessibilityLabel="Full sheet, scrolls sideways">
+        <ZoomableSheet>
           <MatrixSheet areas={m.areas} goalTitle={goal.title} cellSize={PHONE_SHEET_CELL} {...handlers} />
-        </ScrollView>
+        </ZoomableSheet>
       )}
       <PlanMetrics goal={goal} m={m} />
       {editor}
+    </View>
+  );
+}
+
+const MIN_ZOOM = 0.35;
+const MAX_ZOOM = 2.25;
+const ZOOM_STEP = 0.25;
+
+function clamp(v: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, v));
+}
+
+function touchDistance(e: GestureResponderEvent): number | null {
+  const touches = e.nativeEvent.touches;
+  if (!touches || touches.length < 2) return null;
+  const dx = (touches[0]!.pageX ?? 0) - (touches[1]!.pageX ?? 0);
+  const dy = (touches[0]!.pageY ?? 0) - (touches[1]!.pageY ?? 0);
+  return Math.hypot(dx, dy);
+}
+
+/**
+ * The phone's full 9x9 sheet in an interactive viewport: pinch to zoom in or out, and drag/scroll
+ * horizontally (left to right) and vertically once zoomed in or out.
+ */
+function ZoomableSheet({ children }: { children: ReactNode }) {
+  // Dragging sideways here moves the sheet, never the page.
+  useSwipeLock(true);
+  return Platform.OS === 'ios' ? <NativeZoomSheet>{children}</NativeZoomSheet> : <FallbackZoomSheet>{children}</FallbackZoomSheet>;
+}
+
+/** Zoom percentage and +/- buttons; tapping the percentage toggles between 100% and fit-to-width. */
+function ZoomControls({ scale, fitScale, onScale }: { scale: number; fitScale: number; onScale: (s: number) => void }) {
+  const { colors, radius, space } = useTheme();
+  return (
+    <View
+      style={{
+        alignSelf: 'flex-end',
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: colors.ruleStrong,
+        borderRadius: radius.sm,
+      }}
+    >
+      <IconButton icon="remove" accessibilityLabel="Zoom out" onPress={() => onScale(scale - ZOOM_STEP)} />
+      <Text
+        variant="caption"
+        tabular
+        accessibilityRole="button"
+        accessibilityLabel={`Zoom ${Math.round(scale * 100)}%`}
+        accessibilityHint="Switches between 100% and the whole sheet"
+        onPress={() => onScale(Math.abs(scale - 1) < 0.01 && fitScale < 1 ? fitScale : 1)}
+        style={{ paddingHorizontal: space[1] }}
+      >
+        {`${Math.round(scale * 100)}%`}
+      </Text>
+      <IconButton icon="add" accessibilityLabel="Zoom in" onPress={() => onScale(scale + ZOOM_STEP)} />
+    </View>
+  );
+}
+
+/**
+ * iOS: one native zooming scroll view. Pinch zooms, and one finger moves the sheet in any direction at
+ * any zoom (sideways included). Below the width of the screen the sheet is centred.
+ */
+function NativeZoomSheet({ children }: { children: ReactNode }) {
+  const { space } = useTheme();
+  const { height } = useWindowDimensions();
+  const [width, onLayout] = useMeasuredWidth();
+  const sheetSize = PHONE_SHEET_CELL * 9 + 2 * HEAVY_RULE;
+  const fitScale = width > 0 ? clamp(width / sheetSize, MIN_ZOOM, 1) : 1;
+  const [scale, setScale] = useState(1);
+  const [requested, setRequested] = useState(1);
+  const setZoom = (next: number) => {
+    const z = Math.round(clamp(next, Math.min(MIN_ZOOM, fitScale), MAX_ZOOM) * 100) / 100;
+    setRequested(z);
+    setScale(z);
+  };
+  // Tall enough to work in, never taller than most of the screen.
+  const viewportHeight = Math.max(320, Math.min(Math.round(height * 0.62), width > 0 ? width + 160 : 520));
+  return (
+    <View onLayout={onLayout} style={{ gap: space[2] }}>
+      <ZoomControls scale={scale} fitScale={fitScale} onScale={setZoom} />
+      {width > 0 ? (
+        <ScrollView
+          testID="sheet-zoom"
+          style={{ width, height: viewportHeight }}
+          minimumZoomScale={Math.min(MIN_ZOOM, fitScale)}
+          maximumZoomScale={MAX_ZOOM}
+          zoomScale={requested}
+          centerContent
+          bouncesZoom
+          directionalLockEnabled={false}
+          showsHorizontalScrollIndicator
+          showsVerticalScrollIndicator
+          scrollEventThrottle={32}
+          onScroll={(e) => {
+            const z = e.nativeEvent.zoomScale;
+            if (typeof z === 'number' && Math.abs(z - scale) >= 0.01) setScale(Math.round(z * 100) / 100);
+          }}
+          accessibilityLabel="Full sheet. Pinch to zoom; drag to move in any direction"
+          // The scrollable area is the sheet itself in both directions. Without this iOS sizes it to the
+          // screen's width, so after zooming out there was nothing left to scroll sideways.
+          contentContainerStyle={{ width: sheetSize, height: sheetSize }}
+        >
+          <View style={{ width: sheetSize, height: sheetSize }}>{children}</View>
+        </ScrollView>
+      ) : null}
+    </View>
+  );
+}
+
+/** Android and web: no native zoom, so pinch is read from touches and the sheet scrolls both ways. */
+function FallbackZoomSheet({ children }: { children: ReactNode }) {
+  const { space } = useTheme();
+  const [width, onLayout] = useMeasuredWidth();
+  const sheetSize = PHONE_SHEET_CELL * 9 + 2 * HEAVY_RULE;
+  const fitScale = width > 0 ? clamp(width / sheetSize, MIN_ZOOM, 1) : 1;
+  const [scale, setScale] = useState(1);
+  const scaleRef = useRef(1);
+  scaleRef.current = scale;
+
+  const pinchStartDist = useRef<number | null>(null);
+  const pinchStartScale = useRef(1);
+
+  const applyScale = (next: number) => {
+    const clamped = Math.round(clamp(next, Math.min(MIN_ZOOM, fitScale), MAX_ZOOM) * 100) / 100;
+    scaleRef.current = clamped;
+    setScale(clamped);
+  };
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: (e) => (e.nativeEvent.touches?.length ?? 0) >= 2,
+        onMoveShouldSetPanResponder: (e) => (e.nativeEvent.touches?.length ?? 0) >= 2,
+        onPanResponderGrant: (e) => {
+          const dist = touchDistance(e);
+          if (dist !== null && dist > 0) {
+            pinchStartDist.current = dist;
+            pinchStartScale.current = scaleRef.current;
+          }
+        },
+        onPanResponderMove: (e) => {
+          const dist = touchDistance(e);
+          if (dist !== null && dist > 0) {
+            if (pinchStartDist.current === null) {
+              pinchStartDist.current = dist;
+              pinchStartScale.current = scaleRef.current;
+            } else {
+              applyScale(pinchStartScale.current * (dist / pinchStartDist.current));
+            }
+          }
+        },
+        onPanResponderRelease: () => {
+          pinchStartDist.current = null;
+        },
+        onPanResponderTerminate: () => {
+          pinchStartDist.current = null;
+        },
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fitScale],
+  );
+
+  const scaledSize = Math.ceil(sheetSize * scale);
+  const viewportHeight = width > 0 ? Math.min(Math.max(width, 320), Math.max(width, scaledSize)) : 360;
+
+  return (
+    <View onLayout={onLayout} style={{ gap: space[2] }} {...panResponder.panHandlers}>
+      <ZoomControls scale={scale} fitScale={fitScale} onScale={applyScale} />
+
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        directionalLockEnabled={false}
+        showsHorizontalScrollIndicator
+        bounces
+        contentContainerStyle={{ minWidth: width > 0 ? width : undefined }}
+        accessibilityLabel="Full sheet, pinch to zoom, drag to move"
+      >
+        <ScrollView
+          nestedScrollEnabled
+          directionalLockEnabled={false}
+          showsVerticalScrollIndicator
+          bounces
+          style={Platform.OS === 'web' ? undefined : { maxHeight: viewportHeight }}
+        >
+          <View
+            style={{
+              width: scaledSize,
+              height: scaledSize,
+              overflow: 'hidden',
+            }}
+          >
+            <View
+              style={{
+                width: sheetSize,
+                height: sheetSize,
+                transform: [
+                  { translateX: (scaledSize - sheetSize) / 2 },
+                  { translateY: (scaledSize - sheetSize) / 2 },
+                  { scale },
+                ],
+              }}
+            >
+              {children}
+            </View>
+          </View>
+        </ScrollView>
+      </ScrollView>
     </View>
   );
 }

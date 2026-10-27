@@ -7,6 +7,9 @@ import { useTheme } from '@/theme';
 import { Button, Text } from '@/ui';
 import type { GoalFieldsDTO } from '@shared/application/dto';
 
+import { openUpgrade } from '../premium/routes';
+import { UpgradePrompt } from '../premium/UpgradePrompt';
+
 export type ActivateGoalButtonProps = {
   goalId: string;
   activateGoal: GoalMutations['activateGoal'];
@@ -19,11 +22,13 @@ export function ActivateGoalButton({
   goalId,
   activateGoal,
   onActivated,
-  note = 'This goal is a draft. Activating it puts its actions on Today.',
+  note,
 }: ActivateGoalButtonProps) {
   const { space } = useTheme();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  // Free allows one active goal: the server refuses a second with UPGRADE_REQUIRED. The goal stays a draft.
+  const [needsPro, setNeedsPro] = useState(false);
   const inFlight = useRef(false);
 
   async function run() {
@@ -31,10 +36,15 @@ export function ActivateGoalButton({
     inFlight.current = true;
     setPending(true);
     setError('');
+    setNeedsPro(false);
     try {
       const res = await activateGoal({ goalId });
       if (res.ok) onActivated?.(res.data);
-      else setError(errorMessage(res.error));
+      else if (res.error.code === 'UPGRADE_REQUIRED') {
+        const upgradeNote = 'You already have an active goal. This one is kept as a draft, with everything you planned.';
+        setNeedsPro(true);
+        openUpgrade('multiple_goals', upgradeNote);
+      } else setError(errorMessage(res.error));
     } catch {
       setError('Could not activate. Please try again.');
     } finally {
@@ -57,6 +67,14 @@ export function ActivateGoalButton({
         <Text variant="meta" tone="danger" accessibilityRole="alert">
           {error}
         </Text>
+      ) : null}
+      {needsPro ? (
+        <UpgradePrompt
+          feature="multiple_goals"
+          trigger="action"
+          note="You already have an active goal. This one is kept as a draft, with everything you planned."
+          onDismiss={() => setNeedsPro(false)}
+        />
       ) : null}
     </View>
   );

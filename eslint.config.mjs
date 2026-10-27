@@ -10,6 +10,8 @@ const config = [
   {
     ignores: [
       'legacy/**',
+      // The Expo app has its own config and runs `expo lint` (mobile/package.json).
+      'mobile/**',
       '.claude/**',
       '.next/**',
       'node_modules/**',

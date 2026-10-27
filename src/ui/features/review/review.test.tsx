@@ -10,7 +10,7 @@ import { ReviewView } from './ReviewView';
 afterEach(cleanup);
 
 const refl = (over: Partial<ReflectionDTO> = {}): ReflectionDTO => ({
-  id: 'r1', goalId: 'g1', date: '2026-10-18', kind: 'daily', wentWell: 'Good run', didntGoWell: '', nextChange: '',
+  id: 'r1', goalId: 'g1', date: '2026-10-18', kind: 'daily', wentWell: 'Good run', didntGoWell: '', nextChange: '', answers: {},
   createdAt: '2026-10-18T20:00:00.000Z', updatedAt: '', ...over,
 });
 const ev = (over: Partial<GoalEventDTO> = {}): GoalEventDTO => ({
@@ -80,12 +80,18 @@ describe('ReflectionForm', () => {
     expect(add).toHaveBeenCalledWith(expect.objectContaining({ goalId: '11111111-1111-4111-8111-111111111111', date: '2026-10-19', kind: 'daily', wentWell: 'hello' }));
   });
 
-  it('clears and confirms on success', async () => {
+  it('gates weekly reflections for Free users with an upgrade prompt, and allows saving when advanced is true', async () => {
     const saved = refl();
     const add = vi.fn(async () => ({ ok: true as const, data: saved }));
     const onSaved = vi.fn();
-    render(<ReflectionForm goalId="11111111-1111-4111-8111-111111111111" today="2026-10-19" addReflection={add} onSaved={onSaved} />);
+    const { rerender } = render(<ReflectionForm goalId="11111111-1111-4111-8111-111111111111" today="2026-10-19" addReflection={add} onSaved={onSaved} />);
     await userEvent.click(screen.getByRole('button', { name: 'weekly' }));
+    expect(screen.getByTestId('upgrade-prompt-advanced_reviews')).toHaveTextContent('Reflect. Learn. Improve.');
+    expect(screen.queryByRole('button', { name: 'Save reflection' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'See Harada Pro' }).getAttribute('href')).toBe('/pricing');
+    expect(add).not.toHaveBeenCalled();
+
+    rerender(<ReflectionForm goalId="11111111-1111-4111-8111-111111111111" today="2026-10-19" addReflection={add} onSaved={onSaved} advanced />);
     await userEvent.type(screen.getByLabelText('What will you change?'), 'sleep');
     await userEvent.click(screen.getByRole('button', { name: 'Save reflection' }));
     await waitFor(() => expect(screen.getByText('Reflection saved.')).toBeTruthy());

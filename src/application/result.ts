@@ -4,6 +4,8 @@ export type AppErrorCode =
   | 'VALIDATION'
   | 'INVALID_STATE'
   | 'LIMIT_REACHED'
+  /** Needs Harada Pro (the database's HG402); clients show an upgrade prompt for it. */
+  | 'UPGRADE_REQUIRED'
   | 'NOT_FOUND'
   | 'UNAUTHENTICATED'
   | 'CONFLICT'

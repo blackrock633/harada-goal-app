@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import * as uc from '@/application/use-cases';
 import { getDeps } from '@/infrastructure/container';
 import { requireCtx } from '@/app/lib/session';
 import { signOutAction } from '@/app/actions/auth';
 import { Button } from '@/ui/primitives';
 import { Screen, ScreenHeader, Section } from '@/ui/layout';
+import { routes } from '@/ui/routes';
 
 export const metadata: Metadata = { title: 'Settings' };
 
@@ -31,6 +33,12 @@ export default async function SettingsPage() {
             <dd className="mt-1 text-sm text-ink-muted">Decides when your day starts and what counts as “today”.</dd>
           </div>
         </dl>
+        <Link
+          href={routes.accountBilling}
+          className="mt-4 inline-flex min-h-11 items-center font-medium text-accent underline underline-offset-2"
+        >
+          Plan and billing
+        </Link>
         <form action={signOutAction} className="mt-6">
           <Button type="submit" variant="secondary">Sign out</Button>
         </form>

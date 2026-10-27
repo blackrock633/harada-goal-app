@@ -25,18 +25,8 @@ describe('Screen', () => {
     expect(within(screen.getByTestId('screen-scroll')).queryByText('Save')).toBeNull();
   });
 
-  it('offers pull-to-refresh only when onRefresh is given', async () => {
-    const onRefresh = jest.fn();
-    const view = await render(
-      <Screen onRefresh={onRefresh} refreshing>
-        <RNText>content</RNText>
-      </Screen>,
-    );
-    const control = screen.getByTestId('screen-scroll').props.refreshControl;
-    expect(control.props.refreshing).toBe(true);
-    control.props.onRefresh();
-    expect(onRefresh).toHaveBeenCalledTimes(1);
-    await view.rerender(
+  it('has no pull-to-refresh spinner (data refreshes on focus; loading uses skeletons)', async () => {
+    await render(
       <Screen>
         <RNText>content</RNText>
       </Screen>,

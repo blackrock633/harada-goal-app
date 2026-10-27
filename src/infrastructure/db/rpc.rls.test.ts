@@ -364,7 +364,7 @@ describe('RPC write path', () => {
         const before = await snapshot();
         const refl = uuid();
         // A fixed past date: A's time zone was changed above, so the UTC `today` may be A's tomorrow.
-        await one(t.client, a(), 'add_reflection', { id: refl, goalId, date: '2026-01-02', kind: 'weekly', wentWell: 'x' });
+        await one(t.client, a(), 'add_reflection', { id: refl, goalId, date: '2026-01-02', kind: 'daily', wentWell: 'x' });
         const beforeWithRefl = await snapshot();
         const cases: [string, unknown][] = [
           ['update_goal', { goalId, title: 'Mine' }],

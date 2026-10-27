@@ -3,14 +3,11 @@ import { StyleSheet, View } from 'react-native';
 
 import type { GoalEventDTO, OutcomeDTO, ReflectionDTO } from '@shared/application/dto';
 import { useTheme } from '@/theme';
-import { EmptyState, Screen, Section, Text, useLayout } from '@/ui';
+import { Badge, EmptyState, ListRow, Screen, Section, Text, useLayout } from '@/ui';
 import { formatLocalDate } from '../today/format';
 import { ReflectionCard } from './ReflectionCard';
 
 export type ReviewViewProps = {
-  /** Pull-to-refresh, wired by the route to the query refetch. */
-  refreshing?: boolean;
-  onRefresh?: () => void;
   /** Slot for <ReflectionForm />. */
   reflectionForm: ReactNode;
   /** GoalSummaryDTO.completedThisWeek. */
@@ -18,6 +15,11 @@ export type ReviewViewProps = {
   outcomes: OutcomeDTO[];
   reflections: ReflectionDTO[];
   events: GoalEventDTO[];
+  /** Offers "Edit" on each past reflection. */
+  onEditReflection?: (reflection: ReflectionDTO) => void;
+  /** Opens the progress history (/insights). `historyLocked` marks it as part of Harada Pro. */
+  onOpenHistory?: () => void;
+  historyLocked?: boolean;
 };
 
 type TimelineEntry =
@@ -67,8 +69,9 @@ export function ReviewView({
   outcomes,
   reflections,
   events,
-  refreshing,
-  onRefresh,
+  onEditReflection,
+  onOpenHistory,
+  historyLocked,
 }: ReviewViewProps) {
   const { colors, space } = useTheme();
   const { width } = useLayout();
@@ -96,7 +99,7 @@ export function ReviewView({
         ) : (
           <View>
             {sortedReflections.map((r) => (
-              <ReflectionCard key={r.id} reflection={r} />
+              <ReflectionCard key={r.id} reflection={r} onEdit={onEditReflection} />
             ))}
           </View>
         )}
@@ -108,6 +111,17 @@ export function ReviewView({
             ? 'No tasks completed yet this week.'
             : `${completedThisWeek} ${completedThisWeek === 1 ? 'task' : 'tasks'} completed this week.`}
         </Text>
+        {onOpenHistory ? (
+          <ListRow
+            title="Progress history"
+            meta="Your activity week by week"
+            chevron
+            divider={false}
+            onPress={onOpenHistory}
+            accessibilityLabel={historyLocked ? 'Progress history, part of Harada Pro' : 'Progress history'}
+            trailing={historyLocked ? <Badge text="Pro" /> : undefined}
+          />
+        ) : null}
         {outcomes.length === 0 ? (
           <EmptyState
             title="No key areas yet"
@@ -176,7 +190,7 @@ export function ReviewView({
   );
 
   return (
-    <Screen refreshing={refreshing} onRefresh={onRefresh} maxWidth={twoPane ? 'full' : undefined}>
+    <Screen maxWidth={twoPane ? 'full' : undefined}>
       {twoPane ? (
         <View style={[styles.panes, { gap: space[10] }]}>
           <View style={styles.left}>{form}</View>

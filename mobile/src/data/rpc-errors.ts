@@ -12,6 +12,8 @@ export interface PostgrestLikeError {
 const APP_CODES: Record<string, AppErrorCode> = {
   HG400: 'VALIDATION',
   HG401: 'UNAUTHENTICATED',
+  /** An entitlement check: needs Harada Pro. The message names the benefit; screens offer the upgrade. */
+  HG402: 'UPGRADE_REQUIRED',
   HG404: 'NOT_FOUND',
   HG409: 'CONFLICT',
   HG422: 'INVALID_STATE',

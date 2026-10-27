@@ -31,6 +31,6 @@ export function makeReflection(goalId: string, over: Partial<Reflection> = {}): 
   const now = new Date();
   return {
     id: randomUUID(), goalId, date: '2026-01-01', kind: 'daily', wentWell: 'a', didntGoWell: 'b',
-    nextChange: 'c', createdAt: now, updatedAt: now, ...over,
+    nextChange: 'c', answers: {}, createdAt: now, updatedAt: now, ...over,
   };
 }

@@ -103,3 +103,34 @@ verified before the staging project exists. Revisit once staging confirms those 
 RPCs). `rpc-parity.rls.test.ts` runs the same command script through both and fails on any difference in outcome
 or resulting data; drift remains possible only for paths the script doesn't cover. The event log (`goal_events`) is written only by trusted code, which also closes QA H4 for
 clients. Account deletion needs the service-role key, so it will be a Supabase Edge Function, not an RPC.
+
+## D-018 — Harada Pro: Stripe on the web, entitlements in Postgres · 2026-10-26 · accepted
+**Context:** Freemium with Pro monthly/annual, a 30-Day Challenge, sharing, referrals and first-party analytics,
+on top of D-017 (devices talk to Supabase directly, so the database is the authorization boundary).
+**Decision:** Stripe Checkout/Portal through Supabase Edge Functions; only the signed Stripe webhook writes
+`subscriptions` (service role, idempotent, ordered). One check, `harada_private.plan_of()`, decides Free/Pro;
+limits, features and prices are rows. Premium rules are database triggers or SECURITY DEFINER functions that
+resolve the caller from `auth.uid()`, so the web server path is covered too. New feature tables grant clients
+SELECT on own rows at most. Share links store a server-built snapshot under a random token. AI suggestions
+(Claude, Pro, 20/day) are drafts the user accepts item by item. Details: `docs/PREMIUM_SYSTEM.md`.
+**Alternatives:** RevenueCat/StoreKit in-app purchase (needs a development build, not Expo Go, and App Store
+review); client-side gating (rejected: the device is untrusted); public links pointing at live goal rows
+(rejected: a token would then reach more than the user chose to share).
+**Consequences:** the `begin_write` allow-list became the table `harada_private.write_rpcs`. Structure tests now
+pin explicit allow-lists of feature tables, anon-readable policies and reviewed definer RPCs. iOS distribution
+must settle how web checkout fits App Store rules per storefront.
+
+## D-019 — Social photos: device-encoded JPEG in the database, served per post · 2026-10-26 · accepted
+**Context:** Posts and profiles can carry a photo. The first version stored any PNG/JPEG/WebP data URI or any
+`https://` URL, inline in every feed item.
+**Decision:** Photos are re-encoded on the device (mobile: expo-image-manipulator; web: canvas) into a downsized
+JPEG, which drops EXIF/GPS and anything appended to the file. The database accepts only
+`data:image/jpeg;base64,/9j/…` (the JPEG signature), capped at 60 000 characters for avatars and 700 000 for post
+photos; no remote URLs, so a viewer's device never contacts a third party. Feeds carry `hasImage`; the photo is
+fetched per post through `get_post_image()`, which applies `can_view_post()`, so it disappears with the post when
+its goal turns private or the post is deleted. The web serves it from `/community/image/<id>` as `image/jpeg`
+with `nosniff` and a `default-src 'none'` CSP. Comments are paginated (30 per page).
+**Alternatives:** Supabase Storage with a private bucket and signed URLs (more moving parts, a storage shim for
+tests, and signed URLs that outlive a privacy change for their lifetime). Revisit if photos grow large or many.
+**Consequences:** Avatars still travel inline with names (small by construction). Public share links are no longer
+offered in the app; the `/s/<token>` page and its functions remain for links already created.

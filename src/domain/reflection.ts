@@ -32,6 +32,7 @@ export function createReflection(
     wentWell,
     didntGoWell,
     nextChange,
+    answers: {},
     createdAt: now,
     updatedAt: now
   };

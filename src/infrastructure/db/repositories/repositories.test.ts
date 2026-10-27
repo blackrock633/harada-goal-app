@@ -413,12 +413,14 @@ describe('repositories (real Postgres + RLS)', () => {
       wentWell: 'w',
       didntGoWell: 'd',
       nextChange: 'n',
+      answers: {},
       createdAt: now(),
       updatedAt: now(),
       ...over,
     });
 
     it('round-trips, updates, lists newest first with before, latestDateByGoals, delete', async () => {
+      await t.client.query(`insert into plan_grants (user_id, plan_id, reason) values ($1, 'pro', 'test')`, [userId]);
       const goal = await seedGoal();
       const r1 = make(goal.id, '2026-10-10');
       const r2 = make(goal.id, '2026-10-12', { kind: 'weekly' });

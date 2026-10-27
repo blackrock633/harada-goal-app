@@ -1,4 +1,4 @@
-import { ActivityIndicator, Platform, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { MIN_TOUCH, useTheme } from '@/theme';
 
@@ -87,7 +87,15 @@ export function Button({
       {loading ? (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           <View style={styles.spinner}>
-            <ActivityIndicator color={palette.fg} />
+            <View
+              style={{
+                width: compact ? 28 : 44,
+                height: compact ? 8 : 10,
+                borderRadius: radius.sm,
+                backgroundColor: palette.fg,
+                opacity: 0.35,
+              }}
+            />
           </View>
         </View>
       ) : null}

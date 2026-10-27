@@ -18,10 +18,23 @@ Deno.serve((req: Request) =>
       if (error || !data.user?.email) return null;
       return { id: data.user.id, email: data.user.email };
     },
+    async consumeAttempt(userId) {
+      const { data, error } = await admin.rpc('consume_password_attempt', { p_user_id: userId });
+      if (error) throw error;
+      return data === true;
+    },
     async verifyPassword(email, password) {
       // A throwaway client: checking the password must not touch any other session.
-      const { error } = await createClient(url, anonKey, noSession).auth.signInWithPassword({ email, password });
-      return !error;
+      const probe = createClient(url, anonKey, noSession);
+      const { error } = await probe.auth.signInWithPassword({ email, password });
+      if (error) {
+        // Only a wrong password is "incorrect"; Auth rate limits and outages must not look like one.
+        if ((error as { code?: string }).code === 'invalid_credentials') return false;
+        throw error;
+      }
+      // Revoke the probe's session so no extra refresh token outlives this request.
+      await probe.auth.signOut({ scope: 'local' }).catch(() => undefined);
+      return true;
     },
     async deleteUser(userId) {
       const { error } = await admin.auth.admin.deleteUser(userId);
@@ -30,5 +43,7 @@ Deno.serve((req: Request) =>
     logError(message, detail) {
       console.error(message, detail);
     },
+    // Comma-separated, e.g. "https://app.example.com". Unset: no browser origin is allowed.
+    allowedOrigins: (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((o) => o.trim()).filter(Boolean),
   }),
 );

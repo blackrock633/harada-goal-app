@@ -310,6 +310,8 @@ describe('reflections and history (mocked auth)', () => {
 
 describe('queries (mocked auth)', () => {
   it('getToday batches goals and returns next items with outcomePosition', async () => {
+    // Two active goals need Harada Pro (plans_entitlements migration).
+    await t.client.query(`insert into plan_grants (user_id, plan_id, reason) values ($1, 'pro', 'test')`, [userId]);
     const g1 = await newGoal(ctx, 'Goal one');
     const g2 = await newGoal(ctx, 'Goal two');
     const o1 = await newOutcome(g1.id, 'Out1');
@@ -535,5 +537,37 @@ describe('metrics split (mocked auth)', () => {
     });
     expect(d.outcomes[0]).toMatchObject({ taskCompletion: 0.5, completedTasks: 2, totalTasks: 4, attainment: 0.2 });
     expect(d.metrics.planning).toMatchObject({ filled: 5, total: 72 });
+  });
+});
+
+describe('plan limits through the web write path', () => {
+  /** A goal with one key area and one task, so it can be activated. */
+  const ready = async (title: string) => {
+    const g = await newGoal(ctx, title);
+    await newTask((await newOutcome(g.id)).id, 'Task');
+    return g;
+  };
+  it('a Free user can have one active goal; a second activation asks for Pro and changes nothing', async () => {
+    const g1 = await ready('First');
+    const g2 = await ready('Second');
+    must(await uc.activateGoal(t.deps, ctx, { goalId: g1.id }));
+    const r = await uc.activateGoal(t.deps, ctx, { goalId: g2.id });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe('UPGRADE_REQUIRED');
+      expect(r.error.message).toMatch(/one active goal/);
+    }
+    const { rows } = await t.client.query<{ status: string }>(`select status from goals where id = $1`, [g2.id]);
+    expect(rows[0]!.status).toBe('draft');
+  });
+
+  it('Pro (here a grant) allows several active goals; an expired grant does not', async () => {
+    await t.client.query(`insert into plan_grants (user_id, plan_id, reason, expires_at) values ($1, 'pro', 'test', now() - interval '1 day')`, [userId]);
+    const g1 = await ready('First');
+    const g2 = await ready('Second');
+    must(await uc.activateGoal(t.deps, ctx, { goalId: g1.id }));
+    expect((await uc.activateGoal(t.deps, ctx, { goalId: g2.id })).ok).toBe(false);
+    await t.client.query(`insert into plan_grants (user_id, plan_id, reason) values ($1, 'pro', 'test')`, [userId]);
+    must(await uc.activateGoal(t.deps, ctx, { goalId: g2.id }));
   });
 });

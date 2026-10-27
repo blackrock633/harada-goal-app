@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 
-import { errorMessage } from '@/data/errors';
+import { errorMessage, newClientId } from '@/data/errors';
 import type { ExecutionMutations, FocusMutations, MatrixMutations } from '@/data/mutations';
 import { CONTENT_MAX_WIDTH, useTheme } from '@/theme';
 import { Button, CheckCircle, FocusToggle, Icon, IconButton, ListRow, Section, Text, useLayout } from '@/ui';
 import type { ActionDTO, GoalDetailDTO, OutcomeFieldsDTO } from '@shared/application/dto';
+import type { Result } from '@shared/application/result';
+import { LIMITS } from '@shared/domain/limits';
+
+import { PlanSuggestions, type SuggestedAction, type SuggestedArea } from '../premium/PlanSuggestions';
 
 import { ActionEditorSheet, type ActionEditorMode } from './ActionEditorSheet';
 import { KeyAreaEditor } from './KeyAreaEditor';
@@ -30,6 +34,11 @@ export interface KeyAreaViewProps {
   onChanged?: () => void;
   /** Offered on CONFLICT. */
   onReloadLatest?: () => void;
+  /**
+   * Planning suggestions: true when the plan includes them, false to show them as Harada Pro,
+   * undefined to leave them out (plan unknown).
+   */
+  aiPlanning?: boolean;
 }
 
 type OutcomePatch = Pick<OutcomeFieldsDTO, 'id' | 'title' | 'description' | 'updatedAt'>;
@@ -50,16 +59,27 @@ export function KeyAreaView({
   onError,
   onChanged,
   onReloadLatest,
+  aiPlanning,
 }: KeyAreaViewProps) {
   const { colors, radius, space } = useTheme();
   const { wide, width } = useLayout();
   const pos = wrap(Number.isFinite(position) ? position : 0);
   const model = useMemo(() => buildMatrix(goal), [goal]);
   const area = model.areas[pos]!;
-  const outcome = area.outcome;
 
   const [overrides, setOverrides] = useState<Record<string, ActionDTO>>({});
   const [outcomeOverride, setOutcomeOverride] = useState<OutcomePatch | null>(null);
+  const outcome: OutcomeFieldsDTO | null = area.outcome ?? (outcomeOverride ? {
+    id: outcomeOverride.id,
+    goalId: goal.id,
+    title: outcomeOverride.title,
+    description: outcomeOverride.description,
+    measure: null,
+    position: pos,
+    archivedAt: null,
+    createdAt: '',
+    updatedAt: outcomeOverride.updatedAt,
+  } : null);
   const inFlight = useRef(new Set<string>());
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [editorOpen, setEditorOpen] = useState(false);
@@ -69,18 +89,26 @@ export function KeyAreaView({
   const [sheet, setSheet] = useState<{ id: number; mode: ActionEditorMode } | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const sheetCounter = useRef(0);
+  // Positions taken by accepted suggestions before the refreshed goal arrives, so two quick Adds
+  // never aim at the same slot.
+  const claimedSlots = useRef(new Set<number>());
+  const claimedAreas = useRef(new Set<number>());
 
   // Server data is authoritative once the route re-renders with a fresh goal.
   useEffect(() => {
     setOverrides({});
     setOutcomeOverride(null);
+    claimedSlots.current.clear();
+    claimedAreas.current.clear();
   }, [goal]);
 
   // A different key area is a different draft.
   useEffect(() => {
     setEditorOpen(false);
+    setOutcomeOverride(null);
     setPendingNav(null);
     setSheetOpen(false);
+    claimedSlots.current.clear();
   }, [pos]);
 
   const effective = (a: ActionDTO) => overrides[a.id] ?? a;
@@ -194,6 +222,46 @@ export function KeyAreaView({
   const tasks = filledSlots.filter((s) => s.action!.kind === 'task');
   const tasksDone = tasks.filter((s) => s.action!.completedAt).length;
 
+  const full = (message: string): Result<never> => ({ ok: false, error: { code: 'LIMIT_REACHED', message } });
+
+  /** A suggested action goes into the next free position of this key area. */
+  async function addSuggestedAction(item: SuggestedAction): Promise<Result<unknown>> {
+    if (!outcome) return full('Add the key area first.');
+    const slot = liveArea.slots.find((s) => !s.action && !claimedSlots.current.has(s.position));
+    if (!slot) return full('All 8 positions are planned.');
+    claimedSlots.current.add(slot.position);
+    const res = await matrix.addAction({
+      id: newClientId(),
+      outcomeId: outcome.id,
+      position: slot.position,
+      title: item.title.slice(0, LIMITS.actionTitle),
+      kind: item.kind,
+      ...(item.kind === 'routine'
+        ? { schedule: item.cadence === 'weekly' ? { type: 'weekly' as const, timesPerWeek: 1 } : { type: 'daily' as const } }
+        : {}),
+    });
+    if (res.ok) onChanged?.();
+    else claimedSlots.current.delete(slot.position);
+    return res;
+  }
+
+  /** A suggested key area goes into this empty slot first, then the next empty one. */
+  async function addSuggestedArea(item: SuggestedArea): Promise<Result<unknown>> {
+    const free = (p: number) => !model.areas[p]!.outcome && !claimedAreas.current.has(p);
+    const target = free(pos) ? pos : model.areas.find((a) => free(a.position))?.position;
+    if (target === undefined) return full('All 8 key areas are filled.');
+    claimedAreas.current.add(target);
+    const res = await matrix.addOutcome({
+      id: newClientId(),
+      goalId: goal.id,
+      position: target,
+      title: item.title.slice(0, LIMITS.outcomeTitle),
+    });
+    if (res.ok) onChanged?.();
+    else claimedAreas.current.delete(target);
+    return res;
+  }
+
   function addAt(position: number) {
     if (!outcome) return;
     openSheet({
@@ -279,18 +347,37 @@ export function KeyAreaView({
           All 8 positions are planned.
         </Text>
       )}
+      {aiPlanning !== undefined && firstFree ? (
+        <PlanSuggestions
+          mode="actions"
+          enabled={aiPlanning}
+          goalTitle={goal.title}
+          areaTitle={title}
+          existingActions={filledSlots.map((s) => s.action!.title)}
+          openPositions={openCount}
+          onAdd={addSuggestedAction}
+        />
+      ) : null}
     </Section>
   ) : null;
 
   const header = !outcome ? (
     <View style={{ gap: space[3] }}>
       <Text variant="title">{`Key area ${pos + 1} is empty`}</Text>
-      <Text variant="body" tone="muted">
-        Name one outcome that moves the goal forward. You can fill the other key areas later.
-      </Text>
       <View style={{ alignItems: 'flex-start' }}>
         <Button title={`Add key area ${pos + 1}`} icon="add" onPress={() => setEditorOpen(true)} />
       </View>
+      {aiPlanning !== undefined ? (
+        <PlanSuggestions
+          mode="areas"
+          enabled={aiPlanning}
+          goalTitle={goal.title}
+          successCriteria={goal.successCriteria}
+          existingAreas={model.areas.flatMap((a) => (a.outcome ? [a.outcome.title] : []))}
+          openPositions={model.areas.filter((a) => !a.outcome).length}
+          onAdd={addSuggestedArea}
+        />
+      ) : null}
     </View>
   ) : (
     <View style={{ gap: space[2] }}>
@@ -404,7 +491,7 @@ export function KeyAreaView({
       )}
 
       <KeyAreaEditor
-        key={`${resetKey}:${outcome ? 'edit' : 'create'}:${pos}`}
+        key={`${resetKey}:${pos}`}
         mode={
           outcome
             ? {
@@ -424,7 +511,8 @@ export function KeyAreaView({
         onDirtyChange={setAreaDirty}
         onReloadLatest={onReloadLatest}
         onDone={(o) => {
-          if (outcome) setOutcomeOverride({ id: o.id, title: o.title, description: o.description, updatedAt: o.updatedAt });
+          setOutcomeOverride({ id: o.id, title: o.title, description: o.description, updatedAt: o.updatedAt });
+          setEditorOpen(false);
           onChanged?.();
         }}
       />

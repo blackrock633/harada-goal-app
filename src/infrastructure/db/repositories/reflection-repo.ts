@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ReflectionRepo } from '@/application/ports';
-import { Reflection, ReflectionKind, Id, LocalDate } from '@/domain/types';
+import { Reflection, ReflectionKind, ReviewAnswers, Id, LocalDate } from '@/domain/types';
 import { PgTransaction } from 'drizzle-orm/pg-core';
 import { reflections, goals } from '../schema';
 import { eq, and, desc, lt, inArray } from 'drizzle-orm';
@@ -16,7 +16,10 @@ export class ReflectionRepoImpl implements ReflectionRepo {
       .innerJoin(goals, eq(reflections.goalId, goals.id))
       .where(and(eq(reflections.id, reflectionId), eq(goals.ownerId, ownerId)));
 
-    if (rows.length === 0) return null;
+    if (rows.length === 0) {
+      await this.tx.execute(sql`select harada_private.check_reflection_access(${reflectionId}::uuid)`);
+      return null;
+    }
     return this.mapToDomain(rows[0]!.reflection);
   }
 
@@ -95,6 +98,7 @@ export class ReflectionRepoImpl implements ReflectionRepo {
       wentWell: row.wentWell,
       didntGoWell: row.didntGoWell,
       nextChange: row.nextChange,
+      answers: (row.answers ?? {}) as ReviewAnswers,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

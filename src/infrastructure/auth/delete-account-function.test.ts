@@ -7,6 +7,7 @@ const ALICE = { id: '11111111-1111-4111-8111-111111111111', email: 'alice@exampl
 function deps(over: Partial<DeleteAccountDeps> = {}) {
   return {
     getUser: vi.fn(async (token: string) => (token === 'good' ? ALICE : null)),
+    consumeAttempt: vi.fn(async () => true),
     verifyPassword: vi.fn(async (_email: string, pw: string) => pw === 'correct horse'),
     deleteUser: vi.fn(async () => {}),
     ...over,
@@ -67,5 +68,54 @@ describe('delete-account Edge Function handler', () => {
     expect(body.error.code).toBe('INTERNAL');
     expect(JSON.stringify(body)).not.toContain('secret');
     expect(logError).toHaveBeenCalled();
+  });
+
+  // SEC-EDGE-01: a stolen access token must not become an unlimited password oracle.
+  it('stops checking passwords once the per-user attempt limit is used up', async () => {
+    let n = 0;
+    const d = deps({ consumeAttempt: vi.fn(async () => ++n <= 5) });
+    for (let i = 0; i < 5; i++) expect((await send(req({ password: 'wrong', confirmation: 'DELETE' }), d)).status).toBe(400);
+    const sixth = await send(req({ password: 'correct horse', confirmation: 'DELETE' }), d);
+    expect(sixth.status).toBe(429);
+    expect(sixth.body.error.code).toBe('RATE_LIMITED');
+    expect(d.verifyPassword).toHaveBeenCalledTimes(5);
+    expect(d.deleteUser).not.toHaveBeenCalled();
+    expect(d.consumeAttempt).toHaveBeenCalledWith(ALICE.id);
+  });
+
+  it('an Auth failure during the password check is a 500, not "incorrect password"', async () => {
+    const d = deps({ verifyPassword: vi.fn(async () => { throw new Error('429 from auth'); }), logError: vi.fn() });
+    const { status, body } = await send(req({ password: 'correct horse', confirmation: 'DELETE' }), d);
+    expect(status).toBe(500);
+    expect(body.error.code).toBe('INTERNAL');
+    expect(d.deleteUser).not.toHaveBeenCalled();
+  });
+
+  it('refuses oversized bodies before authenticating', async () => {
+    const big = JSON.stringify({ password: 'x'.repeat(1_000_000), confirmation: 'DELETE' });
+    const { status, d } = await send(req(big));
+    expect(status).toBe(413);
+    expect(d.getUser).not.toHaveBeenCalled();
+  });
+
+  it('answers CORS preflight only for allowed browser origins', async () => {
+    const d = deps({ allowedOrigins: ['https://app.example'] });
+    const pre = (origin: string) =>
+      handleDeleteAccount(new Request('https://x/functions/v1/delete-account', { method: 'OPTIONS', headers: { origin } }), d);
+    const ok = await pre('https://app.example');
+    expect(ok.status).toBe(204);
+    expect(ok.headers.get('access-control-allow-origin')).toBe('https://app.example');
+    const evil = await pre('https://evil.example');
+    expect(evil.status).toBe(403);
+    expect(evil.headers.get('access-control-allow-origin')).toBeNull();
+    const post = await handleDeleteAccount(
+      new Request('https://x/functions/v1/delete-account', {
+        method: 'POST',
+        headers: { origin: 'https://evil.example', authorization: 'Bearer good' },
+        body: JSON.stringify({ password: 'correct horse', confirmation: 'DELETE' }),
+      }),
+      d,
+    );
+    expect(post.headers.get('access-control-allow-origin')).toBeNull();
   });
 });

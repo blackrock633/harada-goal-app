@@ -33,3 +33,18 @@ export function requireServiceRoleKey(env: NodeJS.ProcessEnv = process.env): str
   if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
   return key;
 }
+
+/**
+ * Cookie attributes for the Supabase session cookies. @supabase/ssr defaults to `httpOnly: false` (so a
+ * browser client could read them); this app has no browser Supabase client, so page scripts never need the
+ * access/refresh tokens and an XSS must not be able to read them. `secure` outside development so tokens
+ * never travel over plain HTTP. maxAge is fixed by @supabase/ssr; session lifetime is set in Supabase Auth.
+ */
+export function supabaseCookieOptions(env: NodeJS.ProcessEnv = process.env) {
+  return {
+    path: '/',
+    sameSite: 'lax' as const,
+    httpOnly: true,
+    secure: env.NODE_ENV !== 'development' && env.NODE_ENV !== 'test',
+  };
+}

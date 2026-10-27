@@ -15,9 +15,31 @@ export const routes = {
   /** Key-area detail. `position` is the outcome slot 0..7 (works for empty slots too). */
   keyArea: (goalId: string, position: number) => withGoal(`/matrix/${position}`, goalId),
   review: (goalId?: string) => withGoal('/review', goalId),
+  community: '/community',
+  communityShare: (opts?: { goalId?: string; type?: string }) => {
+    const q = new URLSearchParams();
+    q.set('tab', 'feed');
+    q.set('compose', '1');
+    if (opts?.goalId) q.set('goalId', opts.goalId);
+    if (opts?.type) q.set('type', opts.type);
+    return `/community?${q.toString()}`;
+  },
+  profile: (username: string) => `/u/${encodeURIComponent(username)}`,
   settings: '/settings',
   signIn: '/signin',
   signUp: '/signup',
+  /** Sign-up carrying a validated referral code and/or a post-sign-up destination. */
+  signUpWith: (opts: { ref?: string; next?: string }) => {
+    const q = new URLSearchParams();
+    if (opts.ref) q.set('ref', opts.ref);
+    if (opts.next) q.set('next', opts.next);
+    const s = q.toString();
+    return s ? `/signup?${s}` : '/signup';
+  },
+  home: '/',
+  pricing: '/pricing',
+  challenge: '/challenge',
+  accountBilling: '/account/billing',
 } as const;
 
 function withGoal(path: string, goalId?: string): string {

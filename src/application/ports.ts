@@ -115,6 +115,10 @@ export interface GoalEventRepo {
   listByGoal(goalId: Id, opts: { limit: number; before?: Instant }): Promise<GoalEvent[]>;
 }
 
+export interface SocialRepo {
+  callRpc<T>(name: string, input?: Record<string, unknown>): Promise<T>;
+}
+
 export interface Repos {
   profiles: ProfileRepo;
   goals: GoalRepo;
@@ -124,6 +128,7 @@ export interface Repos {
   focus: DailyFocusRepo;
   reflections: ReflectionRepo;
   events: GoalEventRepo;
+  social: SocialRepo;
 }
 
 export interface UnitOfWork {
@@ -193,7 +198,8 @@ export class AuthGatewayError extends Error {
  */
 export interface AuthGateway {
   /** `confirmed: false` when the project requires email confirmation (no session yet). */
-  signUp(input: { email: string; password: string; displayName: string; timeZone: string }): Promise<{
+  /** `referralCode` (validated, 10 hex chars) is stored in sign-up metadata for referral attribution. */
+  signUp(input: { email: string; password: string; displayName: string; timeZone: string; referralCode?: string }): Promise<{
     user: AuthUser;
     confirmed: boolean;
   }>;

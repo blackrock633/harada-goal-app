@@ -1,0 +1,4 @@
+# Reviewed exceptions for `trivy fs` (security.yml). Each entry: why, and when to drop it.
+# zod 3.25.76 is bundled by expo@58 -> @expo/cli (build tooling, not shipped in the app; the app uses zod 4.6.7).
+# Drop when Expo ships a @expo/cli on zod >= 4.6.6. See docs/SECURITY_AUDIT.md SEC-DEP-03.
+CVE-2023-54404

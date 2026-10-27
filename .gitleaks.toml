@@ -1,0 +1,8 @@
+# gitleaks config for CI (.github/workflows/security.yml). Default rules plus one reviewed exception.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Reviewed: test-only DEV_AUTH_SECRET in the QA script. Dev auth is refused unless NODE_ENV is development/test and the DB is local PGlite (src/infrastructure/auth/mode.ts)."
+paths = ['''^tests/qa-regress\.sh$''']
+regexes = ['''qa-regress-secret-[0-9]+''']

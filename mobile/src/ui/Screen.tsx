@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CONTENT_MAX_WIDTH, useTheme } from '@/theme';
@@ -10,9 +10,6 @@ export type ScreenProps = {
   footer?: ReactNode;
   /** Offset for headers that overlap the content, if any. */
   keyboardVerticalOffset?: number;
-  /** Pull-to-refresh: shown only when `onRefresh` is given. */
-  refreshing?: boolean;
-  onRefresh?: () => void;
   /** Widest the content column gets on tablet / desktop. `full` lets a screen lay out its own wide grid. */
   maxWidth?: number | 'full';
 };
@@ -26,7 +23,7 @@ export type ScreenProps = {
  * button from being swallowed by keyboard dismissal. This needs no native module, so it also
  * works in Expo Go.
  */
-export function Screen({ children, footer, keyboardVerticalOffset = 0, refreshing = false, onRefresh, maxWidth = CONTENT_MAX_WIDTH }: ScreenProps) {
+export function Screen({ children, footer, keyboardVerticalOffset = 0, maxWidth = CONTENT_MAX_WIDTH }: ScreenProps) {
   const { colors, space } = useTheme();
   const insets = useSafeAreaInsets();
   return (
@@ -41,9 +38,6 @@ export function Screen({ children, footer, keyboardVerticalOffset = 0, refreshin
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        refreshControl={
-          onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} /> : undefined
-        }
         contentContainerStyle={{
           paddingHorizontal: space[4] + Math.max(insets.left, insets.right),
           paddingTop: space[4],

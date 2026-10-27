@@ -1,7 +1,8 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { DEV_AUTH_COOKIE, isDevAuthEnabled } from '@/infrastructure/auth/mode';
-import { readSupabasePublicEnv } from '@/infrastructure/supabase/env';
+import { clientIp, shareLimiter } from '@/infrastructure/http/rate-limit';
+import { readSupabasePublicEnv, supabaseCookieOptions } from '@/infrastructure/supabase/env';
 
 /**
  * Session refresh + a cheap redirect for signed-out visitors.
@@ -10,14 +11,51 @@ import { readSupabasePublicEnv } from '@/infrastructure/supabase/env';
  * direct server-action posts). Real enforcement is: server code derives the user from
  * AuthGateway.getUser() (server-verified) and every query runs under Postgres RLS.
  */
-const PROTECTED = ['/today', '/goal', '/settings', '/matrix', '/review'];
+const PROTECTED = ['/today', '/goal', '/settings', '/matrix', '/review', '/account', '/community', '/u'];
+
+/** Public share pages (/s/<token>): rate limited per IP, never cached or indexed. */
+const isSharePage = (pathname: string) => pathname.startsWith('/s/');
 
 function isProtected(pathname: string): boolean {
   return PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
+/**
+ * Strict CSP with a per-request nonce. Next reads the nonce from the request's CSP header and puts it on
+ * its own scripts; anything injected without it is refused. Styles allow 'unsafe-inline' for React style
+ * attributes (no script execution). The browser never talks to Supabase directly, so connect-src is 'self'.
+ */
+export function contentSecurityPolicy(nonce: string, dev = process.env.NODE_ENV === 'development'): string {
+  return [
+    `default-src 'self'`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? ` 'unsafe-eval'` : ''}`,
+    `style-src 'self' 'unsafe-inline'`,
+    `img-src 'self' data: blob:`,
+    `font-src 'self'`,
+    `connect-src 'self'${dev ? ' ws:' : ''}`,
+    `object-src 'none'`,
+    `base-uri 'self'`,
+    `form-action 'self'`,
+    `frame-ancestors 'none'`,
+  ].join('; ');
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  if (isSharePage(pathname) && !shareLimiter.consume(clientIp(request.headers))) {
+    return new NextResponse('Too many requests. Please wait a minute and try again.', {
+      status: 429,
+      headers: {
+        'content-type': 'text/plain; charset=utf-8',
+        'retry-after': '60',
+        'cache-control': 'private, no-store',
+        'x-robots-tag': 'noindex, nofollow',
+      },
+    });
+  }
+  const nonce = btoa(crypto.randomUUID());
+  const csp = contentSecurityPolicy(nonce);
+  request.headers.set('content-security-policy', csp);
   let response = NextResponse.next({ request });
   let signedIn = false;
 
@@ -28,6 +66,7 @@ export async function middleware(request: NextRequest) {
     const env = readSupabasePublicEnv();
     if (env) {
       const supabase = createServerClient(env.url, env.anonKey, {
+        cookieOptions: supabaseCookieOptions(),
         cookies: {
           getAll: () => request.cookies.getAll(),
           setAll: (toSet, headers) => {
@@ -59,6 +98,11 @@ export async function middleware(request: NextRequest) {
     // Keep any refreshed/cleared auth cookies on the redirect.
     for (const c of response.cookies.getAll()) redirect.cookies.set(c);
     return redirect;
+  }
+  response.headers.set('content-security-policy', csp);
+  if (isSharePage(pathname)) {
+    response.headers.set('cache-control', 'private, no-store');
+    response.headers.set('x-robots-tag', 'noindex, nofollow');
   }
   return response;
 }

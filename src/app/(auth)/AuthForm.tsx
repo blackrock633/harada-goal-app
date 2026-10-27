@@ -11,9 +11,15 @@ type Mode = 'signin' | 'signup';
 export function AuthForm({
   mode,
   action,
+  referralCode,
+  next,
 }: {
   mode: Mode;
   action: (prev: AuthFormState, form: FormData) => Promise<AuthFormState>;
+  /** Validated by the page (10 hex chars); carried to sign-up metadata for referral attribution. */
+  referralCode?: string;
+  /** Validated same-origin path to continue to after signing in/up. */
+  next?: string;
 }) {
   const [state, formAction, pending] = React.useActionState(action, {});
   const [timeZone, setTimeZone] = React.useState('UTC');
@@ -54,13 +60,15 @@ export function AuthForm({
         />
       </Field>
       {signup && <input type="hidden" name="timeZone" value={timeZone} />}
+      {signup && referralCode && <input type="hidden" name="ref" value={referralCode} />}
+      {next && <input type="hidden" name="next" value={next} />}
       <Button type="submit" loading={pending} className="w-full">
         {signup ? 'Create account' : 'Sign in'}
       </Button>
       <p className="text-center text-sm text-ink-muted">
         {signup ? 'Already have an account? ' : 'New here? '}
         <Link
-          href={signup ? routes.signIn : routes.signUp}
+          href={withQuery(signup ? routes.signIn : routes.signUp, { next })}
           className="inline-flex min-h-11 items-center font-medium text-accent underline underline-offset-2"
         >
           {signup ? 'Sign in' : 'Create an account'}
@@ -68,4 +76,11 @@ export function AuthForm({
       </p>
     </form>
   );
+}
+
+function withQuery(path: string, params: Record<string, string | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
+  const s = q.toString();
+  return s ? `${path}?${s}` : path;
 }

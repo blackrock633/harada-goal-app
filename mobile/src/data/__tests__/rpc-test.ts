@@ -6,6 +6,7 @@ import { actionFromRow, goalFromRow, outcomeFromRow, reflectionFromRow } from '@
 import { createFakeSupabase, type RpcReply } from '../test-support/fake-supabase';
 import { actionRow, checkRow, database, focusRow, goalRow, ID, outcomeRow, reflectionRow, routineRow, TODAY, uuid } from '../test-support/fixtures';
 import { createMutations } from '../rpc';
+import { templatePayload, type TemplateContent } from '../premium';
 
 const newMutations = (replies: Record<string, RpcReply> = {}, tables: Record<string, Record<string, unknown>[]> = {}) => {
   const fake = createFakeSupabase({ ...database(), ...tables }, replies);
@@ -47,6 +48,7 @@ const cases: Case[] = [
   { method: 'createGoal', rpc: 'create_goal', input: { id: ID.goalActive, title: '  Hello  ' }, parsed: { id: ID.goalActive, title: 'Hello' }, badInput: { title: '' }, reply: goalReply, goalId: ID.goalActive, expectData: dto.goal },
   { method: 'updateGoal', rpc: 'update_goal', input: { goalId: ID.goalActive, title: 'New' }, parsed: { goalId: ID.goalActive, title: 'New' }, badInput: { goalId: 'nope' }, reply: goalReply, goalId: ID.goalActive, expectData: dto.goal },
   { method: 'activateGoal', rpc: 'activate_goal', input: { goalId: ID.goalActive }, parsed: { goalId: ID.goalActive }, badInput: { goalId: 'x' }, reply: goalReply, goalId: ID.goalActive, expectData: dto.goal },
+  { method: 'restoreGoal', rpc: 'restore_goal', input: { goalId: ID.goalActive }, parsed: { goalId: ID.goalActive }, badInput: { goalId: 'x' }, reply: goalReply, goalId: ID.goalActive, expectData: dto.goal },
   { method: 'addOutcome', rpc: 'add_outcome', input: { goalId: ID.goalActive, title: 'Area', position: 3 }, parsed: { goalId: ID.goalActive, title: 'Area', position: 3 }, badInput: { goalId: ID.goalActive, title: 'x', position: 9 }, reply: outcomeReply, goalId: ID.goalActive, expectData: dto.outcome },
   { method: 'updateOutcome', rpc: 'update_outcome', input: { outcomeId: ID.outcome, measure: null }, parsed: { outcomeId: ID.outcome, measure: null }, badInput: { outcomeId: ID.outcome, title: '' }, reply: outcomeReply, goalId: ID.goalActive, expectData: dto.outcome },
   { method: 'addAction', rpc: 'add_action', input: { outcomeId: ID.outcome, title: 'Do', kind: 'task' }, parsed: { outcomeId: ID.outcome, title: 'Do', kind: 'task' }, badInput: { outcomeId: ID.outcome, title: 'Do', kind: 'chore' }, reply: taskReply, goalId: ID.goalActive, expectData: dto.task },
@@ -55,7 +57,8 @@ const cases: Case[] = [
   { method: 'reopenAction', rpc: 'reopen_action', input: { actionId: ID.task }, parsed: { actionId: ID.task }, badInput: {}, reply: taskReply, goalId: ID.goalActive, expectData: dto.task },
   { method: 'checkRoutine', rpc: 'check_routine', input: { actionId: ID.routine, date: TODAY }, parsed: { actionId: ID.routine, date: TODAY }, badInput: { actionId: ID.routine, date: '10/20' }, reply: routineReply, goalId: ID.goalActive, expectData: dto.routine },
   { method: 'uncheckRoutine', rpc: 'uncheck_routine', input: { actionId: ID.routine, date: '2026-10-19' }, parsed: { actionId: ID.routine, date: '2026-10-19' }, badInput: { actionId: ID.routine }, reply: routineReply, goalId: ID.goalActive, expectData: (r) => actionDTO(actionFromRow(r), [TODAY], TODAY, true) },
-  { method: 'addReflection', rpc: 'add_reflection', input: { goalId: ID.goalActive, date: '2026-10-19', kind: 'daily', wentWell: ' good ' }, parsed: { goalId: ID.goalActive, date: '2026-10-19', kind: 'daily', wentWell: 'good' }, badInput: { goalId: ID.goalActive, date: '2026-10-19', kind: 'monthly' }, reply: reflectionReply, goalId: ID.goalActive, expectData: dto.reflection },
+  { method: 'addReflection', rpc: 'add_reflection', input: { goalId: ID.goalActive, date: '2026-10-19', kind: 'daily', wentWell: ' good ' }, parsed: { goalId: ID.goalActive, date: '2026-10-19', kind: 'daily', wentWell: 'good' }, badInput: { goalId: ID.goalActive, date: '2026-10-19', kind: 'yearly' }, reply: reflectionReply, goalId: ID.goalActive, expectData: dto.reflection },
+  { method: 'updateReflection', rpc: 'update_reflection', input: { reflectionId: ID.goalActive, expectedUpdatedAt: '2026-10-19T09:00:00.000Z', wentWell: ' better ', answers: { learned: 'x' } }, parsed: { reflectionId: ID.goalActive, expectedUpdatedAt: '2026-10-19T09:00:00.000Z', wentWell: 'better', answers: { learned: 'x' } }, badInput: { reflectionId: ID.goalActive, answers: { mood: 'x' } }, reply: reflectionReply, goalId: ID.goalActive, expectData: dto.reflection },
 ];
 
 describe.each(cases)('$method', (c) => {
@@ -271,6 +274,30 @@ describe('createGoalFromTemplate', () => {
     const t = newMutations();
     expect(await t.m.createGoalFromTemplate('nope', clientId)).toMatchObject({ ok: false, error: { code: 'VALIDATION', fieldErrors: { templateId: expect.any(Array) } } });
     expect(await t.m.createGoalFromTemplate('marathon', 'not-a-uuid')).toMatchObject({ ok: false, error: { code: 'VALIDATION', fieldErrors: { id: expect.any(Array) } } });
+    expect(t.rpc).not.toHaveBeenCalled();
+  });
+});
+
+describe('createGoalFromContent (server catalogue)', () => {
+  const clientId = uuid(701);
+  const t0 = TEMPLATES[0]!;
+  const content = { ...t0, tier: 'premium' } as unknown as TemplateContent;
+
+  it('sends create_goal with the template id, the client id and the nested plan', async () => {
+    const t = newMutations({ create_goal: row(goalRow({ id: clientId, title: t0.goalTitle, status: 'draft' })) });
+    const res = await t.m.createGoalFromContent(templatePayload(content, clientId));
+    expect(res.ok).toBe(true);
+    const [name, { p_input }] = t.rpc.mock.calls[0] as unknown as [string, { p_input: { id: string; templateId: string; outcomes: unknown[] } }];
+    expect(name).toBe('create_goal');
+    expect(p_input).toMatchObject({ id: clientId, templateId: t0.id, title: t0.goalTitle });
+    expect(p_input.outcomes).toHaveLength(Math.min(8, t0.outcomes.length));
+    expect(t.invalidated()).toEqual(goalKeys(clientId));
+  });
+
+  it('validates the goal fields locally', async () => {
+    const t = newMutations();
+    const res = await t.m.createGoalFromContent(templatePayload({ ...content, goalTitle: '' }, clientId));
+    expect(res).toMatchObject({ ok: false, error: { code: 'VALIDATION' } });
     expect(t.rpc).not.toHaveBeenCalled();
   });
 });

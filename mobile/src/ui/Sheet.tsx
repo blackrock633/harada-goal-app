@@ -26,6 +26,8 @@ export function Sheet({ visible, onClose, title, children, footer }: SheetProps)
   const { colors, radius, space } = useTheme();
   const insets = useSafeAreaInsets();
   const reduceMotion = useReduceMotion();
+  // Always mounted: closing flips `visible` so iOS dismisses the modal itself. Unmounting a presented
+  // modal (returning null) could leave an invisible view controller over the app, freezing every touch.
   return (
     <Modal
       testID="sheet-modal"

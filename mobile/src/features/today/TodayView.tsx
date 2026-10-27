@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 
 import type { ActionDTO, NextItemDTO, TodayDTO } from '@shared/application/dto';
@@ -16,9 +16,6 @@ export type TodayViewProps = {
   data: TodayDTO;
   mutations: ExecutionMutations;
   focusMutations: FocusMutations;
-  /** Pull-to-refresh, wired by the route to the query refetch. */
-  refreshing?: boolean;
-  onRefresh?: () => void;
   onError?: (message: string) => void;
   /** Row body press: open the key area that owns the action. */
   onOpenAction?: (goalId: string, outcomePosition: number) => void;
@@ -32,6 +29,8 @@ export type TodayViewProps = {
   onActivated?: () => void;
   /** "Reflect on today" link. */
   onOpenReview?: (goalId: string) => void;
+  /** A quiet row under the lists (the 30-Day Challenge entry); loads on its own, never blocks Today. */
+  challengeEntry?: ReactNode;
 };
 
 const TWO_COLUMN_BREAKPOINT = 1024;
@@ -88,8 +87,6 @@ export function TodayView({
   data,
   mutations,
   focusMutations,
-  refreshing,
-  onRefresh,
   onError,
   onOpenAction,
   onOpenGoal,
@@ -98,6 +95,7 @@ export function TodayView({
   activateGoal,
   onActivated,
   onOpenReview,
+  challengeEntry,
 }: TodayViewProps) {
   const { space } = useTheme();
   const { width } = useLayout();
@@ -310,9 +308,6 @@ export function TodayView({
               style={{ alignSelf: 'flex-start', marginLeft: MIN_TOUCH + space[2] }}
             />
           ) : null}
-          <Text variant="meta" tone="muted">
-            {`Or tap the sun on any action below. Up to ${MAX_DAILY_FOCUS} a day.`}
-          </Text>
         </View>
       ) : (
         emptyLine(`Pick up to ${MAX_DAILY_FOCUS} actions for today from your matrix.`, matrixAction)
@@ -405,7 +400,7 @@ export function TodayView({
 
   if (!data.hasAnyGoals) {
     return (
-      <Screen refreshing={refreshing} onRefresh={onRefresh}>
+      <Screen>
         {heading}
         <EmptyState
           title="Start with one goal"
@@ -418,7 +413,7 @@ export function TodayView({
 
   if (draft) {
     return (
-      <Screen refreshing={refreshing} onRefresh={onRefresh}>
+      <Screen>
         {heading}
         <Section title="Activate your goal to begin" ruled={false}>
           <Text variant="body" tone="muted">
@@ -437,7 +432,7 @@ export function TodayView({
   }
 
   return (
-    <Screen refreshing={refreshing} onRefresh={onRefresh} maxWidth={twoColumns ? 1040 : undefined}>
+    <Screen maxWidth={twoColumns ? 1040 : undefined}>
       {heading}
       {errorBanner}
       {twoColumns ? (
@@ -450,6 +445,7 @@ export function TodayView({
           <View style={{ flex: 1, gap: space[4] }}>
             {tasksSection}
             {reflect}
+            {challengeEntry}
             {panel}
           </View>
         </View>
@@ -460,6 +456,7 @@ export function TodayView({
           {tasksSection}
           {doneSection}
           {reflect}
+          {challengeEntry}
           {panel}
         </>
       )}
