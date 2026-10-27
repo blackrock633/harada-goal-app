@@ -164,9 +164,6 @@ export function PlanSuggestions(props: PlanSuggestionsProps) {
         <View style={{ gap: space[1] }}>
           <View style={[styles.row, { gap: space[2] }]}>
             <Badge text="Suggested" />
-            <Text variant="caption" tone="muted" style={{ flex: 1 }}>
-              Drafted for you to look over. Add the ones that fit; you can edit them after.
-            </Text>
           </View>
           {items.length === 0 ? (
             <Text variant="meta" tone="muted">

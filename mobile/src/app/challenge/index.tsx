@@ -60,8 +60,6 @@ export default function ChallengeScreen() {
           onOpenReview={(goal) => router.navigate({ pathname: '/review', params: { goal } })}
           onComplete={(id) => router.push({ pathname: '/challenge/complete', params: { id } })}
           onShare={(goalId) => router.push({ pathname: '/share', params: { goalId, kind: 'challenge' } })}
-          refreshing={state.refreshing}
-          onRefresh={state.refetch}
         />
       ) : !current && goals.data && ctx ? (
         <ChallengeLanding
@@ -72,8 +70,6 @@ export default function ChallengeScreen() {
           onCreateGoal={() => router.push('/goal/new')}
           onOpenGoal={(goal) => router.navigate({ pathname: '/goal', params: { goal } })}
           onOpenReport={(id) => router.push({ pathname: '/challenge/complete', params: { id } })}
-          refreshing={state.refreshing}
-          onRefresh={state.refetch}
         />
       ) : null}
     </Gate>

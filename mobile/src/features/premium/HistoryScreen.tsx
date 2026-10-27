@@ -7,7 +7,7 @@ import { ErrorScreen, LoadingScreen } from '@/screens/queryState';
 import { useTheme } from '@/theme';
 import { EmptyState, Screen, Text } from '@/ui';
 
-import { ACTIVITY_NOTE, HistoryView, type HistoryRange } from './HistoryView';
+import { HistoryView, type HistoryRange } from './HistoryView';
 import { UpgradePrompt } from './UpgradePrompt';
 
 /**
@@ -38,16 +38,7 @@ export function HistoryScreen({ goalId: requested }: { goalId?: string }) {
   if (!allowed) {
     return (
       <Screen>
-        <View style={{ gap: space[4] }}>
-          <Text variant="title" accessibilityRole="header">
-            Progress history
-          </Text>
-          <Text tone="muted">
-            Week by week for “{goal.title}”: tasks due and done, tasks completed, routine days checked and
-            reflections. {ACTIVITY_NOTE}
-          </Text>
-          <UpgradePrompt feature="progress_history" trigger="gate" />
-        </View>
+        <UpgradePrompt feature="progress_history" trigger="gate" />
       </Screen>
     );
   }
@@ -56,7 +47,7 @@ export function HistoryScreen({ goalId: requested }: { goalId?: string }) {
   if (history.isPending) return <LoadingScreen label="Loading history" />;
 
   return (
-    <Screen refreshing={history.isRefetching} onRefresh={() => void Promise.all([history.refetch(), detail.refetch()])}>
+    <Screen>
       <HistoryView
         goalTitle={goal.title}
         range={range}

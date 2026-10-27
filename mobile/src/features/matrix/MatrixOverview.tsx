@@ -4,6 +4,7 @@ import { PanResponder, Platform, ScrollView, StyleSheet, View, useWindowDimensio
 import type { MatrixMutations } from '@/data/mutations';
 import { useTheme } from '@/theme';
 import { IconButton, ProgressBar, SegmentedControl, Text, useLayout } from '@/ui';
+import { useSwipeLock } from '@/ui/navigation';
 import type { GoalDetailDTO } from '@shared/application/dto';
 import {
   AREA_COUNT,
@@ -148,7 +149,96 @@ function touchDistance(e: GestureResponderEvent): number | null {
  * horizontally (left to right) and vertically once zoomed in or out.
  */
 function ZoomableSheet({ children }: { children: ReactNode }) {
+  // Dragging sideways here moves the sheet, never the page.
+  useSwipeLock(true);
+  return Platform.OS === 'ios' ? <NativeZoomSheet>{children}</NativeZoomSheet> : <FallbackZoomSheet>{children}</FallbackZoomSheet>;
+}
+
+/** Zoom percentage and +/- buttons; tapping the percentage toggles between 100% and fit-to-width. */
+function ZoomControls({ scale, fitScale, onScale }: { scale: number; fitScale: number; onScale: (s: number) => void }) {
   const { colors, radius, space } = useTheme();
+  return (
+    <View
+      style={{
+        alignSelf: 'flex-end',
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: colors.ruleStrong,
+        borderRadius: radius.sm,
+      }}
+    >
+      <IconButton icon="remove" accessibilityLabel="Zoom out" onPress={() => onScale(scale - ZOOM_STEP)} />
+      <Text
+        variant="caption"
+        tabular
+        accessibilityRole="button"
+        accessibilityLabel={`Zoom ${Math.round(scale * 100)}%`}
+        accessibilityHint="Switches between 100% and the whole sheet"
+        onPress={() => onScale(Math.abs(scale - 1) < 0.01 && fitScale < 1 ? fitScale : 1)}
+        style={{ paddingHorizontal: space[1] }}
+      >
+        {`${Math.round(scale * 100)}%`}
+      </Text>
+      <IconButton icon="add" accessibilityLabel="Zoom in" onPress={() => onScale(scale + ZOOM_STEP)} />
+    </View>
+  );
+}
+
+/**
+ * iOS: one native zooming scroll view. Pinch zooms, and one finger moves the sheet in any direction at
+ * any zoom (sideways included). Below the width of the screen the sheet is centred.
+ */
+function NativeZoomSheet({ children }: { children: ReactNode }) {
+  const { space } = useTheme();
+  const { height } = useWindowDimensions();
+  const [width, onLayout] = useMeasuredWidth();
+  const sheetSize = PHONE_SHEET_CELL * 9 + 2 * HEAVY_RULE;
+  const fitScale = width > 0 ? clamp(width / sheetSize, MIN_ZOOM, 1) : 1;
+  const [scale, setScale] = useState(1);
+  const [requested, setRequested] = useState(1);
+  const setZoom = (next: number) => {
+    const z = Math.round(clamp(next, Math.min(MIN_ZOOM, fitScale), MAX_ZOOM) * 100) / 100;
+    setRequested(z);
+    setScale(z);
+  };
+  // Tall enough to work in, never taller than most of the screen.
+  const viewportHeight = Math.max(320, Math.min(Math.round(height * 0.62), width > 0 ? width + 160 : 520));
+  return (
+    <View onLayout={onLayout} style={{ gap: space[2] }}>
+      <ZoomControls scale={scale} fitScale={fitScale} onScale={setZoom} />
+      {width > 0 ? (
+        <ScrollView
+          testID="sheet-zoom"
+          style={{ width, height: viewportHeight }}
+          minimumZoomScale={Math.min(MIN_ZOOM, fitScale)}
+          maximumZoomScale={MAX_ZOOM}
+          zoomScale={requested}
+          centerContent
+          bouncesZoom
+          directionalLockEnabled={false}
+          showsHorizontalScrollIndicator
+          showsVerticalScrollIndicator
+          scrollEventThrottle={32}
+          onScroll={(e) => {
+            const z = e.nativeEvent.zoomScale;
+            if (typeof z === 'number' && Math.abs(z - scale) >= 0.01) setScale(Math.round(z * 100) / 100);
+          }}
+          accessibilityLabel="Full sheet. Pinch to zoom; drag to move in any direction"
+          // The scrollable area is the sheet itself in both directions. Without this iOS sizes it to the
+          // screen's width, so after zooming out there was nothing left to scroll sideways.
+          contentContainerStyle={{ width: sheetSize, height: sheetSize }}
+        >
+          <View style={{ width: sheetSize, height: sheetSize }}>{children}</View>
+        </ScrollView>
+      ) : null}
+    </View>
+  );
+}
+
+/** Android and web: no native zoom, so pinch is read from touches and the sheet scrolls both ways. */
+function FallbackZoomSheet({ children }: { children: ReactNode }) {
+  const { space } = useTheme();
   const [width, onLayout] = useMeasuredWidth();
   const sheetSize = PHONE_SHEET_CELL * 9 + 2 * HEAVY_RULE;
   const fitScale = width > 0 ? clamp(width / sheetSize, MIN_ZOOM, 1) : 1;
@@ -204,47 +294,7 @@ function ZoomableSheet({ children }: { children: ReactNode }) {
 
   return (
     <View onLayout={onLayout} style={{ gap: space[2] }} {...panResponder.panHandlers}>
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: space[2],
-        }}
-      >
-        <Text variant="caption" tone="muted" style={{ flex: 1 }}>
-          Pinch to zoom in or out, and swipe left or right to move across the sheet.
-        </Text>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            borderWidth: StyleSheet.hairlineWidth,
-            borderColor: colors.ruleStrong,
-            borderRadius: radius.sm,
-          }}
-        >
-          <IconButton
-            icon="remove"
-            accessibilityLabel="Zoom out"
-            onPress={() => applyScale(scaleRef.current - ZOOM_STEP)}
-          />
-          <Text
-            variant="caption"
-            tabular
-            accessibilityLabel={`Zoom ${Math.round(scale * 100)}%`}
-            onPress={() => applyScale(scale === 1 && fitScale < 1 ? fitScale : 1)}
-            style={{ paddingHorizontal: space[1] }}
-          >
-            {`${Math.round(scale * 100)}%`}
-          </Text>
-          <IconButton
-            icon="add"
-            accessibilityLabel="Zoom in"
-            onPress={() => applyScale(scaleRef.current + ZOOM_STEP)}
-          />
-        </View>
-      </View>
+      <ZoomControls scale={scale} fitScale={fitScale} onScale={applyScale} />
 
       <ScrollView
         horizontal

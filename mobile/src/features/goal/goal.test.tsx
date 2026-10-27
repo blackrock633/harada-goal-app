@@ -398,13 +398,10 @@ describe('GoalOverview', () => {
     await show(detail(), { activateGoal, onActivated });
     await press('Activate goal');
     expect(await screen.findByTestId('upgrade-prompt-multiple_goals')).toBeOnTheScreen();
-    expect(screen.getByText(/kept as a draft, with everything you planned/)).toBeOnTheScreen();
     expect(screen.queryByText('Free includes one active goal.')).toBeNull();
     expect(onActivated).not.toHaveBeenCalled();
     // Still a draft: the button stays, so the user can try again after upgrading.
     expect(screen.getByRole('button', { name: 'Activate goal' })).toBeOnTheScreen();
-    await press('Not now');
-    expect(screen.queryByTestId('upgrade-prompt-multiple_goals')).toBeNull();
   });
 
   it('does not offer activation for an active goal', async () => {

@@ -201,31 +201,14 @@ export function ReflectionForm({
             if (!saving) {
               setKind(k);
               if ((k === 'weekly' || k === 'monthly') && !advanced) {
-                openUpgrade(
-                  'advanced_reviews',
-                  k === 'monthly'
-                    ? 'Monthly reviews are part of Harada Pro. Daily reflections stay free.'
-                    : 'Weekly reflections are part of Harada Pro. Daily reflections stay free.',
-                );
+                openUpgrade('advanced_reviews');
               }
             }
           }}
         />
       )}
-      <Text variant="meta" tone="muted">
-        {KIND_HINT[kind]}
-        {questions.length > 3 ? ' Answer what helps; you can leave any question empty.' : ''}
-      </Text>
       {locked ? (
-        <UpgradePrompt
-          feature="advanced_reviews"
-          trigger="gate"
-          note={
-            kind === 'monthly'
-              ? 'Monthly reviews are part of Harada Pro. Daily reflections stay free.'
-              : 'Weekly reflections are part of Harada Pro. Daily reflections stay free.'
-          }
-        />
+        <UpgradePrompt feature="advanced_reviews" trigger="locked" />
       ) : (
         <>
           <DateField
@@ -275,7 +258,6 @@ export function ReflectionForm({
             loading={saving}
             style={{ alignSelf: 'flex-start', minWidth: 180 }}
           />
-          {kind === 'weekly' && !advanced && !editing ? <UpgradePrompt feature="advanced_reviews" /> : null}
         </>
       )}
     </View>

@@ -5,6 +5,7 @@ import { useTheme } from '@/theme';
 import { Badge, Button, Icon, ListRow, ProgressBar, Section, Text, type BadgeTone } from '@/ui';
 import type { GoalDetailDTO, GoalFieldsDTO } from '@shared/application/dto';
 
+import { AchieveGoal } from './AchieveGoal';
 import { ActivateGoalButton } from './ActivateGoalButton';
 import { PURPOSE_FIELDS, daysBetween } from './goalLogic';
 
@@ -14,6 +15,9 @@ export type GoalOverviewProps = {
   today: string;
   activateGoal: GoalMutations['activateGoal'];
   onActivated?: (goal: GoalFieldsDTO) => void;
+  /** When given, an active goal offers "Mark goal achieved" (then, optionally, sharing it). */
+  markGoalAchieved?: GoalMutations['markGoalAchieved'];
+  onAchieved?: () => void;
   /** Shown as a ghost button when the route has no header action for it. */
   onEdit?: () => void;
   onOpenMatrix?: () => void;
@@ -82,7 +86,7 @@ function Measure({ label, last, children }: { label: string; last?: boolean; chi
   );
 }
 
-export function GoalOverview({ goal, today, activateGoal, onActivated, onEdit, onOpenMatrix, onOpenArea }: GoalOverviewProps) {
+export function GoalOverview({ goal, today, activateGoal, onActivated, markGoalAchieved, onAchieved, onEdit, onOpenMatrix, onOpenArea }: GoalOverviewProps) {
   const { space, colors } = useTheme();
   const { metrics, pace } = goal;
   const rows = goal.matrix.outcomes;
@@ -130,6 +134,9 @@ export function GoalOverview({ goal, today, activateGoal, onActivated, onEdit, o
           ) : goal.status === 'active' && onOpenMatrix ? (
             <Button title="Open matrix" icon="matrix" onPress={onOpenMatrix} />
           ) : null}
+          {goal.status === 'active' && markGoalAchieved ? (
+            <AchieveGoal goalId={goal.id} title={goal.title} markGoalAchieved={markGoalAchieved} onDone={onAchieved} />
+          ) : null}
           {onEdit ? <Button title="Edit goal" icon="edit" variant="ghost" onPress={onEdit} /> : null}
         </View>
       </View>
@@ -173,9 +180,6 @@ export function GoalOverview({ goal, today, activateGoal, onActivated, onEdit, o
                 {metrics.attainment !== null ? (
                   <>
                     <Text tabular>{`Measured attainment: ${Math.round(metrics.attainment * 100)}%`}</Text>
-                    <Text variant="meta" tone="muted">
-                      Averaged from the measures on your key areas. Tasks and routines are not included.
-                    </Text>
                   </>
                 ) : null}
               </>

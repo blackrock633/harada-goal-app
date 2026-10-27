@@ -39,8 +39,7 @@ describe('Social community system (profiles, following, feed, sharing, privacy, 
     });
 
     it('allows authenticated users to update their own profile fields and avatar', async () => {
-      const validPngDataUrl =
-        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const validPngDataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
       const res = await uc.updateSocialProfile(t.deps, ctxFor(aliceId), {
         displayName: 'Alice Marathon',
         username: 'alice_runs',
@@ -82,6 +81,17 @@ describe('Social community system (profiles, following, feed, sharing, privacy, 
         avatarUrl: 'data:image/svg+xml;base64,PHN2Zz48c2NyaXB0PmFsZXJ0KDEpPC9zY3JpcHQ+PC9zdmc+',
       });
       expect(svgAvatar).toMatchObject({ ok: false, error: { code: 'VALIDATION' } });
+
+      // Photos are JPEGs only, checked by their bytes: no PNG, no disguised content, no remote URLs.
+      for (const avatarUrl of [
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        'data:image/jpeg;base64,PGh0bWw+PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0PjwvaHRtbD4=',
+        'https://tracker.example.com/pixel.jpg',
+      ]) {
+        expect(await uc.updateSocialProfile(t.deps, ctxFor(bobId), { avatarUrl })).toMatchObject({ ok: false, error: { code: 'VALIDATION' } });
+      }
+      // And the database refuses them even if the application check were skipped.
+      await expect(t.client.query(`update social_profiles set avatar_url = 'https://tracker.example.com/p.jpg' where user_id = $1`, [bobId])).rejects.toThrow();
 
       // Valid update for Bob and Carol
       expect((await uc.updateSocialProfile(t.deps, ctxFor(bobId), { username: 'bob_builds' })).ok).toBe(true);
@@ -286,6 +296,26 @@ describe('Social community system (profiles, following, feed, sharing, privacy, 
       await uc.setGoalVisibility(t.deps, ctxFor(aliceId), { goalId: publicGoalId, visibility: 'public' });
       const bobFeedRestored = await uc.getSocialFeed(t.deps, ctxFor(bobId), { scope: 'following' });
       expect(bobFeedRestored.ok && bobFeedRestored.data.items).toHaveLength(2);
+    });
+
+    it('serves a post photo only to viewers who may see the post, and never inside the feed', async () => {
+      const post = await uc.createSocialPost(t.deps, ctxFor(aliceId), {
+        type: 'progress_update', goalId: publicGoalId, visibility: 'public', headline: 'Photo update', imageUrl: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=',
+      });
+      expect(post.ok).toBe(true);
+      if (!post.ok) return;
+      expect(post.data.hasImage).toBe(true);
+      const feed = await uc.getSocialFeed(t.deps, ctxFor(bobId), { scope: 'following' });
+      expect(JSON.stringify(feed)).not.toContain('base64');
+      expect(await uc.getPostImage(t.deps, ctxFor(bobId), { postId: post.data.id })).toMatchObject({ ok: true, data: { image: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=' } });
+
+      // The goal turns private: the photo goes with the post, for everyone but the author.
+      await uc.setGoalVisibility(t.deps, ctxFor(aliceId), { goalId: publicGoalId, visibility: 'private' });
+      expect(await uc.getPostImage(t.deps, ctxFor(bobId), { postId: post.data.id })).toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } });
+      expect((await uc.getPostImage(t.deps, ctxFor(aliceId), { postId: post.data.id })).ok).toBe(true);
+      await uc.setGoalVisibility(t.deps, ctxFor(aliceId), { goalId: publicGoalId, visibility: 'public' });
+      await uc.deleteSocialPost(t.deps, ctxFor(aliceId), { postId: post.data.id });
+      expect(await uc.getPostImage(t.deps, ctxFor(bobId), { postId: post.data.id })).toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } });
     });
 
     it('enforces post ownership for edit and delete, and deleting a post does not delete the goal', async () => {

@@ -60,7 +60,7 @@ const DEFINER_RPCS = [
   'add_post_comment', 'admin_metrics', 'am_i_admin', 'block_user', 'challenge_summary',
   'complete_challenge', 'create_share_link', 'create_social_post', 'delete_post_comment',
   'delete_social_post', 'discover_users', 'follow_user', 'get_goal_visibility', 'get_my_plan',
-  'get_my_referrals', 'get_shared_card', 'get_social_feed', 'get_social_post',
+  'get_my_referrals', 'get_post_image', 'get_shared_card', 'get_social_feed', 'get_social_post',
   'get_social_profile', 'get_template', 'goal_history', 'hide_or_report_post', 'join_challenge',
   'leave_challenge', 'list_follow_connections', 'list_social_notifications', 'list_templates',
   'mark_notifications_read', 'preview_share_card', 'revoke_share_link', 'set_goal_visibility',

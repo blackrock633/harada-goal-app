@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import type { ComponentRef, Ref } from 'react';
 import { Text as RNText, StyleSheet, View, type TextStyle } from 'react-native';
 
@@ -14,7 +15,7 @@ const TEXT_ORDER: TextKey[] = ['accomplishment', 'milestone', 'lesson', 'nextPri
  * same whatever the device scheme. Sizes are in image pixels and scaled to the drawn width.
  * Shows only what the server returned: nothing else from the goal.
  */
-export function ShareCard({ card, format, width, ref }: { card: Card; format: FormatId; width: number; ref?: Ref<ComponentRef<typeof View>> }) {
+export function ShareCard({ card, format, width, ref, photo }: { card: Card; format: FormatId; width: number; ref?: Ref<ComponentRef<typeof View>>; photo?: string | null }) {
   const f = FORMATS[format];
   const k = width / f.width;
   const wide = format === 'wide';
@@ -41,6 +42,14 @@ export function ShareCard({ card, format, width, ref }: { card: Card; format: Fo
       style={{ width, height: width * (f.height / f.width), backgroundColor: c.paper, padding: px(wide ? 64 : 88), overflow: 'hidden' }}
     >
       <View style={{ flex: 1, gap: px(wide ? 24 : 40), justifyContent: story ? 'center' : 'flex-start' }}>
+        {photo ? (
+          <Image
+            source={{ uri: photo }}
+            contentFit="cover"
+            style={{ width: '100%', height: px(wide ? 200 : story ? 720 : 360), borderRadius: px(8) }}
+            accessibilityIgnoresInvertColors
+          />
+        ) : null}
         <RNText allowFontScaling={false} style={t(wide ? 26 : 32, { color: c.inkMuted, letterSpacing: px(3), textTransform: 'uppercase' })}>
           {kicker}
         </RNText>

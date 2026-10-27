@@ -22,7 +22,7 @@ export function ActivateGoalButton({
   goalId,
   activateGoal,
   onActivated,
-  note = 'This goal is a draft. Activating it puts its actions on Today.',
+  note,
 }: ActivateGoalButtonProps) {
   const { space } = useTheme();
   const [pending, setPending] = useState(false);

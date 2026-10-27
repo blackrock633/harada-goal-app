@@ -39,8 +39,6 @@ export type ChallengeDashboardProps = {
   onOpenReview: (goalId: string) => void;
   onComplete: (enrollmentId: string) => void;
   onShare: (goalId: string) => void;
-  refreshing?: boolean;
-  onRefresh?: () => void;
 };
 
 /** The running challenge: where you are, what to do today, and what has been logged. All numbers are stored data. */
@@ -54,8 +52,6 @@ export function ChallengeDashboard({
   onOpenReview,
   onComplete,
   onShare,
-  refreshing,
-  onRefresh,
 }: ChallengeDashboardProps) {
   const { space } = useTheme();
   const cells = calendarCells(s);
@@ -78,7 +74,7 @@ export function ChallengeDashboard({
   };
 
   return (
-    <Screen refreshing={refreshing} onRefresh={onRefresh}>
+    <Screen>
       <View style={{ gap: space[1] }}>
         <Text variant="caption" tone="muted">
           30-DAY CHALLENGE
@@ -133,9 +129,6 @@ export function ChallengeDashboard({
           <StatRow label="Days with activity" value={`${s.activeDays} of ${Math.max(s.day, 0)}`} />
           <StatRow label="Weekly reviews written" value={`${reviewsDone} of ${s.weeklyReviews.length}`} divider={false} />
         </View>
-        <Text variant="caption" tone="muted">
-          Counted from what you logged. Completed actions are not the same as reaching the goal.
-        </Text>
       </Section>
 
       <Section title="Weekly reviews">

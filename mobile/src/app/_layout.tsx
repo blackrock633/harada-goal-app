@@ -1,12 +1,13 @@
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, router } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { SessionProvider, useSession } from '@/auth/session';
 import { QueryProvider } from '@/data/query-provider';
 import { useAppFonts, useTheme } from '@/theme';
-import { ErrorState, Screen } from '@/ui';
+import { ErrorState, IconButton, Screen } from '@/ui';
 import { installWebSurfaces } from '@/ui/web-surfaces';
 
 // Keep the native splash screen up until the display face is loaded.
@@ -15,11 +16,13 @@ installWebSurfaces();
 
 export default function RootLayout() {
   return (
-    <SessionProvider>
-      <QueryProvider>
-        <RootNavigator />
-      </QueryProvider>
-    </SessionProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SessionProvider>
+        <QueryProvider>
+          <RootNavigator />
+        </QueryProvider>
+      </SessionProvider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -94,11 +97,22 @@ function RootNavigator() {
           }}
         />
           {/* Harada Pro, history, the 30-Day Challenge and sharing (premium.ts). */}
-          <Stack.Screen name="upgrade" options={{ ...pushed, title: 'Harada Pro' }} />
+          <Stack.Screen
+            name="upgrade"
+            options={{
+              ...pushed,
+              // The paywall covers the whole screen; Close is the only way back.
+              presentation: 'fullScreenModal',
+              title: '',
+              headerLeft: () => <IconButton icon="close" accessibilityLabel="Close" tone="muted" onPress={() => router.back()} />,
+            }}
+          />
           <Stack.Screen name="insights" options={{ ...pushed, title: 'Progress history' }} />
           <Stack.Screen name="share" options={{ ...pushed, presentation: 'modal', title: 'Share progress' }} />
-          <Stack.Screen name="community" options={{ ...pushed, title: 'Community' }} />
+          <Stack.Screen name="share-card" options={{ ...pushed, presentation: 'modal', title: 'Share as an image' }} />
+          <Stack.Screen name="community" options={{ headerShown: false }} />
           <Stack.Screen name="challenge" />
+          <Stack.Screen name="menu" options={{ ...pushed, presentation: 'modal', title: 'Menu' }} />
         </Stack.Protected>
       </Stack>
     </ThemeProvider>

@@ -72,8 +72,8 @@ describe('challenge routes', () => {
     expect(screen.getByRole('button', { name: 'Start the challenge' })).toBeOnTheScreen();
   });
 
-  it('the share modal opens with everything hidden', async () => {
-    await renderRouter(APP, { initialUrl: '/share?goalId=g1&kind=weekly' });
+  it('the image card opens with everything hidden', async () => {
+    await renderRouter(APP, { initialUrl: '/share-card?goalId=g1&kind=weekly' });
     expect(await screen.findByText('This week card')).toBeOnTheScreen();
     expect(screen.getByRole('checkbox', { name: 'Goal title' })).not.toBeChecked();
     expect(screen.getByLabelText("Next week's priority")).toBeOnTheScreen();

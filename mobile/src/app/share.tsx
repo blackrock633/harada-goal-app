@@ -1,32 +1,31 @@
 import { router, useLocalSearchParams } from 'expo-router';
 
-import { useFocusedGoal } from '@/data/hooks';
-import { ShareComposer, isCardKind } from '@/features/sharing';
+import { useGoals } from '@/data/hooks';
+import { PostComposer } from '@/features/social/PostComposer';
 import { combine, Gate } from '@/screens/queryState';
 import { EmptyState, Screen } from '@/ui';
+import type { SocialPostType } from '@shared/application/social';
 
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
 
-/** Share progress (modal): `?goalId=…&kind=progress|weekly|challenge`. Defaults: the focused goal, a progress card. */
-export default function ShareScreen() {
-  const params = useLocalSearchParams<{ goalId?: string | string[]; kind?: string | string[] }>();
-  const requested = first(params.goalId);
-  const kindParam = first(params.kind);
-  const kind = isCardKind(kindParam) ? kindParam : 'progress';
-  const goal = useFocusedGoal(requested);
+/** What a link into sharing asks for: `?type=` directly, or the older `?kind=` of a card. */
+function initialType(type?: string, kind?: string): SocialPostType {
+  const types: SocialPostType[] = ['goal_completed', 'milestone', 'progress_update', 'general_achievement', 'goal_started'];
+  if (type && (types as string[]).includes(type)) return type as SocialPostType;
+  return kind === 'challenge' ? 'milestone' : 'progress_update';
+}
 
-  if (requested) return <ShareComposer goalId={requested} kind={kind} />;
+/** Share progress (modal): `?goalId=…&type=goal_completed|milestone|progress_update|…`. */
+export default function ShareScreen() {
+  const params = useLocalSearchParams<{ goalId?: string | string[]; type?: string | string[]; kind?: string | string[] }>();
+  const goals = useGoals();
   return (
-    <Gate state={combine(goal)}>
-      {goal.data ? (
-        <ShareComposer goalId={goal.data.id} kind={kind} />
+    <Gate state={combine(goals)}>
+      {goals.data && goals.data.length > 0 ? (
+        <PostComposer goals={goals.data} initialGoalId={first(params.goalId)} initialType={initialType(first(params.type), first(params.kind))} />
       ) : (
         <Screen>
-          <EmptyState
-            title="Nothing to share yet"
-            message="Create a goal first. Cards show only what you choose from it."
-            action={{ label: 'Create your goal', onPress: () => router.push('/goal/new') }}
-          />
+          <EmptyState title="Nothing to share yet" message="Create a goal first." action={{ label: 'Create your goal', onPress: () => router.push('/goal/new') }} />
         </Screen>
       )}
     </Gate>

@@ -71,7 +71,6 @@ export function DetailsFields({ draft, errors, disabled, onChange, onChangePurpo
 
       <Section
         title="Why it matters"
-        description="Your reasons are saved as the four purpose notes on this goal. All of them are optional."
       >
         {visible.map((f) => (
           <TextField

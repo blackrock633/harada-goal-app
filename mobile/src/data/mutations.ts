@@ -31,6 +31,8 @@ export interface GoalMutations {
   activateGoal: Mutation<{ goalId: string }, GoalFieldsDTO>;
   /** Un-archive: the goal returns to the status it had before (active may need Harada Pro). */
   restoreGoal: Mutation<{ goalId: string }, GoalFieldsDTO>;
+  /** Only the user declares a goal achieved (never inferred from completed actions). */
+  markGoalAchieved: Mutation<{ goalId: string }, GoalFieldsDTO>;
 }
 
 export interface MatrixMutations {

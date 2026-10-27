@@ -71,11 +71,6 @@ export function GoalsPanel({ goals, currentId, plan, restoreGoal, onOpenGoal, on
     <View style={{ gap: space[6] }}>
       <Section
         title="Your goals"
-        description={
-          !multiple && activeCount >= 1
-            ? 'Free keeps one goal active. Other goals stay as drafts, with their plans, until you activate them.'
-            : undefined
-        }
       >
         <View>
           {visible.map((g, i) => {

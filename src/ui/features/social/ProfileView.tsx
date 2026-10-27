@@ -126,7 +126,7 @@ export function ProfileView({
     e.target.value = '';
     if (!file) return;
     try {
-      const dataUrl = await readImageFileAsDataUrl(file, 250 * 1024);
+      const dataUrl = await readImageFileAsDataUrl(file, 'avatar');
       setAvatarUrl(dataUrl);
       setErrorMessage(null);
     } catch (err) {

@@ -208,6 +208,7 @@ export function createMutations(deps: RpcDeps): AllMutations {
       run('update_goal', updateGoalSchema, input, goalOfGoalRow, goalDto),
     activateGoal: transition('activate_goal'),
     restoreGoal: transition('restore_goal'),
+    markGoalAchieved: transition('mark_goal_achieved'),
 
     addOutcome: (input) =>
       run('add_outcome', addOutcomeSchema, input, (r: OutcomeRow) => r.goal_id, outcomeDto),

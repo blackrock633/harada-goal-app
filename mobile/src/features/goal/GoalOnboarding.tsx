@@ -260,7 +260,6 @@ export function GoalOnboarding({
       {templates.length > 0 ? (
         <Section
           title="Or start from an example"
-          description="An example creates a new goal with ready-made key areas and actions. You can change all of it."
         >
           <View>
             {templates.map((t, i) => (

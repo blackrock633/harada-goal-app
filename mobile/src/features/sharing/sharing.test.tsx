@@ -2,34 +2,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import * as Sharing from 'expo-sharing';
 import type { ReactElement } from 'react';
-import { Share } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 
-import type { Card, CardInput, ShareLink } from '@/data/premium';
+import type { Card, CardInput } from '@/data/premium';
 import { ShareComposer } from './ShareComposer';
-import { NOT_CONFIGURED, linkStatus } from './ShareLinks';
 import { buildInput, EMPTY_STATE } from './formats';
 
 jest.mock('react-native-view-shot', () => ({ captureRef: jest.fn() }));
 jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(), shareAsync: jest.fn() }));
 
 const mockPreview = jest.fn();
-const mockCreate = jest.fn();
-const mockRevoke = jest.fn();
 const mockTrack = jest.fn();
-let mockOrigin: string | null = 'https://harada.example';
-let mockLinks: { isPending: boolean; isError: boolean; data: ShareLink[] | undefined; error: unknown; refetch: () => Promise<unknown> };
 jest.mock('@/data/premium', () => ({
   ...jest.requireActual('@/data/premium'),
   previewCard: (i: unknown) => mockPreview(i),
-  createShareLink: (...a: unknown[]) => mockCreate(...a),
-  revokeShareLink: (...a: unknown[]) => mockRevoke(...a),
   track: (...a: unknown[]) => mockTrack(...a),
-  webOrigin: () => mockOrigin,
-  shareUrl: (t: string) => (mockOrigin ? `${mockOrigin}/s/${t}` : null),
-  referralUrl: (c: string) => (mockOrigin ? `${mockOrigin}/?ref=${c}` : null),
-  useShareLinks: () => mockLinks,
-  useReferrals: () => ({ isPending: false, isError: false, data: { code: 'ada42', signups: 3, conversions: 1 } }),
 }));
 
 /** The server's card for an input: echoes the ticked fields, with stored numbers. */
@@ -46,13 +33,6 @@ function serverCard(input: CardInput): Card {
   };
 }
 
-function link(over: Partial<ShareLink> = {}): ShareLink {
-  return {
-    id: 'l1', token: 'a'.repeat(64), kind: 'progress', payload: { kind: 'progress' }, createdAt: '2026-10-20T10:00:00Z',
-    expiresAt: '2099-01-01T00:00:00Z', revokedAt: null, viewCount: 12, ...over,
-  };
-}
-
 const lastInput = () => mockPreview.mock.calls.at(-1)![0] as CardInput;
 
 async function renderComposer(ui: ReactElement) {
@@ -61,12 +41,8 @@ async function renderComposer(ui: ReactElement) {
 }
 
 beforeEach(() => {
-  mockOrigin = 'https://harada.example';
   mockPreview.mockReset().mockImplementation(async (i: CardInput) => ({ ok: true, data: serverCard(i) }));
-  mockCreate.mockReset();
-  mockRevoke.mockReset();
   mockTrack.mockReset();
-  mockLinks = { isPending: false, isError: false, data: [], error: null, refetch: jest.fn() };
   (captureRef as jest.Mock).mockReset().mockResolvedValue('file:///tmp/card.png');
   (Sharing.isAvailableAsync as jest.Mock).mockReset().mockResolvedValue(true);
   (Sharing.shareAsync as jest.Mock).mockReset().mockResolvedValue(undefined);
@@ -114,7 +90,6 @@ describe('ShareComposer', () => {
     await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalledWith('file:///tmp/card.png', expect.objectContaining({ mimeType: 'image/png' })));
     expect(captureRef).toHaveBeenCalledWith(expect.anything(), { format: 'png', width: 1080, height: 1920, result: 'tmpfile' });
     expect(mockTrack).toHaveBeenCalledWith('progress_card_generated', { kind: 'challenge', format: 'story' });
-    expect(mockCreate).not.toHaveBeenCalled(); // an image is never a publication
   });
 
   it('says so when the device cannot share files', async () => {
@@ -127,65 +102,9 @@ describe('ShareComposer', () => {
     expect(captureRef).not.toHaveBeenCalled();
   });
 
-  it('creates a public link only on request, with the chosen expiry, and shares the URL', async () => {
-    const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction', activityType: undefined });
-    mockCreate.mockResolvedValue({ ok: true, data: link({ token: 'b'.repeat(64) }) });
+  it('offers no public link: the image is made on the device and shared by the user', async () => {
     await renderComposer(<ShareComposer goalId="g1" kind="progress" />);
-    await waitFor(() => expect(mockPreview).toHaveBeenCalled());
-    expect(mockCreate).not.toHaveBeenCalled();
-    await fireEvent.press(screen.getByRole('radio', { name: '7 days' }));
-    const create = screen.getByRole('button', { name: 'Create public link' });
-    await waitFor(() => expect(create).toBeEnabled());
-    await fireEvent.press(create);
-    await waitFor(() => expect(mockCreate).toHaveBeenCalledWith({ goalId: 'g1', kind: 'progress', show: { goalTitle: false, stats: false, name: false } }, 7));
-    const url = `https://harada.example/s/${'b'.repeat(64)}`;
-    expect(await screen.findByTestId('created-link')).toHaveTextContent(url);
-    await fireEvent.press(screen.getByRole('button', { name: 'Share link' }));
-    expect(share).toHaveBeenCalledWith(expect.objectContaining({ message: url }));
-    share.mockRestore();
-  });
-
-  it('without a web address: no public links, image sharing only, no referral', async () => {
-    mockOrigin = null;
-    await renderComposer(<ShareComposer goalId="g1" kind="progress" />);
-    expect(screen.getByText(NOT_CONFIGURED)).toBeOnTheScreen();
-    expect(screen.queryByRole('button', { name: 'Create public link' })).toBeNull();
-    expect(screen.queryByText('Invite a friend')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Share image (Square)' })).toBeOnTheScreen();
-  });
-
-  it('lists links with views and status, and revokes after confirmation', async () => {
-    mockLinks.data = [
-      link(),
-      link({ id: 'l2', revokedAt: '2026-10-21T10:00:00Z', viewCount: 1 }),
-      link({ id: 'l3', expiresAt: '2026-10-01T00:00:00Z', viewCount: 0 }),
-    ];
-    mockRevoke.mockResolvedValue({ ok: true, data: link({ revokedAt: '2026-10-26T10:00:00Z' }) });
-    await renderComposer(<ShareComposer goalId="g1" kind="progress" />);
-    expect(screen.getByText(/12 views · created Oct 20 · expires/)).toBeOnTheScreen();
-    expect(screen.getByText('Revoked')).toBeOnTheScreen();
-    expect(screen.getByText('Expired')).toBeOnTheScreen();
-    // Only the live link can be revoked.
-    const revoke = screen.getAllByRole('button', { name: /^Revoke Progress card link/ });
-    expect(revoke).toHaveLength(1);
-    await fireEvent.press(revoke[0]!);
-    expect(mockRevoke).not.toHaveBeenCalled();
-    await fireEvent.press(screen.getByRole('button', { name: 'Revoke link' }));
-    await waitFor(() => expect(mockRevoke).toHaveBeenCalledWith('l1'));
-  });
-
-  it('shows the referral link and counts when configured', async () => {
-    await renderComposer(<ShareComposer goalId="g1" kind="progress" />);
-    expect(screen.getByTestId('referral-link')).toHaveTextContent('https://harada.example/?ref=ada42');
-    expect(screen.getByText('3 signed up · 1 became Pro')).toBeOnTheScreen();
-  });
-});
-
-describe('linkStatus', () => {
-  it('revoked beats expired; no expiry stays live', () => {
-    const now = Date.parse('2026-10-26T00:00:00Z');
-    expect(linkStatus(link({ revokedAt: 'x', expiresAt: '2026-01-01T00:00:00Z' }), now)).toBe('revoked');
-    expect(linkStatus(link({ expiresAt: '2026-10-25T00:00:00Z' }), now)).toBe('expired');
-    expect(linkStatus(link({ expiresAt: null }), now)).toBe('live');
+    expect(screen.queryByText(/public link/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Create (public )?link/i })).toBeNull();
   });
 });

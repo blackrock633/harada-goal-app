@@ -65,7 +65,7 @@ export function PostComposer({
     if (!file) return;
     setError(null);
     try {
-      const dataUrl = await readImageFileAsDataUrl(file, 300 * 1024);
+      const dataUrl = await readImageFileAsDataUrl(file, 'post');
       setImageUrl(dataUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid image file.');

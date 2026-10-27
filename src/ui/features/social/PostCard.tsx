@@ -400,11 +400,13 @@ export function PostCard({ post: initialPost, actions, onPostDeleted, onPostUpda
           </div>
 
           {/* Optional Image */}
-          {post.imageUrl && (
+          {post.hasImage && (
             <div className="overflow-hidden rounded-[var(--radius-sm)] border border-rule">
+              {/* Served by /community/image/<id>, which checks the viewer may see this post. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={post.imageUrl}
+                src={`/community/image/${post.id}`}
+                loading="lazy"
                 alt={post.headline || 'Shared progress photo'}
                 className="max-h-96 w-full object-cover"
               />

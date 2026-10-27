@@ -28,7 +28,7 @@ export default function GoalScreen() {
   if (noGoals && !archivedOnly) return <Redirect href="/goal/new" />;
   if (archivedOnly) {
     return (
-      <Screen refreshing={goals.isRefetching} onRefresh={() => void goals.refetch()}>
+      <Screen>
         <GoalsPanel
           goals={goals.data ?? []}
           currentId={null}
@@ -48,7 +48,7 @@ export default function GoalScreen() {
   const goal = detail.id;
   const edit = () => router.push({ pathname: '/goal/edit', params: { goal } });
   return (
-    <Screen refreshing={state.refreshing} onRefresh={state.refetch}>
+    <Screen>
       {inlineEdit ? null : (
       <Stack.Screen
         options={{
@@ -70,6 +70,8 @@ export default function GoalScreen() {
         goal={detail}
         today={today}
         activateGoal={mutations.activateGoal}
+        markGoalAchieved={mutations.markGoalAchieved}
+        onAchieved={state.refetch}
         onEdit={inlineEdit ? edit : undefined}
         onOpenMatrix={() => router.push({ pathname: '/matrix', params: { goal } })}
         onOpenArea={(position) =>

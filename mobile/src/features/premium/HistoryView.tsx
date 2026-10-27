@@ -70,7 +70,7 @@ export function HistoryView({ goalTitle, range, onRangeChange, weeks, outcomes, 
         />
       ) : (
         <>
-          <Section title="Consistency" description="Weeks with at least one completed task, routine check or reflection.">
+          <Section title="Consistency">
             <Text variant="headline" tabular>{`Active in ${activeWeeks} of ${rows.length} weeks`}</Text>
             <ProgressBar
               value={rows.length ? (activeWeeks / rows.length) * 100 : 0}
@@ -79,7 +79,7 @@ export function HistoryView({ goalTitle, range, onRangeChange, weeks, outcomes, 
             />
           </Section>
 
-          <Section title="Planned and done" description="Tasks that were due in the week, and how many of those were completed.">
+          <Section title="Planned and done">
             <WeekBars
               rows={rows.map((w) => ({
                 week: w.weekStart,
@@ -105,7 +105,7 @@ export function HistoryView({ goalTitle, range, onRangeChange, weeks, outcomes, 
         </>
       )}
 
-      <Section title="Completion by key area" description="Tasks done out of tasks planned in each key area, as of today.">
+      <Section title="Completion by key area">
         {insights ? (
           outcomes.length === 0 ? (
             <Text tone="muted">No key areas yet.</Text>

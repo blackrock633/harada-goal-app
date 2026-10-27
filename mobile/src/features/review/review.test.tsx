@@ -250,12 +250,11 @@ describe('Harada Pro reviews', () => {
     await fireEvent.press(screen.getByRole('radio', { name: 'Weekly' }));
     expect(screen.getByTestId('upgrade-prompt-advanced_reviews')).toBeTruthy();
     expect(screen.getByText('Reflect. Learn. Improve.')).toBeTruthy();
-    expect(screen.getByText(/Weekly reflections are part of Harada Pro/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Save reflection' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Not now' })).toBeNull();
 
     await fireEvent.press(screen.getByRole('radio', { name: 'Monthly' }));
-    expect(screen.getByText(/Monthly reviews are part of Harada Pro/)).toBeTruthy();
+    expect(screen.getByTestId('upgrade-prompt-advanced_reviews')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Save reflection' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Not now' })).toBeNull();
     expect(add).not.toHaveBeenCalled();
@@ -312,7 +311,7 @@ describe('Harada Pro reviews', () => {
     await fireEvent.press(screen.getByRole('radio', { name: 'Monthly' }));
     await fireEvent.changeText(screen.getByLabelText('5. What will you focus on next month?'), 'Keep');
     await fireEvent.press(screen.getByRole('button', { name: 'Save reflection' }));
-    expect(await screen.findByText(/this review needs Harada Pro to save/)).toBeTruthy();
+    expect(await screen.findByTestId('upgrade-prompt-advanced_reviews')).toBeTruthy();
     expect(screen.queryByText('raw server text')).toBeNull();
     expect(screen.queryByText('Reflection saved.')).toBeNull();
     expect(screen.getByLabelText('5. What will you focus on next month?').props.value).toBe('Keep');

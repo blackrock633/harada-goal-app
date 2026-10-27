@@ -372,7 +372,8 @@ describe('full 9x9 sheet', () => {
   it('supports zooming in, zooming out, and resetting zoom on the Full sheet view', async () => {
     await render(<MatrixOverview goal={sampleGoal()} onOpenArea={jest.fn()} />);
     await fireEvent.press(screen.getByRole('radio', { name: 'Full sheet' }));
-    expect(screen.getByText(/Pinch to zoom in or out/)).toBeOnTheScreen();
+    // No instruction caption: the controls speak for themselves (pinch and drag work as usual).
+    expect(screen.queryByText(/Pinch to zoom/)).toBeNull();
     expect(screen.getByLabelText('Zoom 100%')).toBeOnTheScreen();
     const zoomIn = screen.getByRole('button', { name: 'Zoom in' });
     const zoomOut = screen.getByRole('button', { name: 'Zoom out' });

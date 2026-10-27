@@ -138,19 +138,6 @@ export interface Card {
   };
 }
 
-export interface ShareLink {
-  id: string;
-  token: string;
-  kind: CardKind;
-  payload: Card;
-  createdAt: string;
-  expiresAt: string | null;
-  revokedAt: string | null;
-  viewCount: number;
-}
-
-export interface Referrals { code: string; signups: number; conversions: number }
-
 export type AiSuggestion =
   | { task: 'areas'; measurableOutcome: string | null; areas: { title: string; why: string }[] }
   | { task: 'actions'; actions: { title: string; kind: 'task' | 'routine'; cadence: 'daily' | 'weekly' | null }[] };
@@ -203,8 +190,6 @@ export const premiumKeys = {
   history: (goalId: string, weeks: number) => ['history', goalId, weeks] as const,
   enrollments: ['challenge', 'enrollments'] as const,
   challenge: (id: string) => ['challenge', 'summary', id] as const,
-  shareLinks: ['shareLinks'] as const,
-  referrals: ['referrals'] as const,
 };
 
 // ---------------------------------------------------------------------------------------------------------
@@ -344,49 +329,10 @@ export const completeChallenge = (enrollmentId: string, finalReflection: string,
   rpc<EnrollmentRow>('complete_challenge', { p_input: { enrollmentId, finalReflection, accomplishments } });
 
 // ---------------------------------------------------------------------------------------------------------
-// Sharing and referrals
+// Share cards (the image is made on the device)
 // ---------------------------------------------------------------------------------------------------------
 
 export const previewCard = (input: CardInput) => rpc<Card>('preview_share_card', { p_input: input });
-
-type ShareRow = { id: string; token: string; kind: CardKind; payload: Card; created_at: string; expires_at: string | null; revoked_at: string | null; view_count: number };
-const shareFromRow = (r: ShareRow): ShareLink => ({
-  id: r.id, token: r.token, kind: r.kind, payload: r.payload, createdAt: r.created_at, expiresAt: r.expires_at, revokedAt: r.revoked_at, viewCount: r.view_count,
-});
-
-export async function createShareLink(input: CardInput, expiresInDays: number | null = 90): Promise<Result<ShareLink>> {
-  const r = await rpc<ShareRow>('create_share_link', { p_input: { ...input, expiresInDays } });
-  return r.ok ? { ok: true, data: shareFromRow(r.data) } : r;
-}
-
-export async function revokeShareLink(id: string): Promise<Result<ShareLink>> {
-  const r = await rpc<ShareRow>('revoke_share_link', { p_input: { id } });
-  return r.ok ? { ok: true, data: shareFromRow(r.data) } : r;
-}
-
-export async function loadShareLinks(): Promise<ShareLink[]> {
-  const { data, error, status } = await getSupabase()
-    .from('share_links')
-    .select('id, token, kind, payload, created_at, expires_at, revoked_at, view_count')
-    .order('created_at', { ascending: false })
-    .limit(50);
-  if (error) throw new QueryError(toAppError(error, status));
-  return (data as ShareRow[]).map(shareFromRow);
-}
-
-export const useShareLinks = () => useQuery({ queryKey: premiumKeys.shareLinks, queryFn: loadShareLinks });
-export const useReferrals = () => useQuery({ queryKey: premiumKeys.referrals, queryFn: () => read<Referrals>('get_my_referrals') });
-
-/** Public web origin (landing page, share pages, Stripe return pages). */
-export function webOrigin(): string | null {
-  const url = process.env.EXPO_PUBLIC_WEB_URL?.trim();
-  return url && /^https?:\/\/[^/]+$/.test(url) ? url : null;
-}
-
-/** The public page of a share link (null until EXPO_PUBLIC_WEB_URL is configured). */
-export const shareUrl = (token: string) => (webOrigin() ? `${webOrigin()}/s/${token}` : null);
-/** Landing page with the user's referral code. */
-export const referralUrl = (code: string) => (webOrigin() ? `${webOrigin()}/?ref=${code}` : null);
 
 // ---------------------------------------------------------------------------------------------------------
 // AI planning

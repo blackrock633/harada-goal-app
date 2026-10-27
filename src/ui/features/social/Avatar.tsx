@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { clsx } from 'clsx';
+import { AVATAR_MAX_CHARS, JPEG_DATA_URI, POST_IMAGE_MAX_CHARS } from '@/application/social';
 
 export interface AvatarProps {
   displayName: string;
@@ -61,28 +62,39 @@ export function Avatar({ displayName, username, avatarUrl, size = 'md', classNam
 }
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
+/** Raw files above this are refused before decoding (the result is far smaller after re-encoding). */
+const MAX_INPUT_BYTES = 15 * 1024 * 1024;
+const PRESETS = {
+  avatar: { maxSide: 256, quality: [0.72, 0.58, 0.45], maxChars: AVATAR_MAX_CHARS },
+  post: { maxSide: 1280, quality: [0.72, 0.6, 0.48, 0.36], maxChars: POST_IMAGE_MAX_CHARS },
+} as const;
 
-export function readImageFileAsDataUrl(file: File, maxBytes = 240 * 1024): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (!ALLOWED_IMAGE_TYPES.has(file.type.toLowerCase())) {
-      reject(new Error('Use a PNG, JPEG, or WebP image file.'));
-      return;
-    }
-    if (file.size > maxBytes) {
-      const kb = Math.round(maxBytes / 1024);
-      reject(new Error(`Image must be under ${kb} KB.`));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === 'string' ? reader.result : '';
-      if (!/^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/.test(result)) {
-        reject(new Error('Invalid image file contents.'));
-        return;
-      }
-      resolve(result);
-    };
-    reader.onerror = () => reject(new Error('Could not read the selected image.'));
-    reader.readAsDataURL(file);
-  });
+/**
+ * Decodes the chosen file in the browser and re-encodes it as a downsized JPEG data URI. Only pixels
+ * survive: EXIF metadata (GPS location, camera, time) and anything appended to the file are dropped, and a
+ * file that is not really an image fails to decode. The result matches the rule the server enforces.
+ */
+export async function readImageFileAsDataUrl(file: File, kind: keyof typeof PRESETS): Promise<string> {
+  if (!ALLOWED_IMAGE_TYPES.has(file.type.toLowerCase())) throw new Error('Use a PNG, JPEG, or WebP image file.');
+  if (file.size > MAX_INPUT_BYTES) throw new Error('That image is too large.');
+  const preset = PRESETS[kind];
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error('That file isn’t an image we can read.');
+  }
+  const scale = Math.min(1, preset.maxSide / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not process the image.');
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  for (const q of preset.quality) {
+    const dataUri = canvas.toDataURL('image/jpeg', q);
+    if (JPEG_DATA_URI.test(dataUri) && dataUri.length <= preset.maxChars) return dataUri;
+  }
+  throw new Error('That image is too large.');
 }

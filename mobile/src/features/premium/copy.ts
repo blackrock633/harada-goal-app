@@ -73,8 +73,8 @@ export const PRO_INCLUDES: { feature: Feature | null; text: string }[] = [
 ];
 
 export const RENEWAL_TERMS: Record<Price['interval'], string> = {
-  month: 'Renews every month until you cancel. Cancel anytime in Billing; you keep Pro until the end of the period you paid for.',
-  year: 'Renews every year until you cancel. Cancel anytime in Billing; you keep Pro until the end of the period you paid for.',
+  month: 'Renews monthly until you cancel. Cancel anytime.',
+  year: 'Renews yearly until you cancel. Cancel anytime.',
 };
 
 /** "October 26, 2026" for an ISO instant or a YYYY-MM-DD date. */
@@ -92,7 +92,7 @@ export type PlanLine = { text: string; tone?: 'muted' | 'warning' | 'danger' };
  */
 export function describePlan(plan: PlanInfo): { name: string; lines: PlanLine[] } {
   if (plan.plan === 'free') {
-    return { name: 'Free', lines: [{ text: 'One active goal at a time, with the full matrix, daily tracking and weekly reflection.', tone: 'muted' }] };
+    return { name: 'Free', lines: [] };
   }
   const lines: PlanLine[] = [];
   const sub = plan.subscription;

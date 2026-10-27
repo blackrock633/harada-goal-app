@@ -4,7 +4,8 @@ import { View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 
 import { errorMessage } from '@/data/errors';
-import { previewCard, track, webOrigin, type Card, type CardKind } from '@/data/premium';
+import { previewCard, track, type Card, type CardKind } from '@/data/premium';
+import { pickPhoto } from '@/data/photos';
 import { SkeletonLines } from '@/screens/queryState';
 import { useTheme } from '@/theme';
 import { Button, Screen, Section, SegmentedControl, Text, TextField, useLayout } from '@/ui';
@@ -22,7 +23,6 @@ import {
   type FormatId,
   type TextKey,
 } from './formats';
-import { InviteFriend, PublicLink, YourLinks } from './ShareLinks';
 import { ShareCard } from './ShareCard';
 
 /** Wait this long after the last change before asking the server for a new preview. */
@@ -41,6 +41,8 @@ export function ShareComposer({ goalId, kind }: { goalId: string; kind: CardKind
   const { width: screenWidth } = useLayout();
   const [state, setState] = useState<ComposerState>(EMPTY_STATE);
   const [format, setFormat] = useState<FormatId>('square');
+  // Drawn into the image on the device; never sent anywhere.
+  const [photo, setPhoto] = useState<string | null>(null);
   const input = useMemo(() => buildInput(goalId, kind, state), [goalId, kind, state]);
   const inputKey = JSON.stringify(input);
 
@@ -102,20 +104,14 @@ export function ShareComposer({ goalId, kind }: { goalId: string; kind: CardKind
 
   return (
     <Screen>
-      <View style={{ gap: space[1] }}>
-        <Text variant="title">{`${KIND_LABEL[kind]} card`}</Text>
-        <Text variant="body" tone="muted">
-          Only what you tick appears on the card. Numbers are counted from what you logged. Nothing is shared until you share
-          it.
-        </Text>
-      </View>
+      <Text variant="title">{`${KIND_LABEL[kind]} card`}</Text>
 
       <Section title="Preview" ruled={false}>
         <SegmentedControl label="Image format" options={FORMAT_OPTIONS} value={format} onChange={setFormat} />
         <View style={{ alignItems: 'center', gap: space[2] }}>
           {card ? (
             <View style={{ opacity: current ? 1 : 0.5 }} accessibilityState={{ busy: !current }}>
-              <ShareCard ref={cardRef} card={card} format={format} width={drawWidth} />
+              <ShareCard ref={cardRef} card={card} format={format} width={drawWidth} photo={photo} />
             </View>
           ) : previewError ? null : (
             <View style={{ width: drawWidth, paddingVertical: space[4] }}>
@@ -141,6 +137,26 @@ export function ShareComposer({ goalId, kind }: { goalId: string; kind: CardKind
         ) : null}
       </Section>
 
+      <Section title="Photo">
+        <View style={{ flexDirection: 'row', gap: space[2] }}>
+          <Button
+            title={photo ? 'Change photo' : 'Add photo'}
+            icon="photo"
+            variant="secondary"
+            size="compact"
+            onPress={async () => {
+              try {
+                const p = await pickPhoto('post');
+                if (p) setPhoto(p.dataUri);
+              } catch {
+                setExportMsg('That photo couldn’t be used. Try another one.');
+              }
+            }}
+          />
+          {photo ? <Button title="Remove" variant="ghost" size="compact" onPress={() => setPhoto(null)} /> : null}
+        </View>
+      </Section>
+
       <Section title="Show on the card">
         <View>
           <CheckRow label="Goal title" selected={state.show.goalTitle} onPress={() => setShow('goalTitle')} />
@@ -149,7 +165,7 @@ export function ShareComposer({ goalId, kind }: { goalId: string; kind: CardKind
         </View>
       </Section>
 
-      <Section title="In your words" description="Optional. Leave a field empty to keep it off the card.">
+      <Section title="In your words">
         {FIELDS[kind].map((key) => (
           <TextField
             key={key}
@@ -162,9 +178,6 @@ export function ShareComposer({ goalId, kind }: { goalId: string; kind: CardKind
       </Section>
 
       <Section title="Share as an image">
-        <Text variant="meta" tone="muted">
-          Saves the card above as a picture and opens your share sheet. No link is created.
-        </Text>
         {exportMsg ? (
           <Text variant="body" tone="danger" accessibilityRole="alert">
             {exportMsg}
@@ -180,9 +193,6 @@ export function ShareComposer({ goalId, kind }: { goalId: string; kind: CardKind
         </View>
       </Section>
 
-      <PublicLink input={input} ready={current} configured={webOrigin() !== null} />
-      <YourLinks />
-      {webOrigin() !== null ? <InviteFriend /> : null}
     </Screen>
   );
 }

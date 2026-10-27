@@ -55,8 +55,6 @@ export default function ReviewScreen() {
       outcomes={detail.outcomes}
       reflections={visibleReflections}
       events={review.data.events}
-      refreshing={state.refreshing}
-      onRefresh={state.refetch}
       onEditReflection={setEditing}
       onOpenHistory={() => router.push(insightsHref(summary.id))}
       historyLocked={!hasFeature(plan.data ?? undefined, 'progress_history')}

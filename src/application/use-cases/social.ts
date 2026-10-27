@@ -224,6 +224,20 @@ export async function getSocialPost(
   );
 }
 
+/** The photo of one post the caller may see, as a JPEG data URI (NOT_FOUND otherwise). */
+export async function getPostImage(
+  deps: Deps,
+  ctx: Ctx,
+  input: unknown,
+): Promise<Result<{ postId: string; image: string }>> {
+  return guard(deps.logger, () =>
+    deps.uow.run(ctx.userId, (repos) => {
+      const data = postIdSchema.parse(input);
+      return repos.social.callRpc<{ postId: string; image: string }>('get_post_image', data);
+    }),
+  );
+}
+
 export async function togglePostLike(
   deps: Deps,
   ctx: Ctx,

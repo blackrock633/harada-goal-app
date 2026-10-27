@@ -26,7 +26,7 @@ export default function MatrixScreen() {
   if (state.loading || !detail) return <LoadingScreen />;
 
   return (
-    <Screen refreshing={state.refreshing} onRefresh={state.refetch} maxWidth={wide ? 'full' : undefined}>
+    <Screen maxWidth={wide ? 'full' : undefined}>
       <MatrixOverview
         goal={detail}
         matrix={mutations}

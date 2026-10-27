@@ -60,7 +60,7 @@ function KeyArea({ index }: { index: number }) {
   if (state.loading || !detail || !today) return <LoadingScreen />;
 
   return (
-    <Screen refreshing={state.refreshing} onRefresh={state.refetch} maxWidth={width >= 1024 ? 1040 : undefined}>
+    <Screen maxWidth={width >= 1024 ? 1040 : undefined}>
       {title}
       {banner ? (
         <Text tone="danger" accessibilityRole="alert">

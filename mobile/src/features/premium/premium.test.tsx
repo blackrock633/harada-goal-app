@@ -103,23 +103,22 @@ const press = (name: string | RegExp) => fireEvent.press(screen.getByRole('butto
 // ---------- upgrade screen ----------
 
 describe('UpgradeView', () => {
-  it('Free: value, comparison, monthly price with renewal terms; tracks the view with the feature', async () => {
+  it('Free: a paywall headed by the feature, what Pro adds, both plans (yearly first), renewal terms; tracks the view', async () => {
     await render(<UpgradeView feature="progress_history" />);
-    expect(screen.getByText(/turn ambitious goals into structured plans and consistent action/)).toBeOnTheScreen();
-    expect(screen.getByText('One active goal')).toBeOnTheScreen();
-    expect(screen.getByText('Multiple active goals')).toBeOnTheScreen();
+    expect(screen.getByTestId('paywall')).toBeOnTheScreen();
     expect(screen.getByTestId('upgrade-focus')).toHaveTextContent(/See your weeks side by side/);
-    expect(screen.getByText('$10.00 per month')).toBeOnTheScreen();
-    expect(screen.getByText(/Renews every month until you cancel/)).toBeOnTheScreen();
+    expect(screen.getByText('Multiple active goals')).toBeOnTheScreen();
+    expect(screen.getByRole('radio', { name: /Yearly, \$96\.00 per year/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /Monthly, \$10\.00 per month/ })).not.toBeChecked();
+    expect(screen.getByText(/Renews yearly until you cancel/)).toBeOnTheScreen();
     expect(mockTrack).toHaveBeenCalledWith('upgrade_page_viewed', { feature: 'progress_history' });
   });
 
   it('yearly shows the price computed from the database prices, with an honest comparison', async () => {
     await render(<UpgradeView />);
-    await fireEvent.press(screen.getByRole('radio', { name: 'Yearly' }));
-    expect(screen.getByText('$96.00 per year')).toBeOnTheScreen();
-    expect(screen.getByText('Equal to $8.00 a month: $24.00 less than 12 months at $10.00.')).toBeOnTheScreen();
-    expect(screen.getByText(/Renews every year until you cancel/)).toBeOnTheScreen();
+    expect(screen.getByText('$8.00 a month · $24.00 less than monthly')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('radio', { name: /Monthly/ }));
+    expect(screen.getByText(/Renews monthly until you cancel/)).toBeOnTheScreen();
     expect(mockTrack).toHaveBeenCalledWith('upgrade_page_viewed', { feature: 'none' });
   });
 
@@ -132,9 +131,9 @@ describe('UpgradeView', () => {
     await render(<UpgradeView />);
     await press(/Continue to payment/);
     await waitFor(() => expect(mockOpenBrowser).toHaveBeenCalledWith('https://checkout.stripe.com/x'));
-    expect(mockCheckout).toHaveBeenCalledWith('pro_monthly');
+    expect(mockCheckout).toHaveBeenCalledWith('pro_annual');
     expect(mockRefresh).toHaveBeenCalled();
-    expect(await screen.findByText(/Your plan updates as soon as Stripe confirms the payment/)).toBeOnTheScreen();
+    expect(await screen.findByText(/Your plan updates once Stripe confirms the payment/)).toBeOnTheScreen();
     expect(screen.queryByText(/You have Harada Pro/)).toBeNull();
     expect(screen.queryByText(/welcome|success|upgraded/i)).toBeNull();
   });
@@ -194,12 +193,18 @@ describe('UpgradeView', () => {
 // ---------- prompt ----------
 
 describe('UpgradePrompt', () => {
-  it('explains the feature, links to /upgrade?feature=, and tracks being shown', async () => {
+  it('passive: one lock row whose Unlock opens the paywall; tracks being shown; nothing opens by itself', async () => {
     await render(<UpgradePrompt feature="ai_planning" />);
     expect(screen.getByText('Planning suggestions')).toBeOnTheScreen();
     expect(mockTrack).toHaveBeenCalledWith('upgrade_prompt_shown', { feature: 'ai_planning' });
-    await press(/See Harada Pro/);
+    expect(mockPush).not.toHaveBeenCalled();
+    await press(/Unlock with Harada Pro/);
     expect(mockPush).toHaveBeenCalledWith('/upgrade?feature=ai_planning');
+  });
+
+  it('action: trying a Pro feature opens the full paywall at once', async () => {
+    await render(<UpgradePrompt feature="multiple_goals" trigger="action" />);
+    expect(mockPush).toHaveBeenCalledWith('/upgrade?feature=multiple_goals');
   });
 
   it('"Not now" hides a passive prompt for the rest of the session, per feature', async () => {
@@ -217,8 +222,9 @@ describe('UpgradePrompt', () => {
     expect(screen.getByTestId('upgrade-prompt-multiple_goals')).toBeOnTheScreen();
   });
 
-  it('a gate prompt has no "Not now"', async () => {
+  it('a gate shows the paywall itself, with no "Not now"', async () => {
     await render(<UpgradePrompt feature="progress_history" trigger="gate" />);
+    expect(screen.getByTestId('paywall')).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Not now' })).toBeNull();
   });
 });

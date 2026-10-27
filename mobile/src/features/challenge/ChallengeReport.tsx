@@ -31,7 +31,7 @@ export function ChallengeReport({ summary: s, onSaved, onShare, onStartAnother, 
   const reviewsDone = s.weeklyReviews.filter((w) => w.done).length;
 
   const record = (
-    <Section title="What the record shows" description="Counted from what you logged between the start and end dates.">
+    <Section title="What the record shows">
       <View style={{ gap: space[1] }}>
         <Text variant="caption" tone="muted">
           ORIGINAL OBJECTIVE
@@ -76,9 +76,6 @@ export function ChallengeReport({ summary: s, onSaved, onShare, onStartAnother, 
 
   const next = (
     <Section title="What next">
-      <Text variant="body" tone="muted">
-        Keep going with your daily actions, or start another 30 days on this goal or a different one.
-      </Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[3] }}>
         <Button title="Keep going on Today" variant="secondary" onPress={onKeepGoing} />
         <Button title="Start another challenge" variant="secondary" onPress={onStartAnother} />
@@ -212,7 +209,6 @@ function CompleteForm({
       {record}
       <Section
         title="What you achieved"
-        description="In your own words. Pick from the tasks you completed, or write your own."
         action={
           <Text variant="meta" tone="muted" tabular accessibilityLabel={`${picked.length} of ${MAX_ACCOMPLISHMENTS} chosen`}>
             {`${picked.length} of ${MAX_ACCOMPLISHMENTS}`}
@@ -262,7 +258,6 @@ function CompleteForm({
       <Section title="Final reflection">
         <TextField
           label="Looking back on the 30 days"
-          hint="What worked, what got in the way, and what you will keep doing."
           value={reflection}
           onChangeText={setReflection}
           maxLength={REFLECTION_MAX}
@@ -275,9 +270,6 @@ function CompleteForm({
         ) : null}
         <View style={{ gap: space[2], alignItems: 'flex-start' }}>
           <Button title={saved ? 'Saved' : 'Save privately'} loading={busy} disabled={saved} onPress={() => void save()} />
-          <Text variant="caption" tone="muted">
-            Only you can see the report. Nothing is shared unless you create a card.
-          </Text>
         </View>
         {share}
       </Section>

@@ -87,7 +87,6 @@ describe('ChallengeLanding', () => {
     const goals = [goal({ id: 'g1', title: 'Run a marathon' }), goal({ id: 'g2', title: 'Learn Spanish' })];
     await render(<ChallengeLanding {...landingProps} goals={goals} onJoined={onJoined} />);
 
-    expect(screen.getByText(/not a promise that the whole goal is done in 30 days/)).toBeOnTheScreen();
     expect(screen.getByText(/days 7, 14, 21 and 28/)).toBeOnTheScreen();
     // Start and end dates: today and today + 29.
     expect(screen.getByText('Starts today, Mon, Oct 26')).toBeOnTheScreen();

@@ -19,6 +19,7 @@ const ALLOWED_SOCIAL_RPCS = new Set([
   'delete_social_post',
   'get_social_feed',
   'get_social_post',
+  'get_post_image',
   'toggle_post_like',
   'add_post_comment',
   'delete_post_comment',

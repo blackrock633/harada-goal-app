@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 import { useTheme } from '@/theme';
 
 import { AccountMenuButton } from './AccountMenuButton';
+import { MenuButton } from './navigation';
 import { useLayout } from './use-layout';
 
 type StackOptions = NonNullable<ComponentProps<typeof Stack>['screenOptions']>;
@@ -16,7 +17,9 @@ type ScreenOptions = NonNullable<ComponentProps<typeof Stack.Screen>['options']>
  */
 export function useTabRootOptions(title: string, keepActions = false): ScreenOptions {
   const { wide } = useLayout();
-  if (!(Platform.OS === 'web' && wide)) return { title };
+  // Native page roots get the menu (pages are switched by swiping or from the menu, not a tab bar).
+  if (Platform.OS !== 'web') return { title, headerLeft: () => <MenuButton /> };
+  if (!wide) return { title };
   return keepActions ? { title, headerTitle: () => null } : { title, headerShown: false };
 }
 

@@ -20,8 +20,6 @@ export type ChallengeLandingProps = {
   onCreateGoal: () => void;
   onOpenGoal: (goalId: string) => void;
   onOpenReport: (enrollmentId: string) => void;
-  refreshing?: boolean;
-  onRefresh?: () => void;
 };
 
 export const COMMITMENT = 'I commit to working on this goal every day for 30 days';
@@ -41,8 +39,6 @@ export function ChallengeLanding({
   onCreateGoal,
   onOpenGoal,
   onOpenReport,
-  refreshing,
-  onRefresh,
 }: ChallengeLandingProps) {
   const { space } = useTheme();
   const active = goals.filter((g) => g.status === 'active');
@@ -128,14 +124,11 @@ export function ChallengeLanding({
     );
 
   return (
-    <Screen refreshing={refreshing} onRefresh={onRefresh}>
+    <Screen>
       <View style={{ gap: space[2] }}>
         <Text variant="title">30 days, one goal</Text>
         <Text variant="body">
           Thirty days focused on a single goal: build the plan, act on it every day, and review it every week.
-        </Text>
-        <Text variant="meta" tone="muted">
-          The challenge is this app&apos;s way of putting the Harada Method into daily practice. It is not part of the method itself.
         </Text>
       </View>
 
@@ -157,9 +150,6 @@ export function ChallengeLanding({
       <Section title="How long, and what to expect">
         <Text variant="body" tone="muted">
           {`${CHALLENGE_DAYS} days in a row, starting the day you join. You can leave at any time; your goal and everything you logged stay.`}
-        </Text>
-        <Text variant="body">
-          A steady execution habit and measurable progress — not a promise that the whole goal is done in 30 days.
         </Text>
       </Section>
 

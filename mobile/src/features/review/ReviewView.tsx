@@ -8,9 +8,6 @@ import { formatLocalDate } from '../today/format';
 import { ReflectionCard } from './ReflectionCard';
 
 export type ReviewViewProps = {
-  /** Pull-to-refresh, wired by the route to the query refetch. */
-  refreshing?: boolean;
-  onRefresh?: () => void;
   /** Slot for <ReflectionForm />. */
   reflectionForm: ReactNode;
   /** GoalSummaryDTO.completedThisWeek. */
@@ -72,8 +69,6 @@ export function ReviewView({
   outcomes,
   reflections,
   events,
-  refreshing,
-  onRefresh,
   onEditReflection,
   onOpenHistory,
   historyLocked,
@@ -195,7 +190,7 @@ export function ReviewView({
   );
 
   return (
-    <Screen refreshing={refreshing} onRefresh={onRefresh} maxWidth={twoPane ? 'full' : undefined}>
+    <Screen maxWidth={twoPane ? 'full' : undefined}>
       {twoPane ? (
         <View style={[styles.panes, { gap: space[10] }]}>
           <View style={styles.left}>{form}</View>

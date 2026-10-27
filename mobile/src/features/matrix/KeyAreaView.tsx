@@ -364,9 +364,6 @@ export function KeyAreaView({
   const header = !outcome ? (
     <View style={{ gap: space[3] }}>
       <Text variant="title">{`Key area ${pos + 1} is empty`}</Text>
-      <Text variant="body" tone="muted">
-        Name one outcome that moves the goal forward. You can fill the other key areas later.
-      </Text>
       <View style={{ alignItems: 'flex-start' }}>
         <Button title={`Add key area ${pos + 1}`} icon="add" onPress={() => setEditorOpen(true)} />
       </View>

@@ -55,7 +55,8 @@ export interface SocialPostDTO {
   visibility: PostVisibility;
   headline: string;
   body: string;
-  imageUrl: string | null;
+  /** The photo itself is fetched with get_post_image (visibility-checked), never inside a feed page. */
+  hasImage: boolean;
   stats: SocialPostStatsDTO | null;
   goal: SocialPostGoalDTO | null;
   createdAt: string;
@@ -66,7 +67,9 @@ export interface SocialPostDTO {
   commentCount: number;
   likedByViewer: boolean;
   recentComments: SocialCommentDTO[];
+  /** Post detail only: the newest comments page (oldest first) and the cursor for older ones. */
   comments?: SocialCommentDTO[];
+  olderComments?: { before: string; beforeId: string } | null;
 }
 
 export interface PublicGoalSummaryDTO {
@@ -200,6 +203,7 @@ export const RESERVED_USERNAMES = new Set([
   'u',
   'new',
   'edit',
+  'me',
 ]);
 
 export const usernameSchema = z
@@ -211,18 +215,21 @@ export const usernameSchema = z
   .regex(/^[a-z0-9_]+$/, 'Use lowercase letters, numbers, or underscores')
   .refine((u) => !RESERVED_USERNAMES.has(u), 'That username is reserved');
 
-const imageDataOrHttps = (maxChars: number, label: string) =>
+/**
+ * A photo as the apps send it: a JPEG re-encoded on the device (which drops EXIF/GPS metadata), as a data
+ * URI. '/9j/' is the base64 of the JPEG signature, so the bytes are checked, not just the declared type. No
+ * remote URLs. The database applies the same rule (20261026160000_social_community.sql).
+ */
+export const JPEG_DATA_URI = /^data:image\/jpeg;base64,\/9j\/[A-Za-z0-9+/]+={0,2}$/;
+export const AVATAR_MAX_CHARS = 60_000;
+export const POST_IMAGE_MAX_CHARS = 700_000;
+
+const jpegPhoto = (maxChars: number, label: string) =>
   z
     .string()
     .trim()
     .max(maxChars, `${label} is too large`)
-    .refine(
-      (v) =>
-        v === '' ||
-        /^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/.test(v) ||
-        (v.length <= 500 && /^https:\/\/[A-Za-z0-9.-]+\.[A-Za-z]{2,}\/[^\s<>"]+$/.test(v)),
-      'Use a PNG, JPEG, or WebP image',
-    );
+    .refine((v) => v === '' || JPEG_DATA_URI.test(v), 'Use a photo (JPEG)');
 
 export const updateSocialProfileSchema = z.object({
   displayName: z.string().trim().min(1, 'Required').max(80, 'Keep it under 80 characters').optional(),
@@ -238,7 +245,7 @@ export const updateSocialProfileSchema = z.object({
       'Enter a valid http:// or https:// website URL',
     )
     .optional(),
-  avatarUrl: imageDataOrHttps(350_000, 'Profile picture').nullable().optional(),
+  avatarUrl: jpegPhoto(AVATAR_MAX_CHARS, 'Profile picture').nullable().optional(),
   isPrivate: z.boolean().optional(),
 });
 
@@ -254,7 +261,7 @@ export const createSocialPostSchema = z.object({
   visibility: z.enum(['public', 'private']).default('public'),
   headline: z.string().trim().max(160, 'Keep it under 160 characters').optional(),
   body: z.string().trim().max(2000, 'Keep it under 2000 characters').optional(),
-  imageUrl: imageDataOrHttps(450_000, 'Image').nullable().optional(),
+  imageUrl: jpegPhoto(POST_IMAGE_MAX_CHARS, 'Photo').nullable().optional(),
   includeStats: z.boolean().optional(),
   makeGoalPublic: z.boolean().optional(),
 });

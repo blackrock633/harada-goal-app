@@ -103,7 +103,7 @@ function makePost(overrides: Partial<SocialPostDTO> = {}): SocialPostDTO {
     visibility: 'public',
     headline: 'Completed 30 straight days of speed work',
     body: 'Stuck to every daily routine in key area #2.',
-    imageUrl: null,
+    hasImage: false,
     stats: { tasksDone: 18, tasksTotal: 24, keyAreas: 8, actionsPlanned: 64 },
     goal: {
       id: '22222222-2222-4222-8222-222222222222',

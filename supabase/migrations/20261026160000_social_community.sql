@@ -62,12 +62,12 @@ create table public.social_profiles (
   constraint social_profiles_website_check check (
     website = '' or (char_length(website) <= 200 and website ~ '^https?://[A-Za-z0-9.-]+\.[A-Za-z]{2,}(/.*)?$')
   ),
+  -- Photos are JPEGs re-encoded on the device (metadata such as GPS stripped). '/9j/' is the base64 of the
+  -- JPEG signature FF D8 FF, so this checks the bytes, not just the declared type. No remote URLs: a viewer's
+  -- device never contacts a third-party host to show a profile.
   constraint social_profiles_avatar_check check (
     avatar_url is null or (
-      char_length(avatar_url) <= 350000 and (
-        avatar_url ~ '^data:image/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$'
-        or (char_length(avatar_url) <= 500 and avatar_url ~ '^https://[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[^\s<>"]+$')
-      )
+      char_length(avatar_url) <= 60000 and avatar_url ~ '^data:image/jpeg;base64,/9j/[A-Za-z0-9+/]+={0,2}$'
     )
   )
 );
@@ -174,12 +174,10 @@ create table public.social_posts (
   constraint social_posts_content_nonempty_check check (
     char_length(btrim(headline)) > 0 or char_length(btrim(body)) > 0
   ),
+  -- Same JPEG-only rule as avatars. Served only through get_post_image(), which applies can_view_post().
   constraint social_posts_image_check check (
     image_url is null or (
-      char_length(image_url) <= 450000 and (
-        image_url ~ '^data:image/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$'
-        or (char_length(image_url) <= 500 and image_url ~ '^https://[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[^\s<>"]+$')
-      )
+      char_length(image_url) <= 700000 and image_url ~ '^data:image/jpeg;base64,/9j/[A-Za-z0-9+/]+={0,2}$'
     )
   ),
   constraint social_posts_stats_check check (
@@ -496,7 +494,7 @@ begin
     'visibility', sp.visibility,
     'headline', sp.headline,
     'body', sp.body,
-    'imageUrl', sp.image_url,
+    'hasImage', sp.image_url is not null,
     'stats', v_stats,
     'goal', v_goal,
     'createdAt', sp.created_at,
@@ -755,7 +753,7 @@ begin
     end if;
     if v_username = any (array[
       'admin', 'settings', 'today', 'goal', 'matrix', 'review', 'community',
-      'signin', 'signup', 'pricing', 'challenge', 'api', 'account', 'share', 's', 'u', 'new', 'edit'
+      'signin', 'signup', 'pricing', 'challenge', 'api', 'account', 'share', 's', 'u', 'new', 'edit', 'me'
     ]) then
       perform harada_private.fail('VALIDATION', 'That username is reserved', 'username');
     end if;
@@ -791,12 +789,11 @@ begin
         perform harada_private.fail('VALIDATION', 'Invalid image format', 'avatarUrl');
       end if;
       v_avatar := btrim(p_input ->> 'avatarUrl');
-      if char_length(v_avatar) > 350000 then
-        perform harada_private.fail('VALIDATION', 'Profile picture must be under 250 KB', 'avatarUrl');
+      if char_length(v_avatar) > 60000 then
+        perform harada_private.fail('VALIDATION', 'Profile picture is too large', 'avatarUrl');
       end if;
-      if v_avatar !~ '^data:image/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$'
-         and not (char_length(v_avatar) <= 500 and v_avatar ~ '^https://[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[^\s<>"]+$') then
-        perform harada_private.fail('VALIDATION', 'Use a PNG, JPEG, or WebP image', 'avatarUrl');
+      if v_avatar !~ '^data:image/jpeg;base64,/9j/[A-Za-z0-9+/]+={0,2}$' then
+        perform harada_private.fail('VALIDATION', 'Use a photo (JPEG)', 'avatarUrl');
       end if;
     end if;
   end if;
@@ -1378,12 +1375,11 @@ begin
     if v_image = '' then
       v_image := null;
     else
-      if char_length(v_image) > 450000 then
-        perform harada_private.fail('VALIDATION', 'Image must be under 320 KB', 'imageUrl');
+      if char_length(v_image) > 700000 then
+        perform harada_private.fail('VALIDATION', 'Photo is too large', 'imageUrl');
       end if;
-      if v_image !~ '^data:image/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$'
-         and not (char_length(v_image) <= 500 and v_image ~ '^https://[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[^\s<>"]+$') then
-        perform harada_private.fail('VALIDATION', 'Use a PNG, JPEG, or WebP image', 'imageUrl');
+      if v_image !~ '^data:image/jpeg;base64,/9j/[A-Za-z0-9+/]+={0,2}$' then
+        perform harada_private.fail('VALIDATION', 'Use a photo (JPEG)', 'imageUrl');
       end if;
     end if;
   end if;
@@ -1762,9 +1758,18 @@ declare
   v_post jsonb;
   v_owner uuid;
   v_comments jsonb;
+  v_limit int := 30;
+  v_before_at timestamptz;
+  v_before_id uuid;
+  v_more boolean;
 begin
   if v_viewer is null then perform harada_private.fail('UNAUTHENTICATED', 'Please sign in'); end if;
   v_post_id := harada_private.req_uuid(p_input, 'postId');
+  -- Comments page backwards from the newest: { commentsBefore?: timestamptz, commentsBeforeId?: uuid }.
+  if harada_private.has(p_input, 'commentsBefore') then
+    v_before_at := (p_input ->> 'commentsBefore')::timestamptz;
+    v_before_id := harada_private.req_uuid(p_input, 'commentsBeforeId');
+  end if;
   if not harada_private.can_view_post(v_viewer, v_post_id) then
     perform harada_private.fail('NOT_FOUND', 'Post not found');
   end if;
@@ -1788,13 +1793,29 @@ begin
     ) order by c.created_at asc, c.id asc
   ), '[]'::jsonb)
   into v_comments
-  from public.social_comments c
+  from (
+    select * from public.social_comments c0
+    where c0.post_id = v_post_id
+      and not harada_private.is_blocked_between(v_viewer, c0.author_id)
+      and (v_before_at is null or (c0.created_at, c0.id) < (v_before_at, v_before_id))
+    order by c0.created_at desc, c0.id desc
+    limit v_limit
+  ) c
   join public.profiles pr on pr.id = c.author_id
-  join public.social_profiles cp on cp.user_id = c.author_id
-  where c.post_id = v_post_id
-    and not harada_private.is_blocked_between(v_viewer, c.author_id);
+  join public.social_profiles cp on cp.user_id = c.author_id;
 
-  return v_post || jsonb_build_object('comments', v_comments);
+  select exists (
+    select 1 from public.social_comments c1
+    where c1.post_id = v_post_id
+      and not harada_private.is_blocked_between(v_viewer, c1.author_id)
+      and (c1.created_at, c1.id) < coalesce(
+        (select (x ->> 'createdAt')::timestamptz from jsonb_array_elements(v_comments) x limit 1), 'infinity'::timestamptz)
+  ) into v_more;
+
+  return v_post || jsonb_build_object(
+    'comments', v_comments,
+    'olderComments', case when v_more and jsonb_array_length(v_comments) > 0 then jsonb_build_object(
+      'before', v_comments -> 0 ->> 'createdAt', 'beforeId', v_comments -> 0 ->> 'id') else null end);
 end;
 $$;
 
@@ -2139,6 +2160,34 @@ revoke all on function
   public.list_social_notifications(jsonb),
   public.mark_notifications_read(jsonb)
 from public, anon;
+
+/**
+ * { postId } -> { postId, image } for a post the caller may see (can_view_post: author, visibility, goal
+ * privacy, blocks). Photos are loaded one by one as cards scroll into view, never inside a feed page.
+ */
+create function public.get_post_image(p jsonb)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_id uuid;
+  v_image text;
+begin
+  if v_uid is null then perform harada_private.fail('UNAUTHENTICATED', 'Please sign in'); end if;
+  v_id := harada_private.req_uuid(p, 'postId');
+  if not harada_private.can_view_post(v_uid, v_id) then perform harada_private.fail('NOT_FOUND', 'Not found'); end if;
+  select sp.image_url into v_image from public.social_posts sp where sp.id = v_id;
+  if v_image is null then perform harada_private.fail('NOT_FOUND', 'Not found'); end if;
+  return jsonb_build_object('postId', v_id, 'image', v_image);
+end;
+$$;
+
+revoke all on function public.get_post_image(jsonb) from public, anon;
+grant execute on function public.get_post_image(jsonb) to authenticated;
 
 grant execute on function
   public.get_social_profile(jsonb),
