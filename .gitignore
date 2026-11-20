@@ -12,3 +12,6 @@ next-env.d.ts
 .env.*.local
 .DS_Store
 .claude/worktrees/
+
+# Supabase CLI local state (linked project ref, versions)
+supabase/.temp/
