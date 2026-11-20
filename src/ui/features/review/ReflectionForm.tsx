@@ -14,7 +14,7 @@ export interface ReflectionFormProps {
   today: string;
   addReflection: ReviewMutations['addReflection'];
   onSaved?: (reflection: ReflectionDTO) => void;
-  /** Whether the user has Harada Pro (advanced_reviews); weekly reflections require Pro. */
+  /** Whether the user has Harada Pro (advanced_reviews); basic weekly reflections remain Free. */
   advanced?: boolean;
 }
 
@@ -26,7 +26,7 @@ const PROMPTS: { key: FieldKey; label: string }[] = [
   { key: 'nextChange', label: 'What will you change?' },
 ];
 
-export function ReflectionForm({ goalId, today, addReflection, onSaved, advanced = false }: ReflectionFormProps) {
+export function ReflectionForm({ goalId, today, addReflection, onSaved }: ReflectionFormProps) {
   const [kind, setKind] = React.useState<'daily' | 'weekly'>('daily');
   const [date, setDate] = React.useState(today);
   const [values, setValues] = React.useState<Record<FieldKey, string>>({
@@ -41,11 +41,10 @@ export function ReflectionForm({ goalId, today, addReflection, onSaved, advanced
   const [saved, setSaved] = React.useState(false);
   // One client id per logical save: reused on retry, replaced after a successful save.
   const clientId = React.useRef<string | null>(null);
-  const locked = kind === 'weekly' && !advanced;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (saving || locked) return;
+    if (saving) return;
     setSaved(false);
     setError(null);
     setNeedsPro(false);
@@ -116,33 +115,14 @@ export function ReflectionForm({ goalId, today, addReflection, onSaved, advanced
             </button>
           ))}
         </div>
-        {!locked && (
+        {(
           <Field label="Date" error={fieldErrors.date}>
             {/* The primitive wires the Field label (A11Y-01), error state and pre-hydration typing. */}
             <DateInput value={date} onChange={(e) => setDate(e.target.value)} className="sm:w-auto" />
           </Field>
         )}
       </div>
-      {locked ? (
-        <div
-          role="region"
-          aria-label="Weekly reflections require Harada Pro"
-          data-testid="upgrade-prompt-advanced_reviews"
-          className="space-y-3 rounded-[var(--radius-md)] border border-accent/40 bg-surface-sunken/60 p-4"
-        >
-          <p className="font-serif text-lg font-medium text-ink">Reflect. Learn. Improve.</p>
-          <p className="text-sm text-ink-muted">
-            Weekly reflections help you evaluate your progress, identify what&apos;s holding you back, and adjust your
-            approach. Unlock weekly reflections with Harada Pro.
-          </p>
-          <p className="text-sm text-ink-muted">Weekly reflections are part of Harada Pro. Daily reflections stay free.</p>
-          <p className="text-sm">
-            <Link href={routes.pricing} className="inline-flex min-h-[44px] items-center font-medium text-accent underline underline-offset-2">
-              See Harada Pro
-            </Link>
-          </p>
-        </div>
-      ) : (
+      {(
         <>
           {PROMPTS.map((p) => (
             <Field key={p.key} label={p.label} error={fieldErrors[p.key]}>

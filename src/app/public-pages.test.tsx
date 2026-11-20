@@ -216,7 +216,7 @@ describe('/billing/success', () => {
     rpc.mockResolvedValue(plan('free'));
     const { container } = await renderPage(page());
     expect(container.textContent).not.toContain('Harada Pro is active');
-    expect(screen.getByText(/confirming/)).toBeInTheDocument();
+    expect(screen.getByText(/Checking your subscription/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Refresh' }).getAttribute('href')).toBe('/billing/success?session_id=cs_test_123');
   });
 

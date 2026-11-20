@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, Switch, View } from 'react-native';
+
+import { isSelfReportedPostType } from '@shared/application/achievements';
 
 import {
   addPostComment,
@@ -8,13 +10,23 @@ import {
   fetchSocialFeed,
   fetchSocialProfile,
   followUser,
+  listBlockedUsers,
   listSocialNotifications,
   markNotificationsRead,
+  setAchievementVisibility,
   setGoalVisibility,
+  shareAchievement,
   togglePostLike,
+  unblockUser,
   unfollowUser,
   updateSocialProfile,
 } from '@/data/social';
+import {
+  AchievementRow,
+  FoundingCredential,
+  FoundingMark,
+  PrimaryGoalSummary,
+} from '@/features/identity/IdentityViews';
 import { useTheme } from '@/theme';
 import {
   Badge,
@@ -28,7 +40,10 @@ import {
   TextField,
 } from '@/ui';
 import type {
+  BlockedUserDTO,
   DiscoverResultDTO,
+  ProfileAchievementDTO,
+  ProfilePrivacyDTO,
   SocialFeedDTO,
   SocialNotificationsListDTO,
   SocialPostDTO,
@@ -72,6 +87,7 @@ export default function CommunityScreen() {
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState<BlockedUserDTO[] | null>(null);
 
   useEffect(() => {
     void loadInitial();
@@ -142,6 +158,52 @@ export default function CommunityScreen() {
         ),
       }));
     }
+  }
+
+  async function handlePrivacy(key: keyof ProfilePrivacyDTO, value: boolean) {
+    const res = await updateSocialProfile({ [key]: value });
+    if (res.ok) setProfile(res.data);
+    else setStatusMessage(res.error.message);
+  }
+
+  async function handleShareAchievement(a: ProfileAchievementDTO) {
+    const res = await shareAchievement(a.id);
+    if (!res.ok) {
+      setStatusMessage(res.error.message);
+      return;
+    }
+    setProfile((prev) =>
+      prev
+        ? { ...prev, achievements: prev.achievements.map((x) => (x.id === a.id ? { ...x, postId: res.data.id } : x)) }
+        : prev,
+    );
+    setFeed((prev) => ({ ...prev, items: [res.data, ...prev.items.filter((p) => p.id !== res.data.id)] }));
+    setStatusMessage(`Shared ${a.title} with the community`);
+  }
+
+  async function handleToggleAchievement(a: ProfileAchievementDTO) {
+    const res = await setAchievementVisibility(a.id, !a.hidden);
+    if (!res.ok) {
+      setStatusMessage(res.error.message);
+      return;
+    }
+    setProfile((prev) =>
+      prev
+        ? { ...prev, achievements: prev.achievements.map((x) => (x.id === a.id ? { ...x, hidden: !a.hidden } : x)) }
+        : prev,
+    );
+  }
+
+  async function handleLoadBlocked() {
+    const res = await listBlockedUsers();
+    if (res.ok) setBlocked(res.data.items);
+    else setStatusMessage(res.error.message);
+  }
+
+  async function handleUnblock(user: BlockedUserDTO) {
+    const res = await unblockUser(user.userId);
+    if (res.ok) setBlocked((prev) => (prev ?? []).filter((b) => b.userId !== user.userId));
+    else setStatusMessage(res.error.message);
   }
 
   async function handleSaveProfile() {
@@ -357,6 +419,104 @@ export default function CommunityScreen() {
               )}
             </Section>
 
+            {profile.foundingMember ? (
+              <FoundingCredential number={profile.foundingMember.number} since={profile.foundingMember.since} />
+            ) : null}
+
+            <Section title="Featured goal">
+              {profile.primaryGoal ? (
+                <PrimaryGoalSummary
+                  goal={profile.primaryGoal}
+                  hiddenFromOthers={profile.privacy?.showProgressMetrics === false}
+                />
+              ) : (
+                <Text variant="meta" tone="muted">
+                  Make a goal public to feature it on your profile with your progress. Goals stay private until you
+                  choose.
+                </Text>
+              )}
+            </Section>
+
+            <Section title="Achievements">
+              {profile.achievements.length === 0 ? (
+                <Text variant="meta" tone="muted">
+                  Achievements appear here as your recorded work earns them: completing a goal, building a full plan,
+                  30 days of progress.
+                </Text>
+              ) : (
+                <View style={{ gap: space[2] }}>
+                  {profile.achievements.map((a) => (
+                    <AchievementRow
+                      key={a.id}
+                      achievement={a}
+                      owner
+                      onShare={() => void handleShareAchievement(a)}
+                      onToggleHidden={() => void handleToggleAchievement(a)}
+                    />
+                  ))}
+                </View>
+              )}
+            </Section>
+
+            {profile.privacy ? (
+              <Section
+                title="Profile privacy"
+                description="Private goals, reflections and notes are never shown, whatever you choose here."
+              >
+                <PrivacySwitch
+                  label="Show my achievements"
+                  value={profile.privacy.showAchievements}
+                  onChange={(v) => void handlePrivacy('showAchievements', v)}
+                />
+                <PrivacySwitch
+                  label="Show progress figures for my featured goal"
+                  value={profile.privacy.showProgressMetrics}
+                  onChange={(v) => void handlePrivacy('showProgressMetrics', v)}
+                />
+                {profile.foundingMember ? (
+                  <PrivacySwitch
+                    label="Show my Founding Member badge on posts"
+                    value={profile.privacy.foundingBadgeOnPosts}
+                    onChange={(v) => void handlePrivacy('foundingBadgeOnPosts', v)}
+                  />
+                ) : null}
+              </Section>
+            ) : null}
+
+            <Section
+              title="Blocked accounts"
+              action={
+                blocked === null ? (
+                  <Button title="Show" size="compact" variant="ghost" onPress={() => void handleLoadBlocked()} />
+                ) : undefined
+              }
+            >
+              {blocked === null ? null : blocked.length === 0 ? (
+                <Text variant="meta" tone="muted">
+                  You have not blocked anyone.
+                </Text>
+              ) : (
+                <View>
+                  {blocked.map((b, idx) => (
+                    <ListRow
+                      key={b.userId}
+                      title={b.displayName}
+                      meta={`@${b.username}`}
+                      divider={idx < blocked.length - 1}
+                      trailing={
+                        <Button
+                          title="Unblock"
+                          size="compact"
+                          variant="secondary"
+                          onPress={() => void handleUnblock(b)}
+                        />
+                      }
+                    />
+                  ))}
+                </View>
+              )}
+            </Section>
+
             {profile.ownGoals.length > 0 && (
               <Section
                 title="Goal privacy controls"
@@ -441,9 +601,22 @@ function MobilePostItem({
         gap: space[2],
       }}
     >
-      <Text weight="medium">
-        {post.author.displayName} (@{post.author.username})
-      </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space[2] }}>
+        <Text weight="medium">
+          {post.author.displayName} (@{post.author.username})
+        </Text>
+        {post.author.foundingMemberNumber != null ? <FoundingMark number={post.author.foundingMemberNumber} /> : null}
+      </View>
+      {isSelfReportedPostType(post.type) ? (
+        <Text variant="caption" tone="muted">
+          Self-reported
+        </Text>
+      ) : null}
+      {post.achievement ? (
+        <Text variant="caption" tone="muted">
+          Achievement · Verified from activity recorded in Harada
+        </Text>
+      ) : null}
       {post.goal ? (
         <Text variant="meta" tone="muted">
           Goal: {post.goal.title}
@@ -477,6 +650,16 @@ function MobilePostItem({
         </View>
         <Button title="Post" size="compact" variant="secondary" onPress={() => void submitComment()} />
       </View>
+    </View>
+  );
+}
+
+function PrivacySwitch({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+  const { space } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space[3] }}>
+      <Text style={{ flex: 1 }}>{label}</Text>
+      <Switch value={value} onValueChange={onChange} accessibilityLabel={label} />
     </View>
   );
 }

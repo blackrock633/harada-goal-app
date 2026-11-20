@@ -91,8 +91,8 @@ describe('premium features (database)', () => {
       expect(plan).toMatchObject({ plan: 'free', features: [], maxActiveGoals: 1, activeGoals: 1, overLimit: false, subscription: null });
       const prices = await as(c, 'anon', async (tx) => (await tx.query(`select id, amount_cents, billing_interval from prices order by sort_order`)).rows);
       expect(prices).toEqual([
-        { id: 'pro_monthly', amount_cents: 799, billing_interval: 'month' },
-        { id: 'pro_annual', amount_cents: 4999, billing_interval: 'year' },
+        { id: 'pro_monthly', amount_cents: 399, billing_interval: 'month' },
+        { id: 'pro_annual', amount_cents: 2999, billing_interval: 'year' },
       ]);
       expect(await code(as(c, 'anon', (tx) => tx.query(`select stripe_price_id from prices`)))).toBe('42501');
     });
@@ -139,7 +139,7 @@ describe('premium features (database)', () => {
       expect(JSON.stringify(plan)).not.toMatch(/cus_|sub_/);
     });
 
-    it('subscription states: cancel at period end keeps Pro until it ends; past_due gets 3 days; expired is Free', async () => {
+    it('subscription states: cancel at period end keeps Pro until it ends; past_due has no unverified grace; expired is Free', async () => {
       const now = Math.floor(Date.now() / 1000);
       const plan = async (over: Record<string, unknown>) => {
         const user = await t.createUser();
@@ -151,7 +151,7 @@ describe('premium features (database)', () => {
       expect(await plan({ cancelAtPeriodEnd: true })).toBe('pro');
       expect(await plan({ status: 'canceled', currentPeriodEnd: now - 60 })).toBe('free');
       expect(await plan({ status: 'active', currentPeriodEnd: now - 60 })).toBe('free');
-      expect(await plan({ status: 'past_due', currentPeriodEnd: now - 86400 })).toBe('pro');
+      expect(await plan({ status: 'past_due', currentPeriodEnd: now - 86400 })).toBe('free');
       expect(await plan({ status: 'past_due', currentPeriodEnd: now - 4 * 86400 })).toBe('free');
       expect(await plan({ status: 'unpaid' })).toBe('free');
       expect(await plan({ status: 'trialing' })).toBe('pro');
@@ -164,8 +164,8 @@ describe('premium features (database)', () => {
       await call(c, { sub: user }, 'activate_goal', { goalId: g2.id });
       await c.query(`delete from plan_grants where user_id = $1`, [user]);
       expect(await call(c, { sub: user }, 'get_my_plan')).toMatchObject({ plan: 'free', activeGoals: 2, overLimit: true });
-      // Still fully readable and editable while over the limit.
-      await call(c, { sub: user }, 'update_goal', { goalId: g2.id, title: 'Second, renamed' });
+      // Secondary active goals remain readable but cannot be edited.
+      expect(await code(call(c, { sub: user }, 'update_goal', { goalId: g2.id, title: 'Second, renamed' }))).toBe('HG402');
       await as(c, { sub: user }, (tx) => tx.query(`select public.choose_active_goal($1::jsonb)`, [JSON.stringify({ goalId: goal })]));
       const rows = (await c.query<{ id: string; status: string }>(`select id, status from goals where owner_id = $1`, [user])).rows;
       expect(Object.fromEntries(rows.map((r) => [r.id, r.status]))).toEqual({ [goal]: 'active', [g2.id]: 'archived' });
@@ -200,22 +200,23 @@ describe('premium features (database)', () => {
       expect(events).toEqual(['subscription_activated', 'subscription_cancelled']);
     });
 
-    it('finds the user from checkout metadata when the customer was not linked; ignores unknown customers', async () => {
+    it('requires a linked customer, rejects metadata impersonation and retries unknown customers', async () => {
       const { user } = await userWithGoal();
+      await call(c, 'service_role', 'billing_link_customer', user, 'cus_meta');
       expect(await call(c, 'service_role', 'billing_apply', stripeEvent({ customerId: 'cus_meta', subscriptionId: 'sub_meta', userId: user }))).toBe('applied');
       expect((await call<{ plan: string }>(c, { sub: user }, 'get_my_plan')).plan).toBe('pro');
-      expect(await call(c, 'service_role', 'billing_apply', stripeEvent({ customerId: 'cus_nobody', subscriptionId: 'sub_nobody' }))).toBe('ignored');
+      await expect(call(c, 'service_role', 'billing_apply', stripeEvent({ customerId: 'cus_nobody', subscriptionId: 'sub_nobody' }))).rejects.toThrow('Unknown billing customer');
     });
   });
 
   describe('advanced reviews', () => {
-    it('Free: only daily reflections are allowed; weekly and monthly require Pro; downgrade preserves data and re-upgrade restores access', async () => {
+    it('Free includes basic weekly reflection; structured reviews need Pro and remain readable after downgrade', async () => {
       const { user, goal } = await userWithGoal();
       const daily = await call<{ id: string }>(c, { sub: user }, 'add_reflection', { goalId: goal, date: today, kind: 'daily', wentWell: 'ok' });
-      expect(await code(call(c, { sub: user }, 'add_reflection', { goalId: goal, date: today, kind: 'weekly', wentWell: 'ok' }))).toBe('HG402');
+      expect(await code(call(c, { sub: user }, 'add_reflection', { goalId: goal, date: today, kind: 'weekly', wentWell: 'ok' }))).toBeUndefined();
       expect(await code(call(c, { sub: user }, 'add_reflection', { goalId: goal, date: today, kind: 'monthly', wentWell: 'ok' }))).toBe('HG402');
       expect(await code(call(c, { sub: user }, 'add_reflection', { goalId: goal, date: today, kind: 'weekly', answers: { learned: 'x' } }))).toBe('HG402');
-      expect(await code(call(c, { sub: user }, 'update_reflection', { reflectionId: daily.id, kind: 'weekly' }))).toBe('HG402');
+      expect(await code(call(c, { sub: user }, 'update_reflection', { reflectionId: daily.id, kind: 'weekly' }))).toBeUndefined();
 
       await grantPro(user);
       const r = await call<{ id: string; answers: Record<string, string> }>(c, { sub: user }, 'add_reflection', {
@@ -233,16 +234,16 @@ describe('premium features (database)', () => {
       // After downgrade: Free cannot edit or delete weekly/monthly reflections, and SELECT returns only daily reflections.
       expect(await code(call(c, { sub: user }, 'update_reflection', { reflectionId: r.id, wentWell: 'Tamper' }))).toBe('HG402');
       expect(await code(call(c, { sub: user }, 'update_reflection', { reflectionId: r.id, answers: { learned: 'changed' } }))).toBe('HG402');
-      expect(await code(call(c, { sub: user }, 'delete_reflection', { reflectionId: r.id }))).toBe('HG402');
+
       const freeVisible = await as(c, { sub: user }, async (tx) => (await tx.query<{ kind: string }>(`select kind from public.reflections where goal_id = $1`, [goal])).rows);
-      expect(freeVisible.map((x) => x.kind)).toEqual(['daily']);
+      expect(freeVisible.map((x) => x.kind).sort()).toEqual(['monthly','weekly','weekly','weekly']);
 
       // All weekly and monthly reflections remain intact in the database and become accessible again on re-upgrade.
       const storedCount = (await c.query<{ n: number }>(`select count(*)::int as n from reflections where goal_id = $1`, [goal])).rows[0]!.n;
-      expect(storedCount).toBe(3);
+      expect(storedCount).toBe(4);
       await grantPro(user);
       const proVisible = await as(c, { sub: user }, async (tx) => (await tx.query<{ id: string; kind: string; went_well: string }>(`select id, kind, went_well from public.reflections where goal_id = $1`, [goal])).rows);
-      expect(proVisible.map((x) => x.kind).sort()).toEqual(['daily', 'monthly', 'weekly']);
+      expect(proVisible.map((x) => x.kind).sort()).toEqual(['monthly', 'weekly', 'weekly', 'weekly']);
       expect(proVisible.find((x) => x.id === r.id)?.went_well).toBe('Shipped v2');
     });
   });
@@ -432,6 +433,7 @@ describe('premium features (database)', () => {
       await signUpWith({ display_name: 'Junk', referral_code: "x'; drop table referrals; --" });
       await signUpWith({ display_name: 'Unknown', referral_code: '0000000000' });
       expect(await call(c, { sub: referrer }, 'get_my_referrals')).toMatchObject({ signups: 1, conversions: 0 });
+      await call(c, 'service_role', 'billing_link_customer', friend, 'cus_friend');
       await call(c, 'service_role', 'billing_apply', stripeEvent({ customerId: 'cus_friend', subscriptionId: 'sub_friend', userId: friend }));
       expect(await call(c, { sub: referrer }, 'get_my_referrals')).toMatchObject({ signups: 1, conversions: 1 });
       expect(await code(as(c, { sub: referrer }, (tx) => tx.query(`select * from referrals`)))).toBe('42501');
@@ -460,7 +462,9 @@ describe('premium features (database)', () => {
       expect(await code(call(c, { sub: user }, 'admin_metrics'))).toBe('HG403');
       expect(await call(c, { sub: user }, 'am_i_admin')).toBe(false);
       const yearly = await t.createUser();
-      await call(c, 'service_role', 'billing_apply', stripeEvent({ customerId: `cus_${uuid()}`, subscriptionId: `sub_${uuid()}`, userId: yearly, stripePriceId: 'price_annual_test', amountCents: 4800, interval: 'year' }));
+      const yearlyCustomer = `cus_${uuid()}`;
+      await call(c, 'service_role', 'billing_link_customer', yearly, yearlyCustomer);
+      await call(c, 'service_role', 'billing_apply', stripeEvent({ customerId: yearlyCustomer, subscriptionId: `sub_${uuid()}`, userId: yearly, stripePriceId: 'price_annual_test', amountCents: 4800, interval: 'year' }));
       await c.query(`insert into admins (user_id) values ($1)`, [user]);
       const m = await call<{ billing: { mrrCents: number; activeSubscriptions: number }; users: { total: number } }>(c, { sub: user }, 'admin_metrics');
       const expected = (await c.query<{ m: string }>(

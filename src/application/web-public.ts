@@ -202,6 +202,8 @@ export function parseSharedCard(raw: unknown): SharedCardViewDTO | null {
 // ---------- my plan ----------
 
 const myPlanSchema = z.object({
+  nativeSubscription: z.object({status:z.string(),store:z.string().nullable(),currentPeriodEnd:z.string().nullable(),cancelAtPeriodEnd:z.boolean()}).nullable().optional(),
+  foundingMember: z.boolean().optional(),
   plan: z.enum(['free', 'pro']),
   features: z.array(z.string()).catch([]),
   maxActiveGoals: z.number().int().nullable().catch(null),

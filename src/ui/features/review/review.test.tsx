@@ -80,18 +80,13 @@ describe('ReflectionForm', () => {
     expect(add).toHaveBeenCalledWith(expect.objectContaining({ goalId: '11111111-1111-4111-8111-111111111111', date: '2026-10-19', kind: 'daily', wentWell: 'hello' }));
   });
 
-  it('gates weekly reflections for Free users with an upgrade prompt, and allows saving when advanced is true', async () => {
+  it('allows Free users to save basic weekly reflections', async () => {
     const saved = refl();
     const add = vi.fn(async () => ({ ok: true as const, data: saved }));
     const onSaved = vi.fn();
-    const { rerender } = render(<ReflectionForm goalId="11111111-1111-4111-8111-111111111111" today="2026-10-19" addReflection={add} onSaved={onSaved} />);
+    render(<ReflectionForm goalId="11111111-1111-4111-8111-111111111111" today="2026-10-19" addReflection={add} onSaved={onSaved} />);
     await userEvent.click(screen.getByRole('button', { name: 'weekly' }));
-    expect(screen.getByTestId('upgrade-prompt-advanced_reviews')).toHaveTextContent('Reflect. Learn. Improve.');
-    expect(screen.queryByRole('button', { name: 'Save reflection' })).toBeNull();
-    expect(screen.getByRole('link', { name: 'See Harada Pro' }).getAttribute('href')).toBe('/pricing');
-    expect(add).not.toHaveBeenCalled();
-
-    rerender(<ReflectionForm goalId="11111111-1111-4111-8111-111111111111" today="2026-10-19" addReflection={add} onSaved={onSaved} advanced />);
+    expect(screen.queryByTestId('upgrade-prompt-advanced_reviews')).toBeNull();
     await userEvent.type(screen.getByLabelText('What will you change?'), 'sleep');
     await userEvent.click(screen.getByRole('button', { name: 'Save reflection' }));
     await waitFor(() => expect(screen.getByText('Reflection saved.')).toBeTruthy());

@@ -7,7 +7,7 @@ import { annualBreakdown, annualDifference, formatMoney } from './money';
 export const FEATURE_LABELS: Record<string, string> = {
   multiple_goals: 'Several active goals at once',
   progress_history: 'Full progress history for every goal',
-  advanced_reviews: 'Weekly and monthly reviews',
+  advanced_reviews: 'Advanced weekly and monthly reviews',
   premium_templates: 'Premium starter templates',
   ai_planning: 'Optional suggested plan drafts (you accept each item yourself)',
   insights: 'Insights on how your execution is going',
@@ -18,7 +18,7 @@ export const FEATURE_LABELS: Record<string, string> = {
 const FREE_BASICS = [
   'The full Harada sheet: one goal, 8 key areas, 64 actions',
   'Today list of due tasks and routines',
-  'Daily reflection',
+  'Daily and basic weekly reflection',
   'Keep as many draft and archived goals as you like',
 ];
 

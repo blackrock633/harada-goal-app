@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 /**
  * Stripe's pages (Checkout and the customer portal) open in the browser. When the browser closes
  * the plan is fetched again and shown as the server reports it: the app never decides on its own
@@ -19,7 +20,7 @@ export function billingErrorMessage(error: AppError, what: 'checkout' | 'portal'
         ? 'Upgrades aren’t available yet. Nothing was charged.'
         : 'Billing isn’t available yet. Nothing was changed.';
     case 'UNAVAILABLE':
-      return 'Couldn’t reach the server. Nothing was charged or changed — try again in a moment.';
+      return 'Couldn’t confirm the billing request. Check your plan before trying again.';
     case 'CONFLICT':
       return error.message || 'Your plan changed in the meantime. Check your plan below.';
     default:
@@ -65,7 +66,7 @@ function useStripePage(what: 'checkout' | 'portal') {
 /** Stripe Checkout for a price. Nothing is charged until the user pays on Stripe's page. */
 export function useCheckout() {
   const { open, ...rest } = useStripePage('checkout');
-  return { ...rest, start: (priceId: Price['id']) => open(() => startCheckout(priceId)) };
+  return { ...rest, start: (priceId: Price['id']) => Platform.OS === 'web' ? open(() => startCheckout(priceId)) : Promise.resolve() };
 }
 
 /** The Stripe customer portal: payment method, invoices, switching or cancelling. */

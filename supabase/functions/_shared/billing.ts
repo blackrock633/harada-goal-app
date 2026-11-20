@@ -10,12 +10,7 @@
  */
 
 export type BillingErrorCode =
-  | 'VALIDATION'
-  | 'UNAUTHENTICATED'
-  | 'CONFLICT'
-  | 'NOT_CONFIGURED'
-  | 'UNAVAILABLE'
-  | 'INTERNAL';
+  'VALIDATION' | 'UNAUTHENTICATED' | 'CONFLICT' | 'NOT_CONFIGURED' | 'UNAVAILABLE' | 'INTERNAL';
 
 export interface PriceRow {
   id: string;
@@ -27,6 +22,7 @@ export interface PriceRow {
 }
 
 export interface BillingConfig {
+  environment?: 'SANDBOX' | 'PRODUCTION';
   /** Stripe secret key (sk_test_… or sk_live_…). Unset: billing answers NOT_CONFIGURED. */
   stripeSecretKey?: string;
   /** Live keys are refused unless this is true (a non-production deploy can only ever use Stripe test mode). */
@@ -41,15 +37,28 @@ export interface CheckoutDeps {
   getPrice(id: string): Promise<PriceRow | null>;
   /** The user's plan as the database computes it, and whether a Stripe subscription currently backs it. */
   getPlan(userId: string): Promise<{ plan: 'free' | 'pro'; stripeActive: boolean }>;
+  checkoutAttempt?(userId: string, priceId: string): Promise<{ key: string; expiresAt: number }>;
   customerOf(userId: string): Promise<string | null>;
   linkCustomer(userId: string, customerId: string): Promise<void>;
-  track?(userId: string, name: string, props: Record<string, string | number | boolean>): Promise<void>;
+  track?(
+    userId: string,
+    name: string,
+    props: Record<string, string | number | boolean>,
+  ): Promise<void>;
   fetch: typeof fetch;
   logError?(message: string, detail: unknown): void;
 }
 
 export interface WebhookDeps {
   webhookSecret?: string;
+  expectedLiveMode?: boolean;
+  nextGeneration?(): Promise<number>;
+  fetchInvoice?(
+    id: string,
+  ): Promise<{
+    subscription?: string;
+    parent?: { subscription_details?: { subscription?: string } };
+  }>;
   /** public.billing_apply (service role): 'applied' | 'duplicate' | 'ignored'. */
   apply(event: NormalizedEvent): Promise<string>;
   linkCustomer(userId: string, customerId: string): Promise<void>;
@@ -83,8 +92,12 @@ function corsHeaders(req: Request, allowed: readonly string[] = []): Record<stri
 function responder(req: Request, allowed?: readonly string[]) {
   const cors = corsHeaders(req, allowed);
   const json = (status: number, body: unknown) =>
-    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...cors } });
-  const fail = (status: number, code: BillingErrorCode, message: string) => json(status, { ok: false, error: { code, message } });
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...cors },
+    });
+  const fail = (status: number, code: BillingErrorCode, message: string) =>
+    json(status, { ok: false, error: { code, message } });
   return { cors, json, fail };
 }
 
@@ -103,9 +116,16 @@ async function readJson(req: Request, max = MAX_BODY_BYTES): Promise<unknown | E
 /** Configuration problems a deploy must fix, or null when billing can talk to Stripe. */
 export function billingConfigError(config: BillingConfig): string | null {
   const key = config.stripeSecretKey ?? '';
-  if (!/^sk_(test|live)_[A-Za-z0-9]+$/.test(key) && !/^rk_(test|live)_[A-Za-z0-9]+$/.test(key)) return 'STRIPE_SECRET_KEY is not set';
-  if (/_live_/.test(key) && !config.allowLiveMode) return 'A live Stripe key is set but ALLOW_LIVE_BILLING is not true';
-  if (!config.appUrl || !/^https?:\/\/[^/]+$/.test(config.appUrl)) return 'APP_URL must be an origin like https://harada.app';
+  if (!/^sk_(test|live)_[A-Za-z0-9]+$/.test(key) && !/^rk_(test|live)_[A-Za-z0-9]+$/.test(key))
+    return 'STRIPE_SECRET_KEY is not set';
+  if (/_live_/.test(key) && !config.allowLiveMode)
+    return 'A live Stripe key is set but ALLOW_LIVE_BILLING is not true';
+  if (config.environment && /_live_/.test(key) !== (config.environment === 'PRODUCTION'))
+    return 'Billing key environment mismatch';
+  if (/_live_/.test(key) && !config.appUrl?.startsWith('https://'))
+    return 'Live billing requires HTTPS';
+  if (!config.appUrl || !/^https?:\/\/[^/]+$/.test(config.appUrl))
+    return 'APP_URL must be an origin like https://harada.app';
   return null;
 }
 
@@ -120,7 +140,10 @@ export function formEncode(params: Record<string, string | number | boolean | un
 }
 
 export class StripeError extends Error {
-  constructor(public readonly status: number, public readonly stripeCode: string | undefined) {
+  constructor(
+    public readonly status: number,
+    public readonly stripeCode: string | undefined,
+  ) {
     super(`Stripe request failed (${status}${stripeCode ? `, ${stripeCode}` : ''})`);
   }
 }
@@ -135,8 +158,10 @@ export async function stripeRequest<T>(
 ): Promise<T> {
   const res = await doFetch(`${STRIPE_API}${path}`, {
     method,
+    signal: AbortSignal.timeout(10000),
     headers: {
       authorization: `Bearer ${key}`,
+      'Stripe-Version': '2025-06-30.basil',
       'content-type': 'application/x-www-form-urlencoded',
       ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}),
     },
@@ -156,16 +181,27 @@ export async function stripeRequest<T>(
  * Refuses when the user already has an active Stripe subscription (they manage it in the portal instead), and
  * when Stripe's price differs from the price Harada displays (amount, currency or interval).
  */
-export async function handleCheckout(req: Request, config: BillingConfig, deps: CheckoutDeps): Promise<Response> {
+export async function handleCheckout(
+  req: Request,
+  config: BillingConfig,
+  deps: CheckoutDeps,
+): Promise<Response> {
   const { cors, json, fail } = responder(req, config.allowedOrigins);
-  if (req.method === 'OPTIONS') return new Response(null, { status: cors['access-control-allow-origin'] ? 204 : 403, headers: cors });
+  if (req.method === 'OPTIONS')
+    return new Response(null, {
+      status: cors['access-control-allow-origin'] ? 204 : 403,
+      headers: cors,
+    });
   if (req.method !== 'POST') return fail(405, 'VALIDATION', 'Use POST');
   const token = /^Bearer\s+(\S+)$/i.exec(req.headers.get('authorization') ?? '')?.[1];
   if (!token) return fail(401, 'UNAUTHENTICATED', 'Please sign in');
   const body = await readJson(req);
   if (body instanceof Error) return fail(400, 'VALIDATION', 'Invalid request body');
+  if (!body || typeof body !== 'object' || Array.isArray(body))
+    return fail(400, 'VALIDATION', 'Invalid request body');
   const priceId = (body as { priceId?: unknown }).priceId;
-  if (priceId !== 'pro_monthly' && priceId !== 'pro_annual') return fail(400, 'VALIDATION', 'Choose monthly or annual billing');
+  if (priceId !== 'pro_monthly' && priceId !== 'pro_annual')
+    return fail(400, 'VALIDATION', 'Choose monthly or annual billing');
 
   const configError = billingConfigError(config);
   if (configError) {
@@ -183,51 +219,99 @@ export async function handleCheckout(req: Request, config: BillingConfig, deps: 
       return fail(503, 'NOT_CONFIGURED', 'This plan is not available yet. Nothing was charged.');
     }
     const plan = await deps.getPlan(user.id);
-    if (plan.stripeActive) {
-      return fail(409, 'CONFLICT', 'You already have Harada Pro. Manage or change it from Billing.');
+    if (plan.stripeActive || plan.plan === 'pro') {
+      return fail(
+        409,
+        'CONFLICT',
+        'You already have Harada Pro. Manage or change it from Billing.',
+      );
     }
 
-    const stripePrice = await stripeRequest<{ active: boolean; unit_amount: number | null; currency: string; recurring: { interval: string } | null }>(
-      deps.fetch, key, 'GET', `/prices/${encodeURIComponent(price.stripePriceId)}`);
-    if (!stripePrice.active || stripePrice.unit_amount !== price.amountCents || stripePrice.currency !== price.currency
-        || stripePrice.recurring?.interval !== price.interval) {
+    const stripePrice = await stripeRequest<{
+      active: boolean;
+      unit_amount: number | null;
+      currency: string;
+      recurring: { interval: string; interval_count?: number } | null;
+    }>(deps.fetch, key, 'GET', `/prices/${encodeURIComponent(price.stripePriceId)}`);
+    if (
+      !stripePrice.active ||
+      stripePrice.unit_amount !== price.amountCents ||
+      stripePrice.currency !== price.currency ||
+      stripePrice.recurring?.interval !== price.interval ||
+      (stripePrice.recurring?.interval_count ?? 1) !== 1
+    ) {
       deps.logError?.('billing-checkout price mismatch', { priceId });
-      return fail(503, 'NOT_CONFIGURED', 'This plan is not available right now. Nothing was charged.');
+      return fail(
+        503,
+        'NOT_CONFIGURED',
+        'This plan is not available right now. Nothing was charged.',
+      );
     }
 
     let customer = await deps.customerOf(user.id);
     if (!customer) {
-      const created = await stripeRequest<{ id: string }>(deps.fetch, key, 'POST', '/customers', {
-        email: user.email ?? undefined,
-        'metadata[user_id]': user.id,
-      }, `customer-${user.id}`);
+      const created = await stripeRequest<{ id: string }>(
+        deps.fetch,
+        key,
+        'POST',
+        '/customers',
+        {
+          email: user.email ?? undefined,
+          'metadata[user_id]': user.id,
+        },
+        `customer-${user.id}`,
+      );
       customer = created.id;
       await deps.linkCustomer(user.id, customer);
     }
 
-    const session = await stripeRequest<{ url: string }>(deps.fetch, key, 'POST', '/checkout/sessions', {
-      mode: 'subscription',
-      customer,
-      client_reference_id: user.id,
-      'line_items[0][price]': price.stripePriceId,
-      'line_items[0][quantity]': 1,
-      'subscription_data[metadata][user_id]': user.id,
-      'metadata[user_id]': user.id,
-      success_url: `${config.appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${config.appUrl}/billing/cancel`,
-    });
-    await deps.track?.(user.id, 'checkout_started', { price: priceId, interval: price.interval }).catch(() => undefined);
+    const attempt = await deps.checkoutAttempt?.(user.id, price.id);
+    const session = await stripeRequest<{ url: string }>(
+      deps.fetch,
+      key,
+      'POST',
+      '/checkout/sessions',
+      {
+        expires_at: attempt?.expiresAt,
+        mode: 'subscription',
+        customer,
+        client_reference_id: user.id,
+        'line_items[0][price]': price.stripePriceId,
+        'line_items[0][quantity]': 1,
+        'payment_method_types[0]': 'card',
+        'subscription_data[metadata][user_id]': user.id,
+        'metadata[user_id]': user.id,
+        success_url: `${config.appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${config.appUrl}/billing/cancel`,
+      },
+      attempt?.key ?? `checkout-${user.id}-${price.id}-${Math.floor(Date.now() / 1800000)}`,
+    );
+    await deps
+      .track?.(user.id, 'checkout_started', { price: priceId, interval: price.interval })
+      .catch(() => undefined);
     return json(200, { ok: true, data: { url: session.url } });
   } catch (e) {
     deps.logError?.('billing-checkout failed', e instanceof Error ? e.message : 'unknown');
-    return fail(502, 'UNAVAILABLE', 'Could not reach the payment provider. Nothing was charged — please try again.');
+    return fail(
+      502,
+      'UNAVAILABLE',
+      'Could not confirm checkout. Check your plan before trying again.',
+    );
   }
 }
 
 /** POST (no body) with the user's bearer token → {url} of the Stripe customer portal (update card, cancel, switch plan). */
-export async function handlePortal(req: Request, config: BillingConfig, deps: Pick<CheckoutDeps, 'getUser' | 'customerOf' | 'fetch' | 'logError'>): Promise<Response> {
+export async function handlePortal(
+  req: Request,
+  config: BillingConfig,
+  deps: Pick<CheckoutDeps, 'getUser' | 'customerOf' | 'fetch' | 'logError'>,
+): Promise<Response> {
   const { cors, json, fail } = responder(req, config.allowedOrigins);
-  if (req.method === 'OPTIONS') return new Response(null, { status: cors['access-control-allow-origin'] ? 204 : 403, headers: cors });
+  if (req.method === 'OPTIONS')
+    return new Response(null, {
+      status: cors['access-control-allow-origin'] ? 204 : 403,
+      headers: cors,
+    });
   if (req.method !== 'POST') return fail(405, 'VALIDATION', 'Use POST');
   const token = /^Bearer\s+(\S+)$/i.exec(req.headers.get('authorization') ?? '')?.[1];
   if (!token) return fail(401, 'UNAUTHENTICATED', 'Please sign in');
@@ -241,10 +325,16 @@ export async function handlePortal(req: Request, config: BillingConfig, deps: Pi
     if (!user) return fail(401, 'UNAUTHENTICATED', 'Please sign in');
     const customer = await deps.customerOf(user.id);
     if (!customer) return fail(409, 'CONFLICT', 'There is no billing account yet. Upgrade first.');
-    const session = await stripeRequest<{ url: string }>(deps.fetch, config.stripeSecretKey!, 'POST', '/billing_portal/sessions', {
-      customer,
-      return_url: `${config.appUrl}/account/billing`,
-    });
+    const session = await stripeRequest<{ url: string }>(
+      deps.fetch,
+      config.stripeSecretKey!,
+      'POST',
+      '/billing_portal/sessions',
+      {
+        customer,
+        return_url: `${config.appUrl}/account/billing`,
+      },
+    );
     return json(200, { ok: true, data: { url: session.url } });
   } catch (e) {
     deps.logError?.('billing-portal failed', e instanceof Error ? e.message : 'unknown');
@@ -268,33 +358,57 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 /** Stripe's v1 scheme: HMAC-SHA256 of `${t}.${payload}` with the endpoint secret, within a 5-minute window. */
-export async function verifyStripeSignature(payload: string, header: string | null, secret: string, nowS: number): Promise<boolean> {
+export async function verifyStripeSignature(
+  payload: string,
+  header: string | null,
+  secret: string,
+  nowS: number,
+): Promise<boolean> {
   if (!header) return false;
   const parts = header.split(',').map((p) => p.trim().split('=') as [string, string]);
   const t = parts.find(([k]) => k === 't')?.[1];
   const signatures = parts.filter(([k]) => k === 'v1').map(([, v]) => v);
   if (!t || !/^\d+$/.test(t) || signatures.length === 0) return false;
   if (Math.abs(nowS - Number(t)) > SIGNATURE_TOLERANCE_S) return false;
-  const cryptoKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const expected = hex(await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(`${t}.${payload}`)));
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const expected = hex(
+    await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(`${t}.${payload}`)),
+  );
   return signatures.some((s) => timingSafeEqual(s, expected));
 }
 
 export interface StripeSubscription {
+  harada_refunded?: boolean;
   id: string;
   customer: string | { id: string };
   status: string;
   cancel_at_period_end?: boolean;
   canceled_at?: number | null;
+  latest_invoice?: string | { id: string } | null;
   current_period_end?: number;
   metadata?: Record<string, string>;
   discount?: { coupon?: { percent_off?: number | null; amount_off?: number | null } } | null;
-  items?: { data?: { quantity?: number; current_period_end?: number; price?: { id: string; unit_amount?: number | null; recurring?: { interval?: string } | null } }[] };
+  items?: {
+    data?: {
+      quantity?: number;
+      current_period_end?: number;
+      price?: { id: string; unit_amount?: number | null; recurring?: { interval?: string } | null };
+    }[];
+  };
 }
 
 /** The shape public.billing_apply takes. */
 export interface NormalizedEvent {
   eventId: string;
+  generation?: number;
+  livemode?: boolean;
+  revoked?: boolean;
   eventType: string;
   created: number;
   customerId: string;
@@ -312,7 +426,12 @@ export interface NormalizedEvent {
 const idOf = (x: string | { id: string } | null | undefined) => (typeof x === 'string' ? x : x?.id);
 
 /** Subscription state as billing_apply stores it. The amount is what one interval costs after a simple coupon. */
-export function normalizeSubscription(eventId: string, eventType: string, created: number, s: StripeSubscription): NormalizedEvent {
+export function normalizeSubscription(
+  eventId: string,
+  eventType: string,
+  created: number,
+  s: StripeSubscription,
+): NormalizedEvent {
   const item = s.items?.data?.[0];
   const base = (item?.price?.unit_amount ?? 0) * (item?.quantity ?? 1);
   const coupon = s.discount?.coupon;
@@ -334,14 +453,22 @@ export function normalizeSubscription(eventId: string, eventType: string, create
     currentPeriodEnd: s.current_period_end ?? item?.current_period_end,
     cancelAtPeriodEnd: s.cancel_at_period_end ?? false,
     canceledAt: s.canceled_at ?? null,
+    ...(s.harada_refunded !== undefined ? { revoked: s.harada_refunded } : {}),
   };
 }
 
 const SUBSCRIPTION_EVENTS = new Set([
-  'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted',
-  'customer.subscription.paused', 'customer.subscription.resumed',
+  'customer.subscription.created',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+  'customer.subscription.paused',
+  'customer.subscription.resumed',
 ]);
-const RECORDED_EVENTS = new Set(['invoice.payment_failed', 'invoice.paid', 'invoice.payment_succeeded']);
+const RECORDED_EVENTS = new Set([
+  'invoice.payment_failed',
+  'invoice.paid',
+  'invoice.payment_succeeded',
+]);
 
 /**
  * The Stripe webhook. Verifies the signature against the raw body, then applies subscription events through
@@ -349,56 +476,197 @@ const RECORDED_EVENTS = new Set(['invoice.payment_failed', 'invoice.paid', 'invo
  * 400 for a bad signature, and 500 (Stripe retries) only when the database could not be updated.
  */
 export async function handleStripeWebhook(req: Request, deps: WebhookDeps): Promise<Response> {
-  const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  const json = (status: number, body: unknown) =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   if (req.method !== 'POST') return json(405, { error: 'Use POST' });
   if (!deps.webhookSecret || !deps.webhookSecret.startsWith('whsec_')) {
     deps.logError?.('stripe-webhook not configured', 'STRIPE_WEBHOOK_SECRET is not set');
     return json(503, { error: 'not configured' });
   }
-  if (Number(req.headers.get('content-length') ?? 0) > MAX_WEBHOOK_BYTES) return json(413, { error: 'too large' });
+  if (Number(req.headers.get('content-length') ?? 0) > MAX_WEBHOOK_BYTES)
+    return json(413, { error: 'too large' });
   const payload = await req.text();
   if (payload.length > MAX_WEBHOOK_BYTES) return json(413, { error: 'too large' });
   const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
-  if (!(await verifyStripeSignature(payload, req.headers.get('stripe-signature'), deps.webhookSecret, now))) {
+  if (
+    !(await verifyStripeSignature(
+      payload,
+      req.headers.get('stripe-signature'),
+      deps.webhookSecret,
+      now,
+    ))
+  ) {
     return json(400, { error: 'invalid signature' });
   }
 
-  let event: { id: string; type: string; created: number; data: { object: Record<string, unknown> } };
+  let event: {
+    id: string;
+    type: string;
+    created: number;
+    livemode?: boolean;
+    data: { object: Record<string, unknown> };
+  };
   try {
     event = JSON.parse(payload);
   } catch {
     return json(400, { error: 'invalid payload' });
   }
 
+  if (
+    !event ||
+    typeof event.id !== 'string' ||
+    !event.id.startsWith('evt_') ||
+    !Number.isFinite(event.created)
+  )
+    return json(400, { error: 'invalid payload' });
+  if (deps.expectedLiveMode !== undefined && event.livemode !== deps.expectedLiveMode)
+    return json(400, { error: 'environment mismatch' });
   try {
+    const generation = await deps.nextGeneration?.();
+    const apply = (value: NormalizedEvent) =>
+      deps.apply({ ...value, generation, livemode: event.livemode });
+    const current = async (id: string, fallback?: StripeSubscription) => {
+      if (!deps.fetchSubscription) {
+        if (fallback) return fallback;
+        throw new Error('Subscription retrieval not configured');
+      }
+      const sub = await deps.fetchSubscription(id);
+      if (!sub) throw new Error('Subscription retrieval failed');
+      return sub;
+    };
     const obj = event.data?.object ?? {};
     if (SUBSCRIPTION_EVENTS.has(event.type)) {
-      const result = await deps.apply(normalizeSubscription(event.id, event.type, event.created, obj as unknown as StripeSubscription));
+      const sub = await current(String(obj.id), obj as unknown as StripeSubscription);
+      const result = await apply(normalizeSubscription(event.id, event.type, event.created, sub));
       return json(200, { received: true, result });
     }
     if (event.type === 'checkout.session.completed') {
-      const session = obj as { customer?: string | { id: string }; client_reference_id?: string | null; subscription?: string | { id: string } | null; mode?: string };
+      const session = obj as {
+        customer?: string | { id: string };
+        client_reference_id?: string | null;
+        subscription?: string | { id: string } | null;
+        mode?: string;
+      };
       const customer = idOf(session.customer);
       const userId = session.client_reference_id ?? undefined;
-      if (session.mode !== 'subscription' || !customer) return json(200, { received: true, result: 'ignored' });
+      if (session.mode !== 'subscription' || !customer)
+        return json(200, { received: true, result: 'ignored' });
       if (userId && /^[0-9a-f-]{36}$/.test(userId)) await deps.linkCustomer(userId, customer);
       const subId = idOf(session.subscription);
-      const sub = subId && deps.fetchSubscription ? await deps.fetchSubscription(subId) : null;
-      const result = await deps.apply(sub
-        ? { ...normalizeSubscription(event.id, event.type, event.created, sub), userId: userId ?? sub.metadata?.user_id }
-        : { eventId: event.id, eventType: event.type, created: event.created, customerId: customer, userId, subscriptionId: subId });
+      const sub = subId ? await current(subId) : null;
+      const result = await apply(
+        sub
+          ? {
+              ...normalizeSubscription(event.id, event.type, event.created, sub),
+              userId: userId ?? sub.metadata?.user_id,
+            }
+          : {
+              eventId: event.id,
+              eventType: event.type,
+              created: event.created,
+              customerId: customer,
+              userId,
+              subscriptionId: subId,
+            },
+      );
       return json(200, { received: true, result });
     }
     if (RECORDED_EVENTS.has(event.type)) {
-      const invoice = obj as { customer?: string | { id: string }; subscription?: string | { id: string } | null };
+      const invoice = obj as {
+        customer?: string | { id: string };
+        subscription?: string | { id: string } | null;
+        parent?: { subscription_details?: { subscription?: string } };
+      };
       const customer = idOf(invoice.customer);
       if (!customer) return json(200, { received: true, result: 'ignored' });
-      const result = await deps.apply({ eventId: event.id, eventType: event.type, created: event.created, customerId: customer, subscriptionId: idOf(invoice.subscription) });
+      const subId =
+        idOf(invoice.subscription) ?? invoice.parent?.subscription_details?.subscription;
+      const sub = subId && deps.fetchSubscription ? await current(subId) : null;
+      const result = await apply(
+        sub
+          ? normalizeSubscription(event.id, event.type, event.created, sub)
+          : {
+              eventId: event.id,
+              eventType: event.type,
+              created: event.created,
+              customerId: customer,
+              subscriptionId: subId,
+            },
+      );
       return json(200, { received: true, result });
+    }
+    if (
+      event.type === 'charge.refunded' &&
+      obj.refunded === true &&
+      typeof obj.invoice === 'string'
+    ) {
+      if (!deps.fetchInvoice) throw new Error('Invoice retrieval not configured');
+      const invoice = await deps.fetchInvoice(obj.invoice);
+      const subId = invoice.subscription ?? invoice.parent?.subscription_details?.subscription;
+      if (subId) {
+        const sub = await current(subId);
+        // A refund of an old period must not revoke a subsequently paid renewal.
+        if (idOf(sub.latest_invoice) === obj.invoice) {
+          return json(200, {
+            received: true,
+            result: await apply({
+              ...normalizeSubscription(event.id, event.type, event.created, sub),
+              revoked: sub.harada_refunded ?? true,
+            }),
+          });
+        }
+      }
     }
     return json(200, { received: true, result: 'unused' });
   } catch (e) {
     deps.logError?.('stripe-webhook failed', e instanceof Error ? e.message : 'unknown');
     return json(500, { error: 'not applied' });
   }
+}
+
+/** Fetch current state and refund information. Never persist or log payment objects. */
+export async function readStripeState(
+  doFetch: typeof fetch,
+  key: string,
+  id: string,
+): Promise<StripeSubscription> {
+  const s = await stripeRequest<StripeSubscription>(
+    doFetch,
+    key,
+    'GET',
+    `/subscriptions/${encodeURIComponent(id)}`,
+  );
+  const invoice = typeof s.latest_invoice === 'string' ? s.latest_invoice : s.latest_invoice?.id;
+  if (!invoice) return s;
+  const payments = await stripeRequest<{
+    has_more: boolean;
+    data: { status: string; payment: { type: string; payment_intent?: string; charge?: string } }[];
+  }>(
+    doFetch,
+    key,
+    'GET',
+    `/invoice_payments?invoice=${encodeURIComponent(invoice)}&status=paid&limit=100`,
+  );
+  if (payments.has_more) throw new Error('invoice_requires_manual_review');
+  let fullyRefunded = payments.data.length > 0;
+  for (const p of payments.data) {
+    let charge: { refunded: boolean } | null = null;
+    if (p.payment.payment_intent) {
+      const intent = await stripeRequest<{ latest_charge: { refunded: boolean } | null }>(
+        doFetch,
+        key,
+        'GET',
+        `/payment_intents/${encodeURIComponent(p.payment.payment_intent)}?expand[]=latest_charge`,
+      );
+      charge = intent.latest_charge;
+    } else if (p.payment.charge)
+      charge = await stripeRequest(
+        doFetch,
+        key,
+        'GET',
+        `/charges/${encodeURIComponent(p.payment.charge)}`,
+      );
+    if (!charge?.refunded) fullyRefunded = false;
+  }
+  return { ...s, harada_refunded: fullyRefunded };
 }

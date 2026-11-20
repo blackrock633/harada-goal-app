@@ -49,6 +49,13 @@ const FEATURE_TABLES = [
   'social_profiles', 'goal_visibility', 'social_follows', 'social_blocks', 'social_posts',
   'social_likes', 'social_comments', 'social_hidden_posts', 'social_reports',
   'social_notifications', 'social_rate_limits',
+  'billing_settings',
+  'entitlement_audit',
+  'founding_members',
+  'native_billing_events',
+  'native_subscriptions',
+  'billing_lifecycle_events',
+  'user_achievements',
 ];
 /** Callable before sign-in: the public share page and first-party analytics. Both validate everything. */
 const ANON_RPCS = ['get_shared_card', 'track_event'];
@@ -66,6 +73,12 @@ const DEFINER_RPCS = [
   'mark_notifications_read', 'preview_share_card', 'revoke_share_link', 'set_goal_visibility',
   'toggle_post_like', 'track_event', 'unblock_user', 'unfollow_user', 'update_social_post',
   'update_social_profile',
+  'admin_entitlement',
+  'my_billing_identity',
+  // Identity and achievements (20261027140000): the admin_* ones call require_admin() first; the rest act on
+  // auth.uid() only.
+  'admin_community_metrics', 'admin_founding_members', 'admin_revoke_founding_member', 'admin_search_users',
+  'list_blocked_users', 'record_profile_view', 'set_achievement_visibility',
 ];
 
 describe('RLS / authorization holes (asserting secure behaviour)', () => {
@@ -170,7 +183,7 @@ describe('RLS / authorization holes (asserting secure behaviour)', () => {
       const bad = rows.filter((r) => r.auth && !r.proname.startsWith('owns_') && !r.emptypath);
       expect(bad.map((r) => `${r.proname} config=${r.config}`), 'executable RPCs must pin an empty search_path').toEqual([]);
       const definers = rows.filter((r) => r.auth && r.definer && !r.proname.startsWith('owns_')).map((r) => r.proname).sort();
-      expect(definers, 'definer RPCs reachable by authenticated must be reviewed').toEqual(DEFINER_RPCS);
+      expect(definers, 'definer RPCs reachable by authenticated must be reviewed').toEqual([...DEFINER_RPCS].sort());
 
     });
 

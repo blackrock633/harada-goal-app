@@ -35,6 +35,7 @@ sections, decorative illustrations, gamification chrome (XP bars, badges, confet
 | `--success` | `#2F6B43` | `#6FBF8A` | completed, ahead |
 | `--warning` | `#8F5A0B` | `#E0A64A` | behind, overdue |
 | `--danger` | `#B0261B` | `#F07A6E` | destructive, errors |
+| `--founder` | `#7D6228` | `#C9A85C` | Founding Member credential and mark only (hairlines, number label). Never a fill or a second accent |
 
 All text/background pairs must meet WCAG AA (4.5:1 body, 3:1 large/UI). Dark mode follows
 `prefers-color-scheme`, with an override in Settings stored in a cookie (`light | dark | system`).

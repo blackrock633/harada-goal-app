@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import type { HistoryWeek, PlanInfo, Price } from '@/data/premium';
@@ -87,6 +88,7 @@ const PRICES: Price[] = [
 ];
 
 beforeEach(() => {
+  Object.defineProperty(Platform, 'OS', {value:'web', configurable:true});
   jest.clearAllMocks();
   resetUpgradePromptDismissals();
   mockPlan = q(free());
@@ -105,7 +107,7 @@ const press = (name: string | RegExp) => fireEvent.press(screen.getByRole('butto
 describe('UpgradeView', () => {
   it('Free: value, comparison, monthly price with renewal terms; tracks the view with the feature', async () => {
     await render(<UpgradeView feature="progress_history" />);
-    expect(screen.getByText(/turn ambitious goals into structured plans and consistent action/)).toBeOnTheScreen();
+    expect(screen.getByText(/Go Further/)).toBeOnTheScreen();
     expect(screen.getByText('One active goal')).toBeOnTheScreen();
     expect(screen.getByText('Multiple active goals')).toBeOnTheScreen();
     expect(screen.getByTestId('upgrade-focus')).toHaveTextContent(/See your weeks side by side/);
@@ -152,7 +154,7 @@ describe('UpgradeView', () => {
     mockCheckout.mockResolvedValue({ ok: false, error: { code: 'UNAVAILABLE', message: 'x' } });
     await render(<UpgradeView />);
     await press(/Continue to payment/);
-    expect(await screen.findByText(/Nothing was charged or changed/)).toBeOnTheScreen();
+    expect(await screen.findByText(/Check your plan before trying again/)).toBeOnTheScreen();
     expect(screen.queryByText(/You have Harada Pro/)).toBeNull();
     expect(mockRefresh).not.toHaveBeenCalled();
   });

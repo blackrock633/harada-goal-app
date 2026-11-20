@@ -30,7 +30,7 @@ const FUNNEL_ORDER = [
 const num = (n: number) => new Intl.NumberFormat('en-US').format(n);
 const pct = (part: number, whole: number) => (whole > 0 ? `${((part / whole) * 100).toFixed(1)}%` : '—');
 
-function Stat({ label, value, note }: { label: string; value: React.ReactNode; note?: string }) {
+export function Stat({ label, value, note }: { label: string; value: React.ReactNode; note?: string }) {
   return (
     <div className="min-w-0 border-t border-rule pt-3">
       <dt className="text-sm text-ink-muted">{label}</dt>
@@ -40,7 +40,7 @@ function Stat({ label, value, note }: { label: string; value: React.ReactNode; n
   );
 }
 
-function Block({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
+export function Block({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
   const id = React.useId();
   return (
     <section aria-labelledby={id} className="mt-10 min-w-0">
@@ -52,7 +52,7 @@ function Block({ title, note, children }: { title: string; note?: string; childr
 }
 
 /** Server-rendered operator metrics from admin_metrics(). Read-only; no client code. */
-export function AdminMetricsView({ metrics: m }: { metrics: AdminMetricsDTO }) {
+export function AdminMetricsView({ metrics: m, children }: { metrics: AdminMetricsDTO; children?: React.ReactNode }) {
   const u = m.users;
   const b = m.billing;
   const generated = m.generatedAt ? new Date(m.generatedAt) : null;
@@ -155,6 +155,7 @@ export function AdminMetricsView({ metrics: m }: { metrics: AdminMetricsDTO }) {
           </div>
         )}
       </section>
+      {children}
     </main>
   );
 }

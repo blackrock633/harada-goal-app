@@ -1,5 +1,6 @@
 import type { Result } from '@shared/application/result';
 import type {
+  BlockedUserDTO,
   DiscoverResultDTO,
   FollowConnectionDTO,
   GoalVisibility,
@@ -11,6 +12,7 @@ import type {
   SocialPostType,
   SocialProfileDTO,
 } from '@shared/application/social';
+import { normalizeSocialProfile } from '@shared/application/social';
 
 import { thrownToAppError, toAppError } from './rpc-errors';
 import { getSupabase } from './supabase';
@@ -21,7 +23,8 @@ async function callSocialRpc<T>(
 ): Promise<Result<T>> {
   try {
     const sb = getSupabase();
-    const { data, error } = await sb.rpc(fnName, { p: payload });
+    // Every social function takes a single jsonb argument named p_input (supabase/migrations/*social*).
+    const { data, error } = await sb.rpc(fnName, { p_input: payload });
     if (error) return { ok: false, error: toAppError(error) };
     return { ok: true, data: data as T };
   } catch {
@@ -29,12 +32,17 @@ async function callSocialRpc<T>(
   }
 }
 
+async function withProfile(p: Promise<Result<SocialProfileDTO>>): Promise<Result<SocialProfileDTO>> {
+  const res = await p;
+  return res.ok ? { ok: true, data: normalizeSocialProfile(res.data) } : res;
+}
+
 export function fetchSocialProfile(input: {
   userId?: string;
   username?: string;
   viewAsPublic?: boolean;
 } = {}): Promise<Result<SocialProfileDTO>> {
-  return callSocialRpc<SocialProfileDTO>('get_social_profile', input);
+  return withProfile(callSocialRpc<SocialProfileDTO>('get_social_profile', input));
 }
 
 export function updateSocialProfile(input: {
@@ -45,8 +53,11 @@ export function updateSocialProfile(input: {
   website?: string;
   avatarUrl?: string | null;
   isPrivate?: boolean;
+  showAchievements?: boolean;
+  showProgressMetrics?: boolean;
+  foundingBadgeOnPosts?: boolean;
 }): Promise<Result<SocialProfileDTO>> {
-  return callSocialRpc<SocialProfileDTO>('update_social_profile', input);
+  return withProfile(callSocialRpc<SocialProfileDTO>('update_social_profile', input));
 }
 
 export function setGoalVisibility(input: {
@@ -101,6 +112,7 @@ export function fetchSocialFeed(input: {
 
 export function createSocialPost(input: {
   type: SocialPostType;
+  achievementId?: string;
   goalId?: string | null;
   visibility: PostVisibility;
   headline?: string;
@@ -141,4 +153,24 @@ export function listSocialNotifications(limit = 30): Promise<Result<SocialNotifi
 
 export function markNotificationsRead(notificationId?: string) {
   return callSocialRpc<{ unreadCount: number }>('mark_notifications_read', { notificationId });
+}
+
+/** Shares a verified achievement as a community post (one post per achievement; repeats return it). */
+export function shareAchievement(achievementId: string, visibility: PostVisibility = 'public') {
+  return callSocialRpc<SocialPostDTO>('create_social_post', { type: 'achievement', achievementId, visibility });
+}
+
+export function setAchievementVisibility(achievementId: string, hidden: boolean) {
+  return callSocialRpc<{ achievementId: string; hidden: boolean }>('set_achievement_visibility', {
+    achievementId,
+    hidden,
+  });
+}
+
+export function listBlockedUsers() {
+  return callSocialRpc<{ items: BlockedUserDTO[] }>('list_blocked_users', {});
+}
+
+export function unblockUser(targetUserId: string) {
+  return callSocialRpc<{ blocked: boolean; targetUserId: string }>('unblock_user', { targetUserId });
 }

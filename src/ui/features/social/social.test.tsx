@@ -16,6 +16,8 @@ import { PostCard, type PostCardActions } from './PostCard';
 import { PostComposer } from './PostComposer';
 import { ProfileView } from './ProfileView';
 
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+
 vi.mock('@/app/actions/social', () => ({
   getSocialProfileAction: vi.fn(),
   updateSocialProfileAction: vi.fn(async (input: Record<string, unknown>) => ({
@@ -44,7 +46,15 @@ vi.mock('@/app/actions/social', () => ({
     ok: true,
     data: { blocked: true, targetUserId },
   })),
-  unblockUserAction: vi.fn(),
+  unblockUserAction: vi.fn(async ({ targetUserId }: { targetUserId: string }) => ({
+    ok: true,
+    data: { blocked: false, targetUserId },
+  })),
+  listBlockedUsersAction: vi.fn(async () => ({ ok: true, data: { items: [] } })),
+  setAchievementVisibilityAction: vi.fn(async (input: { achievementId: string; hidden: boolean }) => ({
+    ok: true,
+    data: input,
+  })),
   listFollowConnectionsAction: vi.fn(async () => ({
     ok: true,
     data: {
@@ -201,6 +211,10 @@ function makeProfile(overrides: Partial<SocialProfileDTO> = {}): SocialProfileDT
       },
     ],
     recentPosts: [makePost()],
+    foundingMember: null,
+    primaryGoal: null,
+    achievements: [],
+    privacy: { showAchievements: true, showProgressMetrics: true, foundingBadgeOnPosts: true },
     ...overrides,
   };
 }

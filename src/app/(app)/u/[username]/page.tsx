@@ -30,6 +30,10 @@ export default async function UserProfilePage({
   if (!res.ok) {
     notFound();
   }
+  if (!res.data.isOwnProfile) {
+    // Analytics only (profile_viewed, founding_badge_viewed); a failure never affects the page.
+    await uc.recordProfileView(deps, ctx, { userId: res.data.userId });
+  }
 
   return (
     <Screen width="reading">

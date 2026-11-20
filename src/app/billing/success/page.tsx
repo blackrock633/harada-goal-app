@@ -42,7 +42,7 @@ export default async function BillingSuccessPage({
           </>
         ) : plan ? (
           <>
-            <h1 className="font-serif text-3xl font-medium text-ink">Payment received by Stripe — confirming…</h1>
+            <h1 className="font-serif text-3xl font-medium text-ink">Checking your subscription…</h1>
             <p role="status" className="mt-3 text-ink-muted">
               Your account still shows the Free plan. Stripe usually tells Harada within a few moments; refresh in a
               moment. If it still shows Free after a few minutes, check{' '}

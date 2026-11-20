@@ -12,6 +12,12 @@ import {
   type PricingCatalogDTO,
   type SharedCardViewDTO,
 } from '@/application/web-public';
+import {
+  parseCommunityMetrics,
+  parseFoundingOverview,
+  type CommunityMetricsDTO,
+  type FoundingOverviewDTO,
+} from '@/application/admin-identity';
 import { ConsoleLogger } from '../logger';
 
 /**
@@ -128,6 +134,31 @@ export async function fetchAdminMetrics(client: SupabaseClient | null): Promise<
     return parseAdminMetrics(data);
   } catch (e) {
     warn('admin_metrics', e);
+    return null;
+  }
+}
+
+/** admin_founding_members() for an admin; null for anyone else (HG403) or on failure. */
+export async function fetchFoundingOverview(client: SupabaseClient | null): Promise<FoundingOverviewDTO | null> {
+  return adminRead(client, 'admin_founding_members', parseFoundingOverview);
+}
+
+/** admin_community_metrics() for an admin; null for anyone else (HG403) or on failure. */
+export async function fetchCommunityMetrics(client: SupabaseClient | null): Promise<CommunityMetricsDTO | null> {
+  return adminRead(client, 'admin_community_metrics', parseCommunityMetrics);
+}
+
+async function adminRead<T>(client: SupabaseClient | null, fn: string, parse: (raw: unknown) => T | null): Promise<T | null> {
+  if (!client) return null;
+  try {
+    const { data, error } = await client.rpc(fn);
+    if (error) {
+      if ((error as { code?: string }).code !== 'HG403') warn(fn, error);
+      return null;
+    }
+    return parse(data);
+  } catch (e) {
+    warn(fn, e);
     return null;
   }
 }

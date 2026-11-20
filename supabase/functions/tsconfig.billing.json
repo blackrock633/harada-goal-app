@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "incremental": false,
+    "paths": { "npm:@supabase/supabase-js@2.109.0": ["../../node_modules/@supabase/supabase-js/dist/index.d.mts"] }
+  },
+  "include": ["../tests/deno-types.d.ts", "billing-checkout/index.ts", "billing-portal/index.ts", "stripe-webhook/index.ts", "revenuecat-webhook/index.ts", "billing-sync/index.ts", "billing-reconcile/index.ts"],
+  "exclude": []
+}

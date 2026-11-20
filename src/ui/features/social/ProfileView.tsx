@@ -1,28 +1,39 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import type {
+  BlockedUserDTO,
   FollowConnectionDTO,
   GoalVisibility,
   OwnGoalVisibilityDTO,
+  ProfileAchievementDTO,
+  ProfilePrivacyDTO,
   SocialFeedCursorDTO,
   SocialPostDTO,
   SocialProfileDTO,
 } from '@/application/social';
 import {
   blockUserAction,
+  createSocialPostAction,
   followUserAction,
   getSocialFeedAction,
+  listBlockedUsersAction,
   listFollowConnectionsAction,
+  setAchievementVisibilityAction,
   setGoalVisibilityAction,
+  unblockUserAction,
   unfollowUserAction,
   updateSocialProfileAction,
 } from '@/app/actions/social';
-import { Button } from '@/ui/primitives';
+import { Button, ConfirmDialog } from '@/ui/primitives';
 import { routes } from '@/ui/routes';
+import { AchievementCard } from './AchievementCard';
 import { Avatar, readImageFileAsDataUrl } from './Avatar';
+import { FoundingCredential, FoundingMark } from './FoundingBadge';
 import { PostCard, type PostCardActions } from './PostCard';
+import { PrimaryGoalPanel } from './PrimaryGoalPanel';
 import {
   Card,
   defaultPostCardActions,
@@ -72,6 +83,10 @@ export function ProfileView({
   const [connections, setConnections] = useState<FollowConnectionDTO[]>([]);
   const [connectionsLoading, setConnectionsLoading] = useState(false);
 
+  const [confirmBlock, setConfirmBlock] = useState(false);
+  const [blocked, setBlocked] = useState<BlockedUserDTO[] | null>(null);
+  const router = useRouter();
+
   const [pending, startTransition] = useTransition();
 
   const updateProfileState = (next: SocialProfileDTO) => {
@@ -118,6 +133,76 @@ export function ProfileView({
         return;
       }
       setStatusMessage(`Blocked @${profile.username}`);
+      router.push(routes.community);
+    });
+  };
+
+  const handlePrivacyChange = (key: keyof ProfilePrivacyDTO, value: boolean) => {
+    setErrorMessage(null);
+    startTransition(async () => {
+      const res = await updateSocialProfileAction({ [key]: value });
+      if (!res.ok) {
+        setErrorMessage(res.error.message);
+        return;
+      }
+      updateProfileState(res.data);
+      setStatusMessage('Privacy settings saved');
+    });
+  };
+
+  const handleAchievementHidden = (a: ProfileAchievementDTO, hidden: boolean) => {
+    setErrorMessage(null);
+    startTransition(async () => {
+      const res = await setAchievementVisibilityAction({ achievementId: a.id, hidden });
+      if (!res.ok) {
+        setErrorMessage(res.error.message);
+        return;
+      }
+      setProfile((p) => ({
+        ...p,
+        achievements: p.achievements.map((x) => (x.id === a.id ? { ...x, hidden } : x)),
+      }));
+      setStatusMessage(hidden ? `${a.title} is hidden from your profile` : `${a.title} is shown on your profile`);
+    });
+  };
+
+  const handleShareAchievement = (a: ProfileAchievementDTO) => {
+    setErrorMessage(null);
+    startTransition(async () => {
+      const res = await createSocialPostAction({ type: 'achievement', achievementId: a.id, visibility: 'public' });
+      if (!res.ok) {
+        setErrorMessage(res.error.message);
+        return;
+      }
+      setProfile((p) => ({
+        ...p,
+        achievements: p.achievements.map((x) => (x.id === a.id ? { ...x, postId: res.data.id } : x)),
+      }));
+      setPosts((prev) => (prev.some((p) => p.id === res.data.id) ? prev : [res.data, ...prev]));
+      setStatusMessage(`Shared ${a.title} with the community`);
+    });
+  };
+
+  const handleLoadBlocked = () => {
+    startTransition(async () => {
+      const res = await listBlockedUsersAction();
+      if (!res.ok) {
+        setErrorMessage(res.error.message);
+        return;
+      }
+      setBlocked(res.data.items);
+    });
+  };
+
+  const handleUnblock = (user: BlockedUserDTO) => {
+    startTransition(async () => {
+      const res = await unblockUserAction({ targetUserId: user.userId });
+      if (!res.ok) {
+        setErrorMessage(res.error.message);
+        return;
+      }
+      setBlocked((prev) => (prev ?? []).filter((b) => b.userId !== user.userId));
+      setStatusMessage(`Unblocked @${user.username}`);
     });
   };
 
@@ -273,6 +358,12 @@ export function ProfileView({
     : posts;
 
   const isViewingAsOwner = profile.isOwnProfile && !previewPublic;
+  // The public preview applies the same rules the database applies for other viewers.
+  const visibleAchievements = isViewingAsOwner
+    ? profile.achievements
+    : previewPublic && profile.privacy && !profile.privacy.showAchievements
+      ? []
+      : profile.achievements.filter((a) => !a.hidden);
   const isRestrictedView = profile.restricted || (previewPublic && profile.isPrivate);
 
   return (
@@ -307,7 +398,10 @@ export function ProfileView({
                   </span>
                 )}
               </div>
-              <p className="font-mono text-xs text-ink-muted">@{profile.username}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-mono text-xs text-ink-muted">@{profile.username}</p>
+                {profile.foundingMember && <FoundingMark number={profile.foundingMember.number} />}
+              </div>
               {profile.bio && (
                 <p className="mt-2 max-w-[60ch] text-sm leading-relaxed text-ink">
                   {profile.bio}
@@ -366,14 +460,27 @@ export function ProfileView({
                   size="sm"
                   variant="ghost"
                   disabled={pending}
-                  onClick={handleBlock}
+                  onClick={() => setConfirmBlock(true)}
                 >
                   Block
                 </Button>
+                <ConfirmDialog
+                  open={confirmBlock}
+                  onOpenChange={setConfirmBlock}
+                  title={`Block @${profile.username}?`}
+                  description="You will stop following each other, and neither of you will see the other's profile, posts or comments. You can unblock them later from your own profile."
+                  confirmText="Block"
+                  destructive
+                  onConfirm={handleBlock}
+                />
               </>
             )}
           </div>
         </div>
+
+        {profile.foundingMember && (
+          <FoundingCredential number={profile.foundingMember.number} since={profile.foundingMember.since} />
+        )}
 
         {/* Follower / Following counts */}
         <div className="flex flex-wrap items-center gap-6 border-t border-rule pt-4">
@@ -592,6 +699,84 @@ export function ProfileView({
         />
       ) : (
         <>
+          {profile.primaryGoal ? (
+            <Card padding="lg">
+              <PrimaryGoalPanel
+                goal={profile.primaryGoal}
+                metricsHiddenFromOthers={isViewingAsOwner && profile.privacy?.showProgressMetrics === false}
+              />
+            </Card>
+          ) : (
+            isViewingAsOwner && (
+              <Card padding="md">
+                <p className="text-sm text-ink-muted">
+                  Make a goal public to feature it here with your progress. Goals stay private until you choose.
+                </p>
+              </Card>
+            )
+          )}
+
+          {(profile.achievements.length > 0 || isViewingAsOwner) && (
+            <section aria-labelledby="achievements-heading" className="space-y-3">
+              <h3
+                id="achievements-heading"
+                className="font-mono text-[11px] tracking-[0.18em] text-ink-muted uppercase"
+              >
+                Achievements ({visibleAchievements.length})
+              </h3>
+              {visibleAchievements.length === 0 ? (
+                <Card padding="md">
+                  <p className="text-sm text-ink-muted">
+                    {isViewingAsOwner
+                      ? 'Achievements appear here as your recorded work earns them: completing a goal, building a full plan, 30 days of progress.'
+                      : 'No achievements shown yet.'}
+                  </p>
+                </Card>
+              ) : (
+                <ul className="grid gap-3 sm:grid-cols-2">
+                  {visibleAchievements.map((a) => (
+                    <li key={a.id} className="flex">
+                      <AchievementCard
+                        achievement={a}
+                        holder={{ displayName: profile.displayName, username: profile.username }}
+                        hidden={isViewingAsOwner && a.hidden}
+                        className="w-full"
+                      >
+                        {isViewingAsOwner && (
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            {a.postId ? (
+                              <span className="text-xs text-ink-muted">Shared with the community</span>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                disabled={pending || a.hidden}
+                                onClick={() => handleShareAchievement(a)}
+                              >
+                                Share
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              disabled={pending}
+                              aria-label={`${a.hidden ? 'Show' : 'Hide'} ${a.title} on my profile`}
+                              onClick={() => handleAchievementHidden(a, !a.hidden)}
+                            >
+                              {a.hidden ? 'Show on profile' : 'Hide from profile'}
+                            </Button>
+                          </div>
+                        )}
+                      </AchievementCard>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
           {/* Progress & Achievement Stats */}
           {profile.stats && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -663,6 +848,42 @@ export function ProfileView({
                   </li>
                 ))}
               </ul>
+            </Card>
+          )}
+
+          {isViewingAsOwner && profile.privacy && (
+            <Card padding="md" className="space-y-3">
+              <div>
+                <p className="font-mono text-[10px] tracking-[0.18em] text-ink-muted uppercase">
+                  Profile privacy
+                </p>
+                <p className="text-xs text-ink-muted">
+                  Private goals, reflections and notes are never shown, whatever you choose here.
+                </p>
+              </div>
+              <PrivacyToggle
+                label="Show my achievements"
+                hint="Achievements tied to a private goal stay hidden regardless."
+                checked={profile.privacy.showAchievements}
+                disabled={pending}
+                onChange={(v) => handlePrivacyChange('showAchievements', v)}
+              />
+              <PrivacyToggle
+                label="Show progress figures for my featured goal"
+                hint="Days pursuing, actions completed, consistency and key areas."
+                checked={profile.privacy.showProgressMetrics}
+                disabled={pending}
+                onChange={(v) => handlePrivacyChange('showProgressMetrics', v)}
+              />
+              {profile.foundingMember && (
+                <PrivacyToggle
+                  label="Show my Founding Member badge on posts"
+                  hint="Your profile always shows it."
+                  checked={profile.privacy.foundingBadgeOnPosts}
+                  disabled={pending}
+                  onChange={(v) => handlePrivacyChange('foundingBadgeOnPosts', v)}
+                />
+              )}
             </Card>
           )}
 
@@ -761,9 +982,78 @@ export function ProfileView({
               </div>
             )}
           </section>
+
+          {isViewingAsOwner && (
+            <Card padding="md" className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-mono text-[10px] tracking-[0.18em] text-ink-muted uppercase">
+                  Blocked accounts
+                </p>
+                {blocked === null && (
+                  <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={handleLoadBlocked}>
+                    Show
+                  </Button>
+                )}
+              </div>
+              {blocked !== null &&
+                (blocked.length === 0 ? (
+                  <p className="text-xs text-ink-muted">You have not blocked anyone.</p>
+                ) : (
+                  <ul className="divide-y divide-rule">
+                    {blocked.map((b) => (
+                      <li key={b.userId} className="flex items-center justify-between gap-3 py-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-ink">{b.displayName}</p>
+                          <p className="truncate font-mono text-[11px] text-ink-muted">@{b.username}</p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={pending}
+                          onClick={() => handleUnblock(b)}
+                        >
+                          Unblock
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ))}
+            </Card>
+          )}
         </>
       )}
     </div>
+  );
+}
+
+function PrivacyToggle({
+  label,
+  hint,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label className="flex items-start gap-2.5">
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-1 accent-accent"
+      />
+      <span className="text-sm text-ink">
+        {label}
+        <span className="block text-xs text-ink-muted">{hint}</span>
+      </span>
+    </label>
   );
 }
 

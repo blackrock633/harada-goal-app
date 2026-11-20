@@ -22,6 +22,7 @@ import {
 import { Button } from '@/ui/primitives';
 import { routes } from '@/ui/routes';
 import { Avatar } from './Avatar';
+import { FoundingMark } from './FoundingBadge';
 import { PostCard, type PostCardActions } from './PostCard';
 import { PostComposer } from './PostComposer';
 import { ProfileView } from './ProfileView';
@@ -606,7 +607,10 @@ function DiscoverUserCard({
           />
           <div className="min-w-0">
             <p className="truncate font-medium text-ink hover:text-accent">{user.displayName}</p>
-            <p className="truncate font-mono text-[11px] text-ink-muted">@{user.username}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate font-mono text-[11px] text-ink-muted">@{user.username}</p>
+              {user.foundingMemberNumber != null && <FoundingMark number={user.foundingMemberNumber} />}
+            </div>
             {user.bio && (
               <p className="mt-1 line-clamp-2 text-xs text-ink-muted">{user.bio}</p>
             )}

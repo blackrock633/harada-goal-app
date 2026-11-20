@@ -32,7 +32,7 @@ export const FEATURE_COPY: Record<Feature, { title: string; body: string }> = {
   },
   advanced_reviews: {
     title: 'Reflect. Learn. Improve.',
-    body: "Weekly reflections help you evaluate your progress, identify what's holding you back, and adjust your approach. Unlock weekly reflections with Harada Pro.",
+    body: "Go deeper with structured weekly questions and monthly strategy reviews. Basic weekly reflections remain Free.",
   },
   premium_templates: {
     title: 'More example plans',
@@ -52,19 +52,19 @@ export const FEATURE_COPY: Record<Feature, { title: string; body: string }> = {
   },
 };
 
-export const VALUE_PROPOSITION = 'Harada helps you turn ambitious goals into structured plans and consistent action.';
+export const VALUE_PROPOSITION = 'Go Further.';
 
 export const FREE_INCLUDES = [
   'One active goal',
   'The full matrix: 8 key areas, 64 actions',
   'Daily tracking of tasks and routines',
-  'Daily reflection',
+  'Daily and basic weekly reflection',
   'A basic progress card to share',
 ];
 
 export const PRO_INCLUDES: { feature: Feature | null; text: string }[] = [
   { feature: 'multiple_goals', text: 'Multiple active goals' },
-  { feature: 'advanced_reviews', text: 'Weekly and monthly reviews' },
+  { feature: 'advanced_reviews', text: 'Advanced weekly and monthly reviews' },
   { feature: 'challenge', text: 'The 30-Day Challenge' },
   { feature: 'progress_history', text: 'Progress history and trends' },
   { feature: 'premium_templates', text: 'Premium example plans' },
@@ -95,6 +95,8 @@ export function describePlan(plan: PlanInfo): { name: string; lines: PlanLine[] 
     return { name: 'Free', lines: [{ text: 'One active goal at a time, with the full matrix, daily tracking and weekly reflection.', tone: 'muted' }] };
   }
   const lines: PlanLine[] = [];
+  const native = plan.nativeSubscription;
+  if (native) lines.push({text: `${native.store === 'app_store' ? 'App Store' : 'Google Play'}: ${native.status.replaceAll('_',' ')}${native.currentPeriodEnd ? ` · ${native.cancelAtPeriodEnd ? 'Access until' : 'Period ends'} ${formatDay(native.currentPeriodEnd)}` : ''}.`});
   const sub = plan.subscription;
   if (sub) {
     const cadence = sub.priceId === 'pro_annual' ? 'Billed yearly' : sub.priceId === 'pro_monthly' ? 'Billed monthly' : null;

@@ -4,7 +4,7 @@ import type { MyPlanDTO } from '@/application/web-public';
 import { fetchMyPlan } from '@/infrastructure/supabase/public-data';
 import { userSupabase } from '@/infrastructure/supabase/server';
 import { requireCtx } from '@/app/lib/session';
-import { openBillingPortalAction } from '@/app/actions/billing';
+import { openBillingPortalAction, synchronizeBillingAction } from '@/app/actions/billing';
 import { SubmitButton, billingErrorMessage, formatBillingDate, intervalLabel, subscriptionLine } from '@/ui/features/marketing';
 import { Screen, ScreenHeader, Section } from '@/ui/layout';
 import { ButtonLink } from '@/ui/primitives';
@@ -52,6 +52,7 @@ function PlanDetails({ plan }: { plan: MyPlanDTO }) {
   return (
     <>
       <Section title="Your plan">
+        {plan.nativeSubscription && <p className="text-sm text-ink-muted">Store subscription: {plan.nativeSubscription.status}. {plan.nativeSubscription.currentPeriodEnd ? `Period ends ${formatBillingDate(plan.nativeSubscription.currentPeriodEnd)}.` : ''} Manage or restore purchases in the Harada mobile app using the store account that purchased Pro.</p>}
         <dl className="divide-y divide-rule">
           <div className="py-3">
             <dt className="text-sm text-ink-muted">Plan</dt>
@@ -88,6 +89,7 @@ function PlanDetails({ plan }: { plan: MyPlanDTO }) {
         </dl>
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <form action={synchronizeBillingAction}><SubmitButton variant="secondary">Check my plan</SubmitButton></form>
           {!isPro && <ButtonLink href={routes.pricing} className="w-full sm:w-auto">Upgrade to Pro</ButtonLink>}
           {s?.hasBillingAccount && (
             <form action={openBillingPortalAction}>
@@ -113,8 +115,7 @@ function PlanDetails({ plan }: { plan: MyPlanDTO }) {
             <p>
               Choose which goal stays active from the goal list in the Harada app. The others are archived, not deleted,
               and you can bring them back later. Until you choose, your{' '}
-              <Link href={routes.today} className="font-medium text-accent underline underline-offset-2">goals</Link> keep
-              working as they are, but you can’t activate another one on Free.
+              <Link href={routes.today} className="font-medium text-accent underline underline-offset-2">goals</Link> remain readable. The oldest active goal stays editable until you select one.
             </p>
           </div>
         </Section>

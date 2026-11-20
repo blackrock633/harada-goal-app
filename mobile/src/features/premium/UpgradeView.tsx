@@ -1,5 +1,6 @@
+import { StorePurchase } from './StorePurchase';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 import { formatPrice, track, usePlan, usePrices, type Feature, type PlanInfo, type Price } from '@/data/premium';
 import { ErrorScreen, LoadingScreen, SkeletonLines } from '@/screens/queryState';
@@ -76,7 +77,7 @@ function FreeOffer({ feature, note }: { feature?: Feature; note?: string }) {
         <Checklist items={PRO_INCLUDES.map((p) => ({ text: p.text, strong: p.feature === feature }))} />
       </Section>
 
-      <Purchase />
+      {Platform.OS === 'web' ? <Purchase /> : <StorePurchase />}
     </View>
   );
 }
@@ -191,7 +192,7 @@ function ProStatus({ plan }: { plan: PlanInfo }) {
   const { space } = useTheme();
   const portal = useBillingPortal();
   const { lines } = describePlan(plan);
-  const canManage = !!plan.subscription?.hasBillingAccount;
+  const canManage = Platform.OS === 'web' && !!plan.subscription?.hasBillingAccount;
   return (
     <View style={{ gap: space[6] }}>
       <View style={{ gap: space[2] }}>
@@ -224,6 +225,7 @@ function ProStatus({ plan }: { plan: PlanInfo }) {
           ) : null}
         </View>
       ) : null}
+      {Platform.OS !== 'web' ? <StorePurchase manage store={plan.nativeSubscription?.store} /> : null}
       <Section title="Included in your plan">
         <Checklist items={PRO_INCLUDES.map((p) => ({ text: p.text }))} />
       </Section>

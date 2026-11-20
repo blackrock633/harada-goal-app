@@ -88,7 +88,7 @@ export function ReflectionForm({
 
   // Editing keeps the entry's kind. Weekly and monthly reflections require Harada Pro.
   const questions = questionsFor(kind, advanced);
-  const locked = (kind === 'weekly' || kind === 'monthly') && !advanced;
+  const locked = (kind === 'monthly' || !!editing?.answers && Object.keys(editing.answers).length > 0) && !advanced;
   const value = (k: QuestionKey) => values[k] ?? '';
 
   async function submit() {
@@ -200,12 +200,12 @@ export function ReflectionForm({
           onChange={(k) => {
             if (!saving) {
               setKind(k);
-              if ((k === 'weekly' || k === 'monthly') && !advanced) {
+              if (k === 'monthly' && !advanced) {
                 openUpgrade(
                   'advanced_reviews',
                   k === 'monthly'
                     ? 'Monthly reviews are part of Harada Pro. Daily reflections stay free.'
-                    : 'Weekly reflections are part of Harada Pro. Daily reflections stay free.',
+                    : 'Structured advanced reviews are part of Harada Pro. Basic weekly reflections stay free.',
                 );
               }
             }
@@ -223,7 +223,7 @@ export function ReflectionForm({
           note={
             kind === 'monthly'
               ? 'Monthly reviews are part of Harada Pro. Daily reflections stay free.'
-              : 'Weekly reflections are part of Harada Pro. Daily reflections stay free.'
+              : 'Structured advanced reviews are part of Harada Pro. Basic weekly reflections stay free.'
           }
         />
       ) : (
@@ -275,7 +275,7 @@ export function ReflectionForm({
             loading={saving}
             style={{ alignSelf: 'flex-start', minWidth: 180 }}
           />
-          {kind === 'weekly' && !advanced && !editing ? <UpgradePrompt feature="advanced_reviews" /> : null}
+          {kind === 'weekly' && !advanced && !editing ? <Button title="Advanced weekly review" variant="ghost" onPress={() => openUpgrade('advanced_reviews')} /> : null}
         </>
       )}
     </View>

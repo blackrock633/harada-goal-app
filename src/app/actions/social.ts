@@ -108,3 +108,11 @@ export async function listSocialNotificationsAction(input: { limit?: number } = 
 export async function markNotificationsReadAction(input: { notificationId?: string } = {}) {
   return runAuthed((deps, ctx) => uc.markNotificationsRead(deps, ctx, input));
 }
+
+export async function setAchievementVisibilityAction(input: { achievementId: string; hidden: boolean }) {
+  return runAuthed((deps, ctx) => uc.setAchievementVisibility(deps, ctx, input));
+}
+
+export async function listBlockedUsersAction() {
+  return runAuthed((deps, ctx) => uc.listBlockedUsers(deps, ctx));
+}

@@ -1,5 +1,7 @@
 # Harada Pro, the 30-Day Challenge, sharing and analytics
 
+> Billing, prices, Free weekly-reflection policy, native purchases and downgrade behavior in this historical document are superseded by [MONETIZATION.md](MONETIZATION.md).
+
 How the premium system is built, what it enforces where, and what a deploy needs. Written 2026-10-26.
 
 ## 1. Shape

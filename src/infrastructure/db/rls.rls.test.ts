@@ -37,6 +37,13 @@ const FEATURE_TABLES = [
   'social_profiles', 'goal_visibility', 'social_follows', 'social_blocks', 'social_posts',
   'social_likes', 'social_comments', 'social_hidden_posts', 'social_reports', 'social_notifications',
   'social_rate_limits',
+  'billing_settings',
+  'entitlement_audit',
+  'founding_members',
+  'native_billing_events',
+  'native_subscriptions',
+  'billing_lifecycle_events',
+  'user_achievements',
 ];
 /** The public catalogue (plan names, features, active prices) is readable before sign-in, by design. */
 const ANON_READABLE_POLICIES = ['plan_features_read', 'plans_read', 'prices_read'];

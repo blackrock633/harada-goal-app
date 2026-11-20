@@ -65,3 +65,13 @@ export async function openBillingPortalAction(): Promise<void> {
   }
   redirect(result.url);
 }
+
+/** Retry verification using authenticated identity, never a success URL or supplied subscription ID. */
+export async function synchronizeBillingAction(): Promise<void> {
+  const client=await userSupabase();
+  const token=client ? await verifiedAccessToken(client) : null;
+  if(!token) redirect('/signin?next=/account/billing');
+  const result=await callEdgeFunction('billing-sync',token,{});
+  if(result.status >= 400) redirect('/account/billing?error=UNAVAILABLE');
+  redirect('/account/billing');
+}

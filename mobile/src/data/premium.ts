@@ -31,6 +31,8 @@ export type Feature =
   | 'challenge';
 
 export interface PlanInfo {
+  nativeSubscription?: { status: string; store: string; currentPeriodEnd: string | null; cancelAtPeriodEnd: boolean } | null;
+  foundingMember?: boolean;
   plan: 'free' | 'pro';
   features: Feature[];
   /** null = no limit. */
@@ -179,7 +181,7 @@ async function read<T>(name: string, args: Record<string, unknown> = {}): Promis
 }
 
 /** Edge Functions answer with the app Result shape, on errors too (see deleteAccount.ts). */
-async function invokeFunction<T>(name: string, body: unknown): Promise<Result<T>> {
+export async function invokeFunction<T>(name: string, body: unknown): Promise<Result<T>> {
   try {
     const { data, error } = await getSupabase().functions.invoke(name, { body: body as Record<string, unknown> });
     const isResult = (v: unknown): v is Result<T> => typeof v === 'object' && v !== null && typeof (v as { ok?: unknown }).ok === 'boolean';
@@ -226,7 +228,7 @@ export async function loadPrices(): Promise<Price[]> {
 export const hasFeature = (plan: PlanInfo | undefined, f: Feature) => !!plan?.features.includes(f);
 
 export function usePlan() {
-  return useQuery({ queryKey: premiumKeys.plan, queryFn: loadPlan, staleTime: 60_000 });
+  return useQuery({ queryKey: premiumKeys.plan, queryFn: loadPlan, staleTime: 30_000, refetchInterval: 60_000 });
 }
 
 export function usePrices() {
@@ -424,5 +426,7 @@ export function useRefreshPlan() {
     qc.invalidateQueries({ queryKey: premiumKeys.plan }),
     qc.invalidateQueries({ queryKey: premiumKeys.templates }),
     qc.invalidateQueries({ queryKey: ['history'] }),
+    qc.invalidateQueries({ queryKey: ['challenge'] }),
+    qc.invalidateQueries({ queryKey: ['goals'] }),
   ]);
 }

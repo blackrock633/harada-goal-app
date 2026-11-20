@@ -3,6 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { Heart, MessageSquare, Trophy, Flag, Sparkles, Lock, Globe, Trash2, EyeOff, ShieldAlert, Pencil } from 'lucide-react';
+import { isSelfReportedPostType } from '@/application/achievements';
 import type { Result } from '@/application/result';
 import {
   POST_TYPE_LABELS,
@@ -12,7 +13,9 @@ import {
 } from '@/application/social';
 import { Button } from '@/ui/primitives';
 import { routes } from '@/ui/routes';
+import { AchievementCard } from './AchievementCard';
 import { Avatar } from './Avatar';
+import { FoundingMark } from './FoundingBadge';
 
 export interface PostCardActions {
   toggleLike: (input: { postId: string; like?: boolean }) => Promise<Result<{ postId: string; liked: boolean; likeCount: number }>>;
@@ -222,6 +225,9 @@ export function PostCard({ post: initialPost, actions, onPostDeleted, onPostUpda
               >
                 @{post.author.username}
               </Link>
+              {post.author.foundingMemberNumber != null && (
+                <FoundingMark number={post.author.foundingMemberNumber} />
+              )}
             </div>
             <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
               <time dateTime={post.createdAt}>{formatTimestamp(post.createdAt)}</time>
@@ -236,6 +242,9 @@ export function PostCard({ post: initialPost, actions, onPostDeleted, onPostUpda
                 )}
                 {POST_TYPE_LABELS[post.type]}
               </span>
+              {isSelfReportedPostType(post.type) && (
+                <span title="Written by the member; not derived from recorded activity">Self-reported</span>
+              )}
               {post.visibility === 'private' && (
                 <span className="inline-flex items-center gap-1 rounded bg-surface-sunken px-1.5 py-0.5 text-xs text-ink-muted">
                   <Lock className="h-3 w-3" aria-hidden="true" />
@@ -296,19 +305,21 @@ export function PostCard({ post: initialPost, actions, onPostDeleted, onPostUpda
       {/* Edit post inline form */}
       {editing ? (
         <form onSubmit={(e) => void handleSaveEdit(e)} className="space-y-3 border-t border-rule pt-3">
-          <div>
-            <label htmlFor={`edit-headline-${post.id}`} className="block text-xs font-medium text-ink-muted">
-              Headline
-            </label>
-            <input
-              id={`edit-headline-${post.id}`}
-              type="text"
-              maxLength={160}
-              value={editHeadline}
-              onChange={(e) => setEditHeadline(e.target.value)}
-              className="mt-1 w-full rounded-[var(--radius-sm)] border border-rule bg-paper px-3 py-2 text-sm text-ink"
-            />
-          </div>
+          {!post.achievement && (
+            <div>
+              <label htmlFor={`edit-headline-${post.id}`} className="block text-xs font-medium text-ink-muted">
+                Headline
+              </label>
+              <input
+                id={`edit-headline-${post.id}`}
+                type="text"
+                maxLength={160}
+                value={editHeadline}
+                onChange={(e) => setEditHeadline(e.target.value)}
+                className="mt-1 w-full rounded-[var(--radius-sm)] border border-rule bg-paper px-3 py-2 text-sm text-ink"
+              />
+            </div>
+          )}
           <div>
             <label htmlFor={`edit-body-${post.id}`} className="block text-xs font-medium text-ink-muted">
               Update
@@ -344,8 +355,15 @@ export function PostCard({ post: initialPost, actions, onPostDeleted, onPostUpda
         </form>
       ) : (
         <>
+          {post.achievement && (
+            <AchievementCard
+              achievement={{ ...post.achievement, goal: post.goal }}
+              holder={{ displayName: post.author.displayName, username: post.author.username }}
+            />
+          )}
+
           {/* Linked Goal Pill */}
-          {post.goal && (
+          {post.goal && !post.achievement && (
             <div
               className={
                 isCelebration
@@ -391,7 +409,7 @@ export function PostCard({ post: initialPost, actions, onPostDeleted, onPostUpda
 
           {/* Post Headline & Body */}
           <div className="space-y-2">
-            {post.headline && (
+            {post.headline && !post.achievement && (
               <h3 className="font-serif text-xl leading-snug text-ink break-words">{post.headline}</h3>
             )}
             {post.body && (

@@ -5,9 +5,11 @@ import type { Ctx, Result } from '../result';
 import {
   addPostCommentSchema,
   createSocialPostSchema,
+  setAchievementVisibilitySchema,
   setGoalVisibilitySchema,
   updateSocialPostSchema,
   updateSocialProfileSchema,
+  type BlockedUserDTO,
   type DiscoverResultDTO,
   type FollowConnectionDTO,
   type GoalVisibility,
@@ -156,6 +158,7 @@ export async function createSocialPost(
         visibility: data.visibility,
       };
       if (data.id) payload.id = data.id;
+      if (data.achievementId) payload.achievementId = data.achievementId;
       if (data.goalId) payload.goalId = data.goalId;
       if (data.headline !== undefined) payload.headline = data.headline;
       if (data.body !== undefined) payload.body = data.body;
@@ -301,5 +304,38 @@ export async function markNotificationsRead(
 ): Promise<Result<{ unreadCount: number }>> {
   return guard(deps.logger, () =>
     deps.uow.run(ctx.userId, (repos) => repos.social.callRpc('mark_notifications_read', input)),
+  );
+}
+
+export async function setAchievementVisibility(
+  deps: Deps,
+  ctx: Ctx,
+  input: unknown,
+): Promise<Result<{ achievementId: string; hidden: boolean }>> {
+  return guard(deps.logger, () =>
+    deps.uow.run(ctx.userId, (repos) => {
+      const data = setAchievementVisibilitySchema.parse(input);
+      return repos.social.callRpc('set_achievement_visibility', data);
+    }),
+  );
+}
+
+export async function listBlockedUsers(deps: Deps, ctx: Ctx): Promise<Result<{ items: BlockedUserDTO[] }>> {
+  return guard(deps.logger, () =>
+    deps.uow.run(ctx.userId, (repos) => repos.social.callRpc('list_blocked_users', {})),
+  );
+}
+
+/** Records a profile view (and a Founding Member badge view) for analytics. Own views record nothing. */
+export async function recordProfileView(
+  deps: Deps,
+  ctx: Ctx,
+  input: unknown,
+): Promise<Result<{ recorded: boolean }>> {
+  return guard(deps.logger, () =>
+    deps.uow.run(ctx.userId, (repos) => {
+      const data = z.object({ userId: z.uuid({ message: 'Invalid user id' }) }).parse(input);
+      return repos.social.callRpc('record_profile_view', data);
+    }),
   );
 }

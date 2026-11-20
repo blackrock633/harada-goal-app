@@ -117,7 +117,7 @@ describe('checkout', () => {
     const res = await handleCheckout(post('billing-checkout', { priceId: 'pro_monthly' }), CONFIG,
       deps({ fetch: (async () => new Response('{"error":{"code":"api_error"}}', { status: 500 })) as unknown as typeof fetch }));
     expect(res.status).toBe(502);
-    expect((await res.json()).error.message).toMatch(/Nothing was charged/);
+    expect((await res.json()).error.message).toMatch(/Check your plan before trying again/);
   });
 });
 
@@ -179,9 +179,9 @@ describe('webhook', () => {
     const res = await handleStripeWebhook(hook(p, sign(p)), d);
     expect(await res.json()).toEqual({ received: true, result: 'applied' });
     expect(d.apply).toHaveBeenCalledWith({
-      eventId: 'evt_1', eventType: 'customer.subscription.updated', created: NOW, customerId: 'cus_1', userId: ALICE.id,
+      generation: undefined, livemode: undefined, eventId: 'evt_1', eventType: 'customer.subscription.updated', created: NOW, customerId: 'cus_1', userId: ALICE.id,
       subscriptionId: 'sub_1', status: 'active', stripePriceId: 'price_m', amountCents: 799, interval: 'month',
-      currentPeriodEnd: NOW + 2_592_000, cancelAtPeriodEnd: true, canceledAt: null,
+      currentPeriodEnd: NOW + 2_592_000, cancelAtPeriodEnd: false, canceledAt: null,
     });
   });
 
@@ -207,4 +207,17 @@ describe('webhook', () => {
     expect(normalizeSubscription('e', 't', 1, { ...sub, discount: { coupon: { amount_off: 1000 } } }).amountCents).toBe(0);
     expect(normalizeSubscription('e', 't', 1, { ...sub, current_period_end: 5 }).currentPeriodEnd).toBe(5);
   });
+});
+
+describe('billing defensive inputs',()=>{
+ it('rejects null and array checkout bodies without an unhandled exception',async()=>{
+  for(const body of [null,[],'text']) expect((await handleCheckout(post('billing-checkout',body),CONFIG,deps())).status).toBe(400);
+ });
+ it('rejects a key for the wrong deployment environment',()=>{
+  expect(billingConfigError({...CONFIG,environment:'PRODUCTION'})).toMatch(/environment/);
+ });
+ it('does not offer a competing paid subscription to a complimentary or native Pro account',async()=>{
+  const d=deps({getPlan:async()=>({plan:'pro',stripeActive:false})});
+  expect((await handleCheckout(post('billing-checkout',{priceId:'pro_monthly'}),CONFIG,d)).status).toBe(409);
+ });
 });

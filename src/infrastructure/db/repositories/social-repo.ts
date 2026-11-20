@@ -25,6 +25,9 @@ const ALLOWED_SOCIAL_RPCS = new Set([
   'hide_or_report_post',
   'list_social_notifications',
   'mark_notifications_read',
+  'set_achievement_visibility',
+  'list_blocked_users',
+  'record_profile_view',
 ]);
 
 export class SocialRepoImpl implements SocialRepo {

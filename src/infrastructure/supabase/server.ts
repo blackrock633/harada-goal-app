@@ -52,7 +52,7 @@ export async function verifiedAccessToken(client: SupabaseClient): Promise<strin
 
 /** POSTs to a Supabase Edge Function as the user. Returns the HTTP status and parsed JSON body (or null). */
 export async function callEdgeFunction(
-  name: 'billing-checkout' | 'billing-portal',
+  name: 'billing-checkout' | 'billing-portal' | 'billing-sync',
   accessToken: string,
   body?: Record<string, unknown>,
 ): Promise<{ status: number; body: unknown }> {

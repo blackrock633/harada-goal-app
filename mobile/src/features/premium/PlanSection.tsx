@@ -1,5 +1,6 @@
+import { StorePurchase } from './StorePurchase';
 import { router } from 'expo-router';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 
 import { usePlan } from '@/data/premium';
 import { messageFor, SkeletonLines } from '@/screens/queryState';
@@ -39,7 +40,7 @@ export function PlanSection() {
 
   const p = plan.data;
   const { name, lines } = describePlan(p);
-  const canManage = !!p.subscription?.hasBillingAccount;
+  const canManage = Platform.OS === 'web' && !!p.subscription?.hasBillingAccount;
   return (
     <Section title="Plan & billing">
       <View>
@@ -57,6 +58,7 @@ export function PlanSection() {
         ))}
       </View>
       <OverLimitNotice plan={p} />
+      {Platform.OS !== 'web' ? <StorePurchase manage store={p.nativeSubscription?.store} /> : null}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
         {p.plan === 'free' ? (
           <Button title="See Harada Pro" variant="secondary" onPress={() => router.push(upgradeHref())} />
