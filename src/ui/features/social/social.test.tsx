@@ -201,6 +201,10 @@ function makeProfile(overrides: Partial<SocialProfileDTO> = {}): SocialProfileDT
       },
     ],
     recentPosts: [makePost()],
+    foundingMember: null,
+    primaryGoal: null,
+    achievements: [],
+    privacy: null,
     ...overrides,
   };
 }

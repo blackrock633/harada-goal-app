@@ -1,6 +1,7 @@
 import { Action, Goal, Id, LocalDate, Outcome } from './types.js';
 
-import { isoWeekStart, weekdayOf, addDays } from './dates.js';
+import { isoWeekStart, addDays } from './dates.js';
+import { isScheduledOn } from './schedule.js';
 
 export interface NextItem {
   action: Action;
@@ -13,8 +14,8 @@ export function isDueToday(action: Action, checks: LocalDate[], today: LocalDate
   if (action.kind !== 'routine' || action.archivedAt !== null || !action.startDate || !action.schedule) return false;
   if (today < action.startDate) return false;
 
-  if (action.schedule.type === 'daily') return true;
-  if (action.schedule.type === 'weekdays') return action.schedule.days.includes(weekdayOf(today));
+  const scheduled = isScheduledOn(action.schedule, today);
+  if (scheduled !== null) return scheduled;
   if (action.schedule.type === 'weekly') {
     const times = action.schedule.timesPerWeek;
     const wStart = isoWeekStart(today);

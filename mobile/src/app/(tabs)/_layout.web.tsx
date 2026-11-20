@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { TabList, TabSlot, TabTrigger, Tabs } from 'expo-router/ui';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View, type PressableProps } from 'react-native';
@@ -108,7 +108,7 @@ export default function WebTabsLayout() {
           </Text>
           {triggers}
           <View style={styles.spacer} />
-          <IconButton accessibilityLabel="Account menu" icon="account" tone="muted" onPress={() => router.push('/settings')} />
+          <IconButton accessibilityLabel="Your profile" icon="account" tone="muted" onPress={() => router.push('/community/u/me' as Href)} />
         </TabList>
       ) : null}
       <View style={styles.slot}>

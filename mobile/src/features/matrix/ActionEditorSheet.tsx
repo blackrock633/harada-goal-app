@@ -20,6 +20,10 @@ import {
   zodFieldErrors,
 } from './form-utils';
 import { DAY_NAMES } from './format';
+import { DateList, MonthDayGrid } from './ScheduleFields';
+
+/** Today on this device (YYYY-MM-DD), for date defaults; the server keeps its own notion of today. */
+const localToday = () => new Date().toLocaleDateString('en-CA');
 
 const KINDS = [
   { value: 'task', label: 'Task' },
@@ -182,6 +186,15 @@ export function ActionEditorSheet({ visible, onClose, mode, mutations, onSaved, 
               <Chip role="radio" label="Every day" selected={sched.type === 'daily'} onPress={() => setSched((s) => ({ ...s, type: 'daily' }))} disabled={pending} />
               <Chip role="radio" label="Specific weekdays" selected={sched.type === 'weekdays'} onPress={() => setSched((s) => ({ ...s, type: 'weekdays' }))} disabled={pending} />
               <Chip role="radio" label="N times per week" selected={sched.type === 'weekly'} onPress={() => setSched((s) => ({ ...s, type: 'weekly' }))} disabled={pending} />
+              <Chip
+                role="radio"
+                label="Monthly"
+                selected={sched.type === 'monthly'}
+                // "Once a month" in one tap: start from today's day of the month.
+                onPress={() => setSched((s) => ({ ...s, type: 'monthly', daysOfMonth: s.daysOfMonth.length ? s.daysOfMonth : [Number(localToday().slice(8, 10))] }))}
+                disabled={pending}
+              />
+              <Chip role="radio" label="Specific dates" selected={sched.type === 'dates'} onPress={() => setSched((s) => ({ ...s, type: 'dates' }))} disabled={pending} />
             </View>
             {errors.schedule ? (
               <Text variant="caption" tone="danger">
@@ -200,6 +213,27 @@ export function ActionEditorSheet({ visible, onClose, mode, mutations, onSaved, 
                 ))}
               </View>
             </View>
+          ) : null}
+          {sched.type === 'monthly' ? (
+            <MonthDayGrid
+              selected={sched.daysOfMonth}
+              disabled={pending}
+              onToggle={(d) =>
+                setSched((s) => ({
+                  ...s,
+                  daysOfMonth: s.daysOfMonth.includes(d) ? s.daysOfMonth.filter((x) => x !== d) : [...s.daysOfMonth, d],
+                }))
+              }
+            />
+          ) : null}
+          {sched.type === 'dates' ? (
+            <DateList
+              dates={sched.dates}
+              today={localToday()}
+              disabled={pending}
+              onAdd={(d) => setSched((s) => ({ ...s, dates: s.dates.includes(d) ? s.dates : [...s.dates, d].sort() }))}
+              onRemove={(d) => setSched((s) => ({ ...s, dates: s.dates.filter((x) => x !== d) }))}
+            />
           ) : null}
           {sched.type === 'weekly' ? (
             <TextField

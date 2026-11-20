@@ -107,6 +107,7 @@ export const actions = pgTable(
     scheduleType: text('schedule_type'),
     scheduleDays: smallint('schedule_days').array(),
     scheduleTimesPerWeek: smallint('schedule_times_per_week'),
+    scheduleDates: date('schedule_dates', { mode: 'string' }).array(),
     startDate: date('start_date', { mode: 'string' }),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
@@ -119,7 +120,7 @@ export const actions = pgTable(
     kindCheck: check('actions_kind_check', sql`kind in ('task','routine')`),
     positionCheck: check('actions_position_check', sql`position between 0 and 7`),
     positionArchiveCheck: check('actions_position_archive_check', sql`(position is null) = (archived_at is not null)`),
-    scheduleTypeCheck: check('actions_schedule_type_check', sql`schedule_type is null or schedule_type in ('daily','weekdays','weekly')`),
+    scheduleTypeCheck: check('actions_schedule_type_check', sql`schedule_type is null or schedule_type in ('daily','weekdays','weekly','monthly','dates')`),
     weeklyTimesCheck: check('actions_weekly_times_check', sql`schedule_times_per_week is null or (schedule_times_per_week between 1 and 7)`),
     kindConsistencyCheck: check('actions_kind_consistency_check', sql`
       (kind = 'task' and schedule_type is null and start_date is null) or

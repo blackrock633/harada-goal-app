@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { AchievementKey } from './achievements';
 
 // ---------- Shared Social DTOs ----------
 
@@ -9,7 +10,8 @@ export type SocialPostType =
   | 'milestone'
   | 'progress_update'
   | 'general_achievement'
-  | 'goal_started';
+  | 'goal_started'
+  | 'achievement';
 
 export type SocialNotificationKind =
   | 'new_follower'
@@ -22,6 +24,8 @@ export interface SocialAuthorDTO {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  /** Shown beside the name when the author is a Founding Member and shows the badge on posts. */
+  foundingMemberNumber?: number | null;
 }
 
 export interface SocialPostStatsDTO {
@@ -49,6 +53,15 @@ export interface SocialCommentDTO {
   author: SocialAuthorDTO;
 }
 
+/** A verified achievement attached to a post of type `achievement`. */
+export interface PostAchievementDTO {
+  id: string;
+  key: AchievementKey;
+  title: string;
+  earnedAt: string;
+  stat: Record<string, number>;
+}
+
 export interface SocialPostDTO {
   id: string;
   type: SocialPostType;
@@ -70,6 +83,7 @@ export interface SocialPostDTO {
   /** Post detail only: the newest comments page (oldest first) and the cursor for older ones. */
   comments?: SocialCommentDTO[];
   olderComments?: { before: string; beforeId: string } | null;
+  achievement?: PostAchievementDTO | null;
 }
 
 export interface PublicGoalSummaryDTO {
@@ -102,6 +116,66 @@ export interface SocialProfileStatsDTO {
   postsCount: number;
 }
 
+export interface FoundingMemberDTO {
+  number: number;
+  since: string;
+}
+
+/**
+ * Progress on one goal, all computed by the database from recorded activity
+ * (docs/IDENTITY_AND_ACHIEVEMENTS.md §3).
+ */
+export interface GoalProgressMetricsDTO {
+  /** Calendar days from activation to today (or to the day it was achieved); null for a draft. */
+  daysPursuing: number | null;
+  /** Completed tasks + on-time routine check-ins. */
+  actionsCompleted: number;
+  tasksCompleted: number;
+  tasksTotal: number;
+  routineCheckins: number;
+  keyAreasComplete: number;
+  keyAreasTotal: number;
+  /** Days with recorded activity in the last 30 days of pursuit (fewer when the goal is newer). */
+  consistency: { activeDays: number; windowDays: number; rate: number } | null;
+}
+
+export interface PrimaryGoalDTO {
+  id: string;
+  title: string;
+  status: string;
+  activatedOn: string | null;
+  targetDate: string | null;
+  achievedAt: string | null;
+  /** Null when the owner hides progress metrics from other people. */
+  metrics: GoalProgressMetricsDTO | null;
+}
+
+export interface ProfileAchievementDTO {
+  id: string;
+  key: AchievementKey;
+  title: string;
+  earnedAt: string;
+  stat: Record<string, number>;
+  /** Only meaningful to the owner: kept off the public profile. */
+  hidden: boolean;
+  goal: { id: string; title: string } | null;
+  /** The community post sharing this achievement, if any. */
+  postId: string | null;
+}
+
+export interface ProfilePrivacyDTO {
+  showAchievements: boolean;
+  showProgressMetrics: boolean;
+  foundingBadgeOnPosts: boolean;
+}
+
+export interface BlockedUserDTO {
+  userId: string;
+  username: string;
+  displayName: string;
+  blockedAt: string;
+}
+
 export interface SocialProfileDTO {
   userId: string;
   username: string;
@@ -122,6 +196,28 @@ export interface SocialProfileDTO {
   publicGoals: PublicGoalSummaryDTO[];
   ownGoals: OwnGoalVisibilityDTO[];
   recentPosts: SocialPostDTO[];
+  foundingMember: FoundingMemberDTO | null;
+  primaryGoal: PrimaryGoalDTO | null;
+  achievements: ProfileAchievementDTO[];
+  /** The owner's own display settings; null for everyone else. */
+  privacy: ProfilePrivacyDTO | null;
+}
+
+/**
+ * Fills the identity fields a database without 20261027140000_identity_achievements.sql does not send, so clients
+ * keep working (showing no founding/achievement data) while a deploy is in progress.
+ */
+export function normalizeSocialProfile(raw: SocialProfileDTO): SocialProfileDTO {
+  return {
+    ...raw,
+    foundingMember: raw.foundingMember ?? null,
+    primaryGoal: raw.primaryGoal ?? null,
+    achievements: raw.achievements ?? [],
+    privacy: raw.privacy ?? null,
+    publicGoals: raw.publicGoals ?? [],
+    ownGoals: raw.ownGoals ?? [],
+    recentPosts: raw.recentPosts ?? [],
+  };
 }
 
 export interface FollowConnectionDTO {
@@ -146,6 +242,7 @@ export interface DiscoverUserDTO {
   followersCount: number;
   publicGoalTitle: string | null;
   reason: string;
+  foundingMemberNumber?: number | null;
 }
 
 export interface DiscoverResultDTO {
@@ -247,6 +344,14 @@ export const updateSocialProfileSchema = z.object({
     .optional(),
   avatarUrl: jpegPhoto(AVATAR_MAX_CHARS, 'Profile picture').nullable().optional(),
   isPrivate: z.boolean().optional(),
+  showAchievements: z.boolean().optional(),
+  showProgressMetrics: z.boolean().optional(),
+  foundingBadgeOnPosts: z.boolean().optional(),
+});
+
+export const setAchievementVisibilitySchema = z.object({
+  achievementId: uuid,
+  hidden: z.boolean(),
 });
 
 export const setGoalVisibilitySchema = z.object({
@@ -284,4 +389,5 @@ export const POST_TYPE_LABELS: Record<SocialPostType, string> = {
   progress_update: 'Progress update',
   general_achievement: 'Personal achievement',
   goal_started: 'New goal started',
+  achievement: 'Achievement',
 };

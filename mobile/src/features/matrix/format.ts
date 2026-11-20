@@ -1,3 +1,4 @@
+import { describeDates, describeMonthly } from '@shared/application/schedule-text';
 import type { Schedule } from '@shared/domain/types';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
@@ -24,5 +25,7 @@ export function describeSchedule(schedule: Schedule | null | undefined): string 
   if (schedule.type === 'daily') return 'Every day';
   if (schedule.type === 'weekdays') return schedule.days.map((d) => DAY_NAMES[d]).join(' · ');
   if (schedule.type === 'weekly') return `${schedule.timesPerWeek}× a week`;
+  if (schedule.type === 'monthly') return describeMonthly(schedule.daysOfMonth);
+  if (schedule.type === 'dates') return describeDates(schedule.dates, new Date().getFullYear());
   return '';
 }

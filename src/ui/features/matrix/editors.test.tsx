@@ -89,6 +89,50 @@ describe('ActionEditorSheet', () => {
   });
 });
 
+describe('ActionEditorSheet: monthly and specific-date routines', () => {
+  const todayLocal = new Date().toLocaleDateString('en-CA');
+  const renderAdd = (addAction = vi.fn().mockResolvedValue(okAction())) => {
+    render(<ActionEditorSheet open onOpenChange={vi.fn()} mode={{ type: 'add', outcomeId: uid(100), position: 3 }} mutations={{ addAction, updateAction: vi.fn() }} />);
+    return addAction;
+  };
+
+  it('monthly starts on today’s day and sends the chosen days', async () => {
+    const user = userEvent.setup();
+    const addAction = renderAdd();
+    await user.type(screen.getByLabelText('Title'), 'Pay rent');
+    await user.selectOptions(screen.getByLabelText('Type'), 'routine');
+    await user.selectOptions(screen.getByLabelText('Schedule'), 'monthly');
+    const day = Number(todayLocal.slice(8, 10));
+    expect((screen.getAllByRole('checkbox', { checked: true }) as HTMLInputElement[]).length).toBe(1);
+    const other = day === 15 ? 1 : 15;
+    await user.click(screen.getByRole('checkbox', { name: other === 15 ? 'The 15th' : 'The 1st' }));
+    await user.click(screen.getByRole('button', { name: 'Add action' }));
+    await waitFor(() => expect(addAction).toHaveBeenCalled());
+    expect(addAction.mock.calls[0]![0]).toMatchObject({ schedule: { type: 'monthly', daysOfMonth: [day, other].sort((a, b) => a - b) } });
+  });
+
+  it('specific dates: add and remove dates, and an empty list is refused', async () => {
+    const user = userEvent.setup();
+    const addAction = renderAdd();
+    await user.type(screen.getByLabelText('Title'), 'Recital');
+    await user.selectOptions(screen.getByLabelText('Type'), 'routine');
+    await user.selectOptions(screen.getByLabelText('Schedule'), 'dates');
+    await user.click(screen.getByRole('button', { name: 'Add action' }));
+    expect(await screen.findByText('Pick at least one date')).toBeTruthy();
+    expect(addAction).not.toHaveBeenCalled();
+
+    const year = new Date().getFullYear() + 1;
+    const input = screen.getByLabelText('Add a date');
+    await user.type(input, `${year}-12-12`);
+    await user.clear(input);
+    await user.type(input, `${year}-11-07`);
+    await user.click(screen.getByRole('button', { name: 'Remove Dec 12, ' + year }));
+    await user.click(screen.getByRole('button', { name: 'Add action' }));
+    await waitFor(() => expect(addAction).toHaveBeenCalled());
+    expect(addAction.mock.calls[0]![0]).toMatchObject({ schedule: { type: 'dates', dates: [`${year}-11-07`] } });
+  });
+});
+
 describe('KeyAreaEditor', () => {
   it('validates, reports dirty state, and creates', async () => {
     const user = userEvent.setup();

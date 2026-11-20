@@ -1,15 +1,22 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Switch, View } from 'react-native';
 
 import { errorMessage } from '@/data/errors';
 import { pickPhoto } from '@/data/photos';
-import { setGoalVisibility, updateSocialProfile, useInvalidateSocial, useSocialProfile } from '@/data/social';
+import {
+  listBlockedUsers,
+  setGoalVisibility,
+  unblockUser,
+  updateSocialProfile,
+  useInvalidateSocial,
+  useSocialProfile,
+} from '@/data/social';
 import { Avatar } from '@/features/social/Avatar';
 import { ErrorScreen, LoadingScreen } from '@/screens/queryState';
 import { useTheme } from '@/theme';
 import { Button, Screen, Section, SegmentedControl, Text, TextField } from '@/ui';
-import type { GoalVisibility, OwnGoalVisibilityDTO } from '@shared/application/social';
+import type { BlockedUserDTO, GoalVisibility, OwnGoalVisibilityDTO, ProfilePrivacyDTO } from '@shared/application/social';
 
 const PRIVACY = [
   { value: 'public', label: 'Public' },
@@ -25,7 +32,10 @@ export default function EditProfileScreen() {
   const { space } = useTheme();
   const me = useSocialProfile('me');
   const invalidate = useInvalidateSocial();
-  const [form, setForm] = useState<{ displayName: string; username: string; bio: string; location: string; isPrivate: boolean; avatarUrl: string | null } | null>(null);
+  const [form, setForm] = useState<
+    | ({ displayName: string; username: string; bio: string; location: string; isPrivate: boolean; avatarUrl: string | null } & Partial<ProfilePrivacyDTO>)
+    | null
+  >(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -35,7 +45,7 @@ export default function EditProfileScreen() {
   useEffect(() => {
     if (me.data && !form) {
       const d = me.data;
-      setForm({ displayName: d.displayName, username: d.username, bio: d.bio, location: d.location, isPrivate: d.isPrivate, avatarUrl: d.avatarUrl });
+      setForm({ displayName: d.displayName, username: d.username, bio: d.bio, location: d.location, isPrivate: d.isPrivate, avatarUrl: d.avatarUrl, ...(d.privacy ?? {}) });
     }
   }, [me.data, form]);
 
@@ -71,6 +81,10 @@ export default function EditProfileScreen() {
       location: f.location,
       isPrivate: f.isPrivate,
       ...(f.avatarUrl !== d.avatarUrl ? { avatarUrl: f.avatarUrl } : {}),
+      // Only a database with the identity migration reports privacy settings, so only then are they sent.
+      ...(d.privacy
+        ? { showAchievements: f.showAchievements, showProgressMetrics: f.showProgressMetrics, foundingBadgeOnPosts: f.foundingBadgeOnPosts }
+        : {}),
     });
     inFlight.current = false;
     setSaving(false);
@@ -112,7 +126,25 @@ export default function EditProfileScreen() {
           </Text>
         ) : null}
       </Section>
+      {me.data!.privacy ? (
+        <Section title="What others see" description="Private goals, reflections and notes are never shown, whatever you choose here.">
+          <PrivacySwitch label="Show my achievements" value={!!f.showAchievements} onChange={(v) => set({ showAchievements: v })} />
+          <PrivacySwitch
+            label="Show progress figures for my featured goal"
+            value={!!f.showProgressMetrics}
+            onChange={(v) => set({ showProgressMetrics: v })}
+          />
+          {me.data!.foundingMember ? (
+            <PrivacySwitch
+              label="Show my Founding Member badge on posts"
+              value={!!f.foundingBadgeOnPosts}
+              onChange={(v) => set({ foundingBadgeOnPosts: v })}
+            />
+          ) : null}
+        </Section>
+      ) : null}
       <GoalVisibilityList goals={me.data!.ownGoals} onChanged={() => void invalidate()} />
+      <BlockedAccounts />
       {error ? (
         <Text tone="danger" accessibilityRole="alert">
           {error}
@@ -153,6 +185,70 @@ function GoalVisibilityList({ goals, onChanged }: { goals: OwnGoalVisibilityDTO[
           </View>
         ))}
       </View>
+      {error ? (
+        <Text tone="danger" accessibilityRole="alert">
+          {error}
+        </Text>
+      ) : null}
+    </Section>
+  );
+}
+
+function PrivacySwitch({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+  const { space } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space[3], minHeight: 44 }}>
+      <Text style={{ flex: 1 }}>{label}</Text>
+      <Switch value={value} onValueChange={onChange} accessibilityLabel={label} />
+    </View>
+  );
+}
+
+/** People you blocked, loaded on request, each with Unblock. */
+function BlockedAccounts() {
+  const { colors, space } = useTheme();
+  const [items, setItems] = useState<BlockedUserDTO[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = async () => {
+    setError(null);
+    const res = await listBlockedUsers();
+    if (res.ok) setItems(res.data.items);
+    else setError(errorMessage(res.error));
+  };
+  const unblock = async (b: BlockedUserDTO) => {
+    const res = await unblockUser(b.userId);
+    if (res.ok) setItems((prev) => (prev ?? []).filter((x) => x.userId !== b.userId));
+    else setError(errorMessage(res.error));
+  };
+  return (
+    <Section
+      title="Blocked accounts"
+      action={items === null ? <Button title="Show" variant="ghost" size="compact" onPress={() => void load()} /> : undefined}
+    >
+      {items?.length === 0 ? (
+        <Text variant="meta" tone="muted">
+          You have not blocked anyone.
+        </Text>
+      ) : null}
+      {items?.map((b, i) => (
+        <View
+          key={b.userId}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: space[3],
+            paddingVertical: space[2],
+            borderBottomWidth: i < items.length - 1 ? StyleSheet.hairlineWidth : 0,
+            borderBottomColor: colors.rule,
+          }}
+        >
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text numberOfLines={1}>{b.displayName}</Text>
+            <Text variant="meta" tone="muted" numberOfLines={1}>{`@${b.username}`}</Text>
+          </View>
+          <Button title="Unblock" variant="secondary" size="compact" onPress={() => void unblock(b)} />
+        </View>
+      ))}
       {error ? (
         <Text tone="danger" accessibilityRole="alert">
           {error}

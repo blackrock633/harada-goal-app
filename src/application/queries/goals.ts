@@ -1,4 +1,5 @@
-import { monthDays, weekdayOf } from '@/domain/dates';
+import { monthDays } from '@/domain/dates';
+import { isScheduledOn } from '@/domain/schedule';
 import type { Action, GoalStatus } from '@/domain/types';
 import { TEMPLATES } from '@/domain/templates';
 import type {
@@ -66,14 +67,9 @@ export async function listReflections(deps: Deps, ctx: Ctx, input: unknown): Pro
 /** Weekly routines have no fixed scheduled days, so their `scheduledDates` is empty. */
 function scheduledDates(a: Action, days: string[]): string[] {
   const start = a.startDate;
-  if (!start || !a.schedule) return [];
-  const eligible = days.filter((d) => d >= start);
-  if (a.schedule.type === 'daily') return eligible;
-  if (a.schedule.type === 'weekdays') {
-    const set = a.schedule.days;
-    return eligible.filter((d) => set.includes(weekdayOf(d)));
-  }
-  return [];
+  const schedule = a.schedule;
+  if (!start || !schedule) return [];
+  return days.filter((d) => d >= start && isScheduledOn(schedule, d) === true);
 }
 
 export async function getRoutineSheet(deps: Deps, ctx: Ctx, input: unknown): Promise<Result<RoutineSheetDTO>> {

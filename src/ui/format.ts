@@ -1,3 +1,4 @@
+import { describeDates, describeMonthly } from '@/application/schedule-text';
 import type { Schedule } from '@/domain/types';
 
 export function formatPercent(progress: number | null): string {
@@ -44,6 +45,8 @@ export function describeSchedule(schedule: Schedule | null | undefined): string 
   if (schedule.type === 'weekly') {
     return `${schedule.timesPerWeek}× a week`;
   }
+  if (schedule.type === 'monthly') return describeMonthly(schedule.daysOfMonth);
+  if (schedule.type === 'dates') return describeDates(schedule.dates, new Date().getFullYear());
   return '';
 }
 

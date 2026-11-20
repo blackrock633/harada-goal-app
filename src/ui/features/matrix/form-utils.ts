@@ -26,14 +26,19 @@ export interface ScheduleState {
   type: ScheduleType;
   days: number[];
   timesPerWeek: string;
+  daysOfMonth: number[];
+  dates: string[];
 }
-export const DEFAULT_SCHEDULE_STATE: ScheduleState = { type: 'daily', days: [], timesPerWeek: '3' };
+export const DEFAULT_SCHEDULE_STATE: ScheduleState = { type: 'daily', days: [], timesPerWeek: '3', daysOfMonth: [], dates: [] };
 
 export function scheduleToState(s: Schedule | null | undefined): ScheduleState {
-  if (!s) return { ...DEFAULT_SCHEDULE_STATE };
-  if (s.type === 'weekdays') return { type: 'weekdays', days: [...s.days], timesPerWeek: '3' };
-  if (s.type === 'weekly') return { type: 'weekly', days: [], timesPerWeek: String(s.timesPerWeek) };
-  return { ...DEFAULT_SCHEDULE_STATE };
+  const base = { ...DEFAULT_SCHEDULE_STATE };
+  if (!s) return base;
+  if (s.type === 'weekdays') return { ...base, type: 'weekdays', days: [...s.days] };
+  if (s.type === 'weekly') return { ...base, type: 'weekly', timesPerWeek: String(s.timesPerWeek) };
+  if (s.type === 'monthly') return { ...base, type: 'monthly', daysOfMonth: [...s.daysOfMonth] };
+  if (s.type === 'dates') return { ...base, type: 'dates', dates: [...s.dates] };
+  return base;
 }
 
 export function stateToSchedule(s: ScheduleState): unknown {
@@ -42,6 +47,8 @@ export function stateToSchedule(s: ScheduleState): unknown {
     const n = s.timesPerWeek.trim() === '' ? NaN : Number(s.timesPerWeek);
     return { type: 'weekly', timesPerWeek: n };
   }
+  if (s.type === 'monthly') return { type: 'monthly', daysOfMonth: [...s.daysOfMonth].sort((a, b) => a - b) };
+  if (s.type === 'dates') return { type: 'dates', dates: [...s.dates].sort() };
   return { type: 'daily' };
 }
 

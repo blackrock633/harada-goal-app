@@ -69,7 +69,11 @@ export type ActionKind = 'task' | 'routine';
 export type Schedule =
   | { type: 'daily' }
   | { type: 'weekdays'; days: Weekday[] }
-  | { type: 'weekly'; timesPerWeek: number };
+  | { type: 'weekly'; timesPerWeek: number }
+  /** On these days of each month (1..31). A day past the end of a shorter month falls on its last day. */
+  | { type: 'monthly'; daysOfMonth: number[] }
+  /** On these calendar dates only (sorted, distinct, 1..MAX_SCHEDULE_DATES). */
+  | { type: 'dates'; dates: LocalDate[] };
 
 export interface Action {
   id: Id;

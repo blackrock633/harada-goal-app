@@ -5,8 +5,10 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { errorMessage } from '@/data/errors';
 import { deleteSocialPost, hideOrReportPost, togglePostLike, useInvalidateSocial, usePostImage } from '@/data/social';
+import { FoundingMark } from '@/features/identity/IdentityViews';
 import { useTheme } from '@/theme';
 import { Button, Icon, IconButton, Sheet, Text, TextField } from '@/ui';
+import { isSelfReportedPostType } from '@shared/application/achievements';
 import type { SocialPostDTO } from '@shared/application/social';
 
 import { Avatar } from './Avatar';
@@ -54,14 +56,17 @@ export function PostCard({ post, detail = false, onRemoved }: { post: SocialPost
         <Pressable
           accessibilityRole="link"
           accessibilityLabel={`${post.author.displayName}, @${post.author.username}`}
-          onPress={() => router.push(profileHref(post.author.username))}
+          onPress={() => router.push(profileHref(post.author.username, post.isOwnPost))}
           style={[styles.row, { flex: 1, gap: space[3] }]}
         >
           <Avatar name={post.author.displayName} uri={post.author.avatarUrl} size={40} />
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text variant="body" weight="semibold" numberOfLines={1}>
-              {post.author.displayName}
-            </Text>
+            <View style={[styles.row, { gap: space[2] }]}>
+              <Text variant="body" weight="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>
+                {post.author.displayName}
+              </Text>
+              {post.author.foundingMemberNumber != null ? <FoundingMark number={post.author.foundingMemberNumber} /> : null}
+            </View>
             <Text variant="meta" tone="muted" numberOfLines={1}>
               {`@${post.author.username} · ${relativeTime(post.createdAt)}${post.visibility === 'private' ? ' · Only you' : ''}`}
             </Text>
@@ -73,8 +78,14 @@ export function PostCard({ post, detail = false, onRemoved }: { post: SocialPost
       <Pressable accessibilityRole={detail ? undefined : 'button'} accessibilityHint={detail ? undefined : 'Opens the post and its comments'} disabled={detail} onPress={open} style={{ gap: space[2] }}>
         <Text variant="caption" weight="semibold" style={{ color: colors.accent }}>
           {POST_TYPE_LABEL[post.type].toUpperCase()}
+          {isSelfReportedPostType(post.type) ? <Text variant="caption" tone="muted">{'  ·  SELF-REPORTED'}</Text> : null}
         </Text>
         {post.headline ? <Text variant="heading">{post.headline}</Text> : null}
+        {post.achievement ? (
+          <Text variant="caption" tone="muted">
+            Verified from activity recorded in Harada
+          </Text>
+        ) : null}
         {post.body ? (
           <Text variant="body" numberOfLines={detail ? undefined : 6}>
             {post.body}

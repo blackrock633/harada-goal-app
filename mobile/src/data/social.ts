@@ -1,8 +1,10 @@
 import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Result } from '@shared/application/result';
+import { normalizeSocialProfile } from '@shared/application/social';
 
 import { QueryError } from './reads';
 import type {
+  BlockedUserDTO,
   DiscoverResultDTO,
   FollowConnectionDTO,
   GoalVisibility,
@@ -37,12 +39,18 @@ async function callSocialRpc<T>(
   }
 }
 
+/** Tolerates a database that predates the identity migration (no founding/achievement fields yet). */
+async function withProfile(p: Promise<Result<SocialProfileDTO>>): Promise<Result<SocialProfileDTO>> {
+  const res = await p;
+  return res.ok ? { ok: true, data: normalizeSocialProfile(res.data) } : res;
+}
+
 export function fetchSocialProfile(input: {
   userId?: string;
   username?: string;
   viewAsPublic?: boolean;
 } = {}): Promise<Result<SocialProfileDTO>> {
-  return callSocialRpc<SocialProfileDTO>('get_social_profile', input);
+  return withProfile(callSocialRpc<SocialProfileDTO>('get_social_profile', input));
 }
 
 export function updateSocialProfile(input: {
@@ -53,8 +61,11 @@ export function updateSocialProfile(input: {
   website?: string;
   avatarUrl?: string | null;
   isPrivate?: boolean;
+  showAchievements?: boolean;
+  showProgressMetrics?: boolean;
+  foundingBadgeOnPosts?: boolean;
 }): Promise<Result<SocialProfileDTO>> {
-  return callSocialRpc<SocialProfileDTO>('update_social_profile', input);
+  return withProfile(callSocialRpc<SocialProfileDTO>('update_social_profile', input));
 }
 
 export function setGoalVisibility(input: {
@@ -149,6 +160,26 @@ export function listSocialNotifications(limit = 30): Promise<Result<SocialNotifi
 
 export function markNotificationsRead(notificationId?: string) {
   return callSocialRpc<{ unreadCount: number }>('mark_notifications_read', { notificationId });
+}
+
+/** Shares a verified achievement as a community post (one post per achievement; repeats return it). */
+export function shareAchievement(achievementId: string, visibility: PostVisibility = 'public') {
+  return callSocialRpc<SocialPostDTO>('create_social_post', { type: 'achievement', achievementId, visibility });
+}
+
+export function setAchievementVisibility(achievementId: string, hidden: boolean) {
+  return callSocialRpc<{ achievementId: string; hidden: boolean }>('set_achievement_visibility', {
+    achievementId,
+    hidden,
+  });
+}
+
+export function listBlockedUsers() {
+  return callSocialRpc<{ items: BlockedUserDTO[] }>('list_blocked_users', {});
+}
+
+export function unblockUser(targetUserId: string) {
+  return callSocialRpc<{ blocked: boolean; targetUserId: string }>('unblock_user', { targetUserId });
 }
 
 export function getSocialPost(postId: string, olderThan?: { before: string; beforeId: string }) {

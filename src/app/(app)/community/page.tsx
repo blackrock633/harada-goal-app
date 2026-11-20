@@ -73,6 +73,10 @@ export default async function CommunityPage({
         publicGoals: [],
         ownGoals: [],
         recentPosts: [],
+        foundingMember: null,
+        primaryGoal: null,
+        achievements: [],
+        privacy: null,
       };
 
   const initialDiscover = discoverRes.ok

@@ -6,6 +6,8 @@ import { KeyAreaView, type KeyAreaViewProps } from './KeyAreaView';
 import { MatrixOverview } from './MatrixOverview';
 import { MatrixSheet } from './MatrixSheet';
 import { buildMatrix } from '@shared/application/matrix';
+import { ordinal } from '@shared/application/schedule-text';
+import { describeSchedule } from './format';
 import { mkAction, mkGoal, mkOutcome, sampleGoal } from './test-fixtures';
 
 const TODAY = '2026-03-01';
@@ -452,5 +454,54 @@ describe('planning suggestions in a key area', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Suggest actions (Harada Pro)' }));
     expect(screen.getByTestId('upgrade-prompt-ai_planning')).toBeOnTheScreen();
     expect(mockSuggestActions).not.toHaveBeenCalled();
+  });
+});
+
+describe('routine schedules: monthly and specific dates', () => {
+  const todayLocal = new Date().toLocaleDateString('en-CA');
+
+  it('"Monthly" starts on today’s day of the month, and more days can be added', async () => {
+    const { matrix } = await setup();
+    matrix.addAction.mockResolvedValue(ok(mkAction({ n: 9, position: 2 })));
+    await fireEvent.press(screen.getByRole('button', { name: 'Add action 3 of 8' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Routine' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Monthly' }));
+    const todayDay = Number(todayLocal.slice(8, 10));
+    const other = todayDay === 1 ? 15 : 1;
+    expect(screen.getByRole('checkbox', { name: `The ${ordinal(todayDay)}` })).toBeChecked();
+    await fireEvent.press(screen.getByRole('checkbox', { name: other === 1 ? 'The 1st' : 'The 15th' }));
+    await fireEvent.changeText(screen.getByLabelText('Title'), 'Pay rent');
+    await fireEvent.press(screen.getByRole('button', { name: 'Add action' }));
+    await act(async () => {});
+    expect(matrix.addAction.mock.calls[0]![0]).toMatchObject({
+      kind: 'routine',
+      schedule: { type: 'monthly', daysOfMonth: [todayDay, other].sort((a, b) => a - b) },
+    });
+  });
+
+  it('"Specific dates" needs at least one date, then sends the picked dates', async () => {
+    const { matrix } = await setup();
+    matrix.addAction.mockResolvedValue(ok(mkAction({ n: 9, position: 2 })));
+    await fireEvent.press(screen.getByRole('button', { name: 'Add action 3 of 8' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Routine' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Specific dates' }));
+    await fireEvent.changeText(screen.getByLabelText('Title'), 'Recital');
+    await fireEvent.press(screen.getByRole('button', { name: 'Add action' }));
+    await act(async () => {});
+    expect(matrix.addAction).not.toHaveBeenCalled();
+    expect(screen.getByText('Pick at least one date')).toBeOnTheScreen();
+
+    // The picker opens on today (its minimum); Done adds it to the list.
+    await fireEvent.press(screen.getByRole('button', { name: 'Add a date: not set' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.getByRole('button', { name: /^Remove / })).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Add action' }));
+    await act(async () => {});
+    expect(matrix.addAction.mock.calls[0]![0]).toMatchObject({ kind: 'routine', schedule: { type: 'dates', dates: [todayLocal] } });
+  });
+
+  it('describes the new schedules in plain words', () => {
+    expect(describeSchedule({ type: 'monthly', daysOfMonth: [1, 15] })).toBe('Monthly on the 1st and 15th');
+    expect(describeSchedule({ type: 'dates', dates: [`${new Date().getFullYear()}-11-07`] })).toBe('Nov 7');
   });
 });

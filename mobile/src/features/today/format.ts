@@ -1,3 +1,4 @@
+import { describeDates, describeMonthly } from '@shared/application/schedule-text';
 import type { Schedule } from '@shared/domain/types';
 
 /** Local-date helpers (no Intl dependence beyond toLocaleDateString, which Hermes supports). */
@@ -29,6 +30,8 @@ export function describeSchedule(schedule: Schedule | null | undefined): string 
     return schedule.days.map((d) => days[d]).join(' · ');
   }
   if (schedule.type === 'weekly') return `${schedule.timesPerWeek}× a week`;
+  if (schedule.type === 'monthly') return describeMonthly(schedule.daysOfMonth);
+  if (schedule.type === 'dates') return describeDates(schedule.dates, new Date().getFullYear());
   return '';
 }
 

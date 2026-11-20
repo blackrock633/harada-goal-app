@@ -1,7 +1,8 @@
 import { Action, Goal, Id, LocalDate, Outcome, Progress, Pace, RoutineCheck } from './types.js';
 import { ADHERENCE_WINDOW_DAYS, MAX_OUTCOMES_PER_GOAL, MAX_ACTIONS_PER_OUTCOME } from './limits.js';
 
-import { addDays, diffDays, eachDay, isoWeekStart, weekdayOf } from './dates.js';
+import { addDays, diffDays, eachDay, isoWeekStart } from './dates.js';
+import { isScheduledOn } from './schedule.js';
 
 export function taskProgress(action: Action): Progress {
   if (action.kind !== 'task') return null;
@@ -26,12 +27,10 @@ export function routineAdherence(action: Action, checks: (LocalDate | RoutineChe
   let expected = 0;
   let kept = 0;
 
-  if (action.schedule.type === 'daily') {
-    expected = evaluatedDays.length;
-    kept = evaluatedDays.filter(d => checkDatesSet.has(d)).length;
-  } else if (action.schedule.type === 'weekdays') {
+  if (action.schedule.type !== 'weekly') {
+    // Schedules with named days: daily, weekdays, monthly, dates.
     const s = action.schedule;
-    const isScheduled = (d: LocalDate) => s.days.includes(weekdayOf(d));
+    const isScheduled = (d: LocalDate) => isScheduledOn(s, d) === true;
     expected = evaluatedDays.filter(isScheduled).length;
     kept = evaluatedDays.filter(d => isScheduled(d) && checkDatesSet.has(d)).length;
   } else if (action.schedule.type === 'weekly') {
@@ -198,8 +197,10 @@ export function routineStreak(action: Action, checks: LocalDate[], today: LocalD
       streak++;
       d = addDays(d, -1);
     }
-  } else if (type === 'weekdays') {
-    const isScheduled = (d: LocalDate) => (action.schedule as {days: number[]}).days.includes(weekdayOf(d));
+  } else if (type !== 'weekly') {
+    // weekdays, monthly, dates: consecutive scheduled days kept, skipping days off.
+    const s = action.schedule;
+    const isScheduled = (d: LocalDate) => isScheduledOn(s, d) === true;
     let d = today;
     if (!checkSet.has(d)) {
       d = addDays(d, -1);

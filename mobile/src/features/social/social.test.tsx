@@ -8,6 +8,7 @@ import { pageIndexForPath } from '@/ui/navigation';
 
 import { AchieveGoal } from '../goal/AchieveGoal';
 import { statPairs } from './format';
+import { PersonRow, profileHref } from './PersonRow';
 import { PostCard } from './PostCard';
 import { PostComposer } from './PostComposer';
 
@@ -57,6 +58,16 @@ describe('navigation', () => {
     expect(pageIndexForPath('/review/')).toBe(3);
     expect(pageIndexForPath('/matrix/2')).toBe(-1);
     expect(pageIndexForPath('/goal/new')).toBe(-1);
+  });
+});
+
+describe('profile links', () => {
+  it('your own profile is always /me, so renaming yourself never breaks the link', async () => {
+    expect(profileHref('noahdockery_633', true)).toBe('/community/u/me');
+    expect(profileHref('bo')).toBe('/community/u/bo');
+    await wrap(<PersonRow person={{ userId: 'u1', username: 'old_name', displayName: 'Noah', avatarUrl: null, isOwnProfile: true }} />);
+    await fireEvent.press(screen.getByRole('link', { name: 'Noah, @old_name' }));
+    expect(mockPush).toHaveBeenCalledWith('/community/u/me');
   });
 });
 

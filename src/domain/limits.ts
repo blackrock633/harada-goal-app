@@ -2,6 +2,8 @@ export const MAX_OUTCOMES_PER_GOAL = 8;
 export const MAX_ACTIONS_PER_OUTCOME = 8;
 export const ADHERENCE_WINDOW_DAYS = 28;
 export const MAX_DAILY_FOCUS = 5;
+/** Most dates a "specific dates" routine can list. */
+export const MAX_SCHEDULE_DATES = 60;
 /** How far ahead a day's focus can be planned. */
 export const FOCUS_PLAN_AHEAD_DAYS = 7;
 

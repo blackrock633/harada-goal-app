@@ -45,9 +45,7 @@ export class ActionRepoImpl implements ActionRepo {
       position: action.position,
       dueDate: !isRoutine ? action.dueDate : null,
       completedAt: !isRoutine ? action.completedAt : null,
-      scheduleType: sched ? sched.type : null,
-      scheduleDays: sched?.type === 'weekdays' ? (sched as any).days : null,
-      scheduleTimesPerWeek: sched?.type === 'weekly' ? (sched as any).timesPerWeek : null,
+      ...scheduleColumns(sched),
       startDate: isRoutine ? action.startDate : null,
       archivedAt: action.archivedAt,
       createdAt: action.createdAt,
@@ -69,9 +67,7 @@ export class ActionRepoImpl implements ActionRepo {
         position: action.position,
         dueDate: !isRoutine ? action.dueDate : null,
         completedAt: !isRoutine ? action.completedAt : null,
-        scheduleType: sched ? sched.type : null,
-        scheduleDays: sched?.type === 'weekdays' ? (sched as any).days : null,
-        scheduleTimesPerWeek: sched?.type === 'weekly' ? (sched as any).timesPerWeek : null,
+        ...scheduleColumns(sched),
         startDate: isRoutine ? action.startDate : null,
         archivedAt: action.archivedAt,
         updatedAt: action.updatedAt,
@@ -101,6 +97,10 @@ export class ActionRepoImpl implements ActionRepo {
       schedule = { type: 'weekdays', days: row.scheduleDays as number[] as any };
     } else if (row.scheduleType === 'weekly') {
       schedule = { type: 'weekly', timesPerWeek: row.scheduleTimesPerWeek! };
+    } else if (row.scheduleType === 'monthly') {
+      schedule = { type: 'monthly', daysOfMonth: (row.scheduleDays ?? []).map(Number) };
+    } else if (row.scheduleType === 'dates') {
+      schedule = { type: 'dates', dates: row.scheduleDates ?? [] };
     }
 
     return {
@@ -120,4 +120,14 @@ export class ActionRepoImpl implements ActionRepo {
       updatedAt: row.updatedAt,
     };
   }
+}
+
+/** A schedule as the four schedule columns (the shape `actions_schedule_shape_check` requires). */
+function scheduleColumns(sched: Schedule | null) {
+  return {
+    scheduleType: sched ? sched.type : null,
+    scheduleDays: sched?.type === 'weekdays' ? sched.days : sched?.type === 'monthly' ? sched.daysOfMonth : null,
+    scheduleTimesPerWeek: sched?.type === 'weekly' ? sched.timesPerWeek : null,
+    scheduleDates: sched?.type === 'dates' ? sched.dates : null,
+  };
 }

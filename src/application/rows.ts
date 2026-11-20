@@ -74,6 +74,8 @@ export interface ActionRow {
   schedule_type: string | null;
   schedule_days: number[] | null;
   schedule_times_per_week: number | null;
+  /** Absent on databases without 20261027150000_routine_schedule_options.sql. */
+  schedule_dates?: (string | Date)[] | null;
   start_date: string | null;
   archived_at: Instant | null;
   created_at: Instant;
@@ -134,7 +136,7 @@ export const SELECT_COLUMNS = {
     'id,owner_id,title,vision,success_criteria,target_date,status,status_before_archive,purpose_self_tangible,purpose_self_intangible,purpose_others_tangible,purpose_others_intangible,activated_on,achieved_at,archived_at,created_at,updated_at',
   outcomes: 'id,goal_id,title,description,measure_target,measure_current,measure_unit,position,archived_at,created_at,updated_at',
   actions:
-    'id,goal_id,outcome_id,title,notes,kind,position,due_date,completed_at,schedule_type,schedule_days,schedule_times_per_week,start_date,archived_at,created_at,updated_at',
+    'id,goal_id,outcome_id,title,notes,kind,position,due_date,completed_at,schedule_type,schedule_days,schedule_times_per_week,schedule_dates,start_date,archived_at,created_at,updated_at',
   routine_checks: 'id,action_id,date,created_at',
   daily_focus: 'id,owner_id,action_id,date,slot,created_at',
   reflections: 'id,goal_id,date,kind,went_well,didnt_go_well,next_change,answers,created_at,updated_at',
@@ -197,6 +199,10 @@ function scheduleFromRow(r: ActionRow): Schedule | null {
       return { type: 'weekdays', days: (r.schedule_days ?? []).map(Number) as Weekday[] };
     case 'weekly':
       return { type: 'weekly', timesPerWeek: Number(r.schedule_times_per_week) };
+    case 'monthly':
+      return { type: 'monthly', daysOfMonth: (r.schedule_days ?? []).map(Number) };
+    case 'dates':
+      return { type: 'dates', dates: (r.schedule_dates ?? []).map(localDate) };
     default:
       return null;
   }

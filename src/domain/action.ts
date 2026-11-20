@@ -1,6 +1,7 @@
 import { Action, Id, LocalDate, Instant, ActionKind, Schedule, Outcome, Weekday } from './types.js';
 import { DomainError } from './errors.js';
-import { LIMITS, MAX_ACTIONS_PER_OUTCOME } from './limits.js';
+import { LIMITS, MAX_ACTIONS_PER_OUTCOME, MAX_SCHEDULE_DATES } from './limits.js';
+import { isValidLocalDate } from './dates.js';
 
 import { PositionUpdate, resolveSlot, assertSlotFree } from './outcome.js';
 
@@ -27,6 +28,25 @@ export function normalizeSchedule(schedule: Schedule): Schedule {
       throw new DomainError('VALIDATION', 'invalid weekday', 'schedule');
     }
     return { type: 'weekdays', days };
+  }
+  if (schedule.type === 'monthly') {
+    if (!Array.isArray(schedule.daysOfMonth) || schedule.daysOfMonth.length === 0) {
+      throw new DomainError('VALIDATION', 'Pick at least one day of the month', 'schedule');
+    }
+    if (schedule.daysOfMonth.some(d => !Number.isInteger(d) || d < 1 || d > 31)) {
+      throw new DomainError('VALIDATION', 'Days of the month are 1 to 31', 'schedule');
+    }
+    return { type: 'monthly', daysOfMonth: Array.from(new Set(schedule.daysOfMonth)).sort((a, b) => a - b) };
+  }
+  if (schedule.type === 'dates') {
+    if (!Array.isArray(schedule.dates) || schedule.dates.some(d => typeof d !== 'string' || !isValidLocalDate(d))) {
+      throw new DomainError('VALIDATION', 'Use dates like 2026-11-01', 'schedule');
+    }
+    const dates = Array.from(new Set(schedule.dates)).sort();
+    if (dates.length === 0 || dates.length > MAX_SCHEDULE_DATES) {
+      throw new DomainError('VALIDATION', `Pick between 1 and ${MAX_SCHEDULE_DATES} dates`, 'schedule');
+    }
+    return { type: 'dates', dates };
   }
   throw new DomainError('VALIDATION', 'Invalid schedule type', 'schedule');
 }

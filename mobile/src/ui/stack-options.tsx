@@ -1,6 +1,6 @@
 import type { Stack } from 'expo-router';
-import type { ComponentProps } from 'react';
-import { Platform } from 'react-native';
+import type { ComponentProps, ReactElement } from 'react';
+import { Platform, View } from 'react-native';
 
 import { useTheme } from '@/theme';
 
@@ -39,6 +39,30 @@ export function useStackOptions(withAccountMenu = false): StackOptions {
     },
     headerShadowVisible: false,
     contentStyle: { backgroundColor: colors.paper },
-    headerRight: showAccount ? () => <AccountMenuButton /> : undefined,
+    ...(showAccount ? headerRightWithAccount() : {}),
+  };
+}
+
+/**
+ * Header-right items ending with your profile photo, optionally preceded by one screen action. On iOS 26 the
+ * photo is drawn on its own, without the glass background the system puts behind header buttons. UIKit lays out
+ * right items from the edge inwards, so the photo is listed first to stay in the corner.
+ */
+export function headerRightWithAccount(action?: ReactElement): ScreenOptions {
+  if (Platform.OS === 'ios') {
+    return {
+      unstable_headerRightItems: () => [
+        { type: 'custom', element: <AccountMenuButton />, hidesSharedBackground: true },
+        ...(action ? [{ type: 'custom' as const, element: action }] : []),
+      ],
+    };
+  }
+  return {
+    headerRight: () => (
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        {action}
+        <AccountMenuButton />
+      </View>
+    ),
   };
 }

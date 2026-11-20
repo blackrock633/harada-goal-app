@@ -36,7 +36,7 @@ describe('app routes (signed in)', () => {
     await renderRouter(APP, { initialUrl: url });
     expect((await screen.findAllByText(copy))[0]).toBeOnTheScreen();
     expect(screen).toHavePathname(url);
-    expect(screen.getAllByRole('button', { name: 'Account menu' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Your profile' }).length).toBeGreaterThan(0);
   });
 
   it('redirects / to Today', async () => {

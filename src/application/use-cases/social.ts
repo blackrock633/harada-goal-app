@@ -8,6 +8,7 @@ import {
   setGoalVisibilitySchema,
   updateSocialPostSchema,
   updateSocialProfileSchema,
+  normalizeSocialProfile,
   type DiscoverResultDTO,
   type FollowConnectionDTO,
   type GoalVisibility,
@@ -28,7 +29,7 @@ export async function getSocialProfile(
   input: { userId?: string; username?: string; viewAsPublic?: boolean } = {},
 ): Promise<Result<SocialProfileDTO>> {
   return guard(deps.logger, () =>
-    deps.uow.run(ctx.userId, (repos) => repos.social.callRpc<SocialProfileDTO>('get_social_profile', input)),
+    deps.uow.run(ctx.userId, async (repos) => normalizeSocialProfile(await repos.social.callRpc<SocialProfileDTO>('get_social_profile', input))),
   );
 }
 
@@ -40,7 +41,7 @@ export async function updateSocialProfile(
   return guard(deps.logger, () =>
     deps.uow.run(ctx.userId, (repos) => {
       const data = updateSocialProfileSchema.parse(input);
-      return repos.social.callRpc<SocialProfileDTO>('update_social_profile', data);
+      return repos.social.callRpc<SocialProfileDTO>('update_social_profile', data).then(normalizeSocialProfile);
     }),
   );
 }

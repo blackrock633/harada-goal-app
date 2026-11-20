@@ -60,6 +60,13 @@ describe('Social community system (profiles, following, feed, sharing, privacy, 
       });
 
       // Replace and remove avatar
+      // Username and photo change together in one save; the profile is found under the new name only.
+      const both = await uc.updateSocialProfile(t.deps, ctxFor(aliceId), { username: 'alice_renamed', avatarUrl: validPngDataUrl });
+      expect(both).toMatchObject({ ok: true, data: { username: 'alice_renamed', avatarUrl: validPngDataUrl } });
+      expect((await uc.getSocialProfile(t.deps, ctxFor(aliceId), { username: 'alice_renamed' })).ok).toBe(true);
+      expect(await uc.getSocialProfile(t.deps, ctxFor(aliceId), { username: 'alice_runs' })).toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } });
+      expect((await uc.updateSocialProfile(t.deps, ctxFor(aliceId), { username: 'alice_runs' })).ok).toBe(true);
+
       const removed = await uc.updateSocialProfile(t.deps, ctxFor(aliceId), { avatarUrl: null });
       expect(removed.ok && removed.data.avatarUrl).toBeNull();
     });

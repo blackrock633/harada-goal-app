@@ -4,7 +4,7 @@
  * Shape validation lives here; business rules live in src/domain.
  */
 import { z } from 'zod';
-import { LIMITS } from '../domain/limits.js';
+import { LIMITS, MAX_SCHEDULE_DATES } from '../domain/limits.js';
 import { REVIEW_ANSWER_KEYS } from '../domain/types.js';
 
 const id = z.uuid({ message: 'Invalid id' });
@@ -131,6 +131,14 @@ export const scheduleSchema = z.discriminatedUnion('type', [
     days: z.array(weekday).min(1, 'Pick at least one day').max(7),
   }),
   z.object({ type: z.literal('weekly'), timesPerWeek: z.number().int().min(1).max(7) }),
+  z.object({
+    type: z.literal('monthly'),
+    daysOfMonth: z.array(z.number().int().min(1).max(31)).min(1, 'Pick at least one day of the month').max(31),
+  }),
+  z.object({
+    type: z.literal('dates'),
+    dates: z.array(localDate).min(1, 'Pick at least one date').max(MAX_SCHEDULE_DATES, `Pick at most ${MAX_SCHEDULE_DATES} dates`),
+  }),
 ]);
 const actionKind = z.enum(['task', 'routine']);
 

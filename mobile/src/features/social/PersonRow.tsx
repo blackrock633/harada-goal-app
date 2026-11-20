@@ -1,6 +1,7 @@
 import { router, type Href } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { FoundingMark } from '@/features/identity/IdentityViews';
 import { useTheme } from '@/theme';
 import { Text } from '@/ui';
 
@@ -16,9 +17,14 @@ export type Person = {
   isFollowing?: boolean;
   /** One short line under the name (a public goal, or nothing). */
   line?: string | null;
+  foundingMemberNumber?: number | null;
 };
 
-export const profileHref = (username: string) => `/community/u/${username}` as Href;
+/**
+ * A profile link. Your own profile is always `me`, so it keeps working after you change your username
+ * (a link by the old username would find nobody).
+ */
+export const profileHref = (username: string, own = false) => `/community/u/${own ? 'me' : username}` as Href;
 
 /** Avatar, name and @username (opens the profile), with Follow on the right. */
 export function PersonRow({ person, divider = true, onError }: { person: Person; divider?: boolean; onError?: (m: string) => void }) {
@@ -33,14 +39,17 @@ export function PersonRow({ person, divider = true, onError }: { person: Person;
       <Pressable
         accessibilityRole="link"
         accessibilityLabel={`${person.displayName}, @${person.username}`}
-        onPress={() => router.push(profileHref(person.username))}
+        onPress={() => router.push(profileHref(person.username, person.isOwnProfile))}
         style={[styles.row, { flex: 1, gap: space[3] }]}
       >
         <Avatar name={person.displayName} uri={person.avatarUrl} size={44} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text variant="body" weight="semibold" numberOfLines={1}>
-            {person.displayName}
-          </Text>
+          <View style={[styles.row, { gap: space[2] }]}>
+            <Text variant="body" weight="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>
+              {person.displayName}
+            </Text>
+            {person.foundingMemberNumber != null ? <FoundingMark number={person.foundingMemberNumber} /> : null}
+          </View>
           <Text variant="meta" tone="muted" numberOfLines={1}>
             {`@${person.username}${person.line ? ` · ${person.line}` : ''}`}
           </Text>

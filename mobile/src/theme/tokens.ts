@@ -28,6 +28,8 @@ export type ColorTokens = {
   focus: string;
   /** Modal scrim. */
   scrim: string;
+  /** Founding Member credential only: a quiet brass, never a second accent (≥ 4.5:1 on paper). */
+  founder: string;
 };
 
 export const lightColors: ColorTokens = {
@@ -49,6 +51,7 @@ export const lightColors: ColorTokens = {
   danger: '#B0261B',
   focus: '#C2401C',
   scrim: 'rgba(27,26,23,0.45)',
+  founder: '#7D6228',
 };
 
 export const darkColors: ColorTokens = {
@@ -70,6 +73,7 @@ export const darkColors: ColorTokens = {
   danger: '#F07A6E',
   focus: '#EB6A45',
   scrim: 'rgba(0,0,0,0.6)',
+  founder: '#C9A85C',
 };
 
 /** 4pt scale: space[1] = 4. Tight inside a group, generous between groups. */

@@ -1,30 +1,57 @@
 import { Stack, router, useLocalSearchParams, type Href } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { errorMessage } from '@/data/errors';
-import { blockUser, useInvalidateSocial, useSocialProfile, useUserPosts } from '@/data/social';
+import {
+  blockUser,
+  setAchievementVisibility,
+  shareAchievement,
+  useInvalidateSocial,
+  useSocialProfile,
+  useUserPosts,
+} from '@/data/social';
+import { AchievementRow, FoundingCredential, FoundingMark, PrimaryGoalSummary } from '@/features/identity/IdentityViews';
 import { Avatar } from '@/features/social/Avatar';
 import { FeedList } from '@/features/social/FeedList';
 import { FollowButton } from '@/features/social/FollowButton';
 import { ErrorScreen, LoadingScreen } from '@/screens/queryState';
 import { useTheme } from '@/theme';
 import { Button, EmptyState, IconButton, Section, Sheet, Text } from '@/ui';
-import type { SocialProfileDTO } from '@shared/application/social';
+import type { Result } from '@shared/application/result';
+import { normalizeSocialProfile, type ProfileAchievementDTO, type SocialProfileDTO } from '@shared/application/social';
 
 /** A person's public profile; your own shows Edit profile and posts only you can see. */
 export default function ProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
   const profile = useSocialProfile(username);
   const posts = useUserPosts(profile.data && !profile.data.restricted ? profile.data.username : undefined);
+  const own = !!profile.data?.isOwnProfile;
+
+  // Your own profile is tracked as `me`, not by username, so you can change your username (and photo, in the
+  // same save) and this screen still finds you when it reloads.
+  useEffect(() => {
+    if (own && username !== 'me') router.setParams({ username: 'me' });
+  }, [own, username]);
 
   if (profile.isPending) return <LoadingScreen label="Loading profile" />;
   if (profile.isError) return <ErrorScreen error={profile.error} onRetry={() => void profile.refetch()} />;
-  const p = profile.data;
+  // Cached or older-server data may lack the identity fields; fill them in once here.
+  const p = normalizeSocialProfile(profile.data);
 
   return (
     <>
-      <Stack.Screen options={{ title: p.displayName, headerRight: () => (p.isOwnProfile ? null : <ProfileMenu profile={p} />) }} />
+      <Stack.Screen
+        options={{
+          title: p.displayName,
+          headerRight: () =>
+            p.isOwnProfile ? (
+              <IconButton icon="settings" tone="muted" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />
+            ) : (
+              <ProfileMenu profile={p} />
+            ),
+        }}
+      />
       <FeedList
         query={posts}
         header={<ProfileHeader p={p} />}
@@ -57,6 +84,7 @@ function ProfileHeader({ p }: { p: SocialProfileDTO }) {
             {p.displayName}
           </Text>
           <Text variant="meta" tone="muted">{`@${p.username}${p.followsViewer && !p.isOwnProfile ? ' · Follows you' : ''}`}</Text>
+          {p.foundingMember ? <FoundingMark number={p.foundingMember.number} /> : null}
         </View>
       </View>
       {p.bio ? <Text>{p.bio}</Text> : null}
@@ -65,6 +93,7 @@ function ProfileHeader({ p }: { p: SocialProfileDTO }) {
           {p.location}
         </Text>
       ) : null}
+      {p.foundingMember ? <FoundingCredential number={p.foundingMember.number} since={p.foundingMember.since} /> : null}
       <View style={[styles.row, { gap: space[5], flexWrap: 'wrap' }]}>
         {counts.map((c) => (
           <Pressable
@@ -85,7 +114,14 @@ function ProfileHeader({ p }: { p: SocialProfileDTO }) {
         ))}
       </View>
       {p.isOwnProfile ? (
-        <Button title="Edit profile" variant="secondary" onPress={() => router.push('/community/edit-profile' as Href)} />
+        <View style={[styles.row, { gap: space[2] }]}>
+          <View style={{ flex: 1 }}>
+            <Button title="Edit profile" variant="secondary" onPress={() => router.push('/community/edit-profile' as Href)} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Button title="Settings" variant="secondary" icon="settings" onPress={() => router.push('/settings')} />
+          </View>
+        </View>
       ) : (
         <FollowButton userId={p.userId} following={p.isFollowing} name={p.displayName} onError={setError} />
       )}
@@ -94,6 +130,18 @@ function ProfileHeader({ p }: { p: SocialProfileDTO }) {
           {error}
         </Text>
       ) : null}
+      {p.primaryGoal ? (
+        <Section title="Featured goal">
+          <PrimaryGoalSummary goal={p.primaryGoal} hiddenFromOthers={p.isOwnProfile && p.privacy?.showProgressMetrics === false} />
+        </Section>
+      ) : p.isOwnProfile ? (
+        <Section title="Featured goal">
+          <Text variant="meta" tone="muted">
+            Make a goal public to feature it here with your progress. Goals stay private until you choose.
+          </Text>
+        </Section>
+      ) : null}
+      {p.achievements.length || (p.isOwnProfile && !p.restricted) ? <Achievements p={p} onError={setError} /> : null}
       {p.publicGoals.length ? (
         <Section title="Public goals">
           <View>
@@ -112,6 +160,40 @@ function ProfileHeader({ p }: { p: SocialProfileDTO }) {
       ) : null}
       {p.restricted ? null : <Text variant="caption" weight="semibold" tone="muted">ACTIVITY</Text>}
     </View>
+  );
+}
+
+/** Verified achievements; on your own profile, Share (one community post each) and Hide. */
+function Achievements({ p, onError }: { p: SocialProfileDTO; onError: (m: string | null) => void }) {
+  const { space } = useTheme();
+  const invalidate = useInvalidateSocial();
+  const act = async (run: () => Promise<Result<unknown>>) => {
+    onError(null);
+    const res = await run();
+    if (!res.ok) return onError(errorMessage(res.error));
+    void invalidate();
+  };
+  return (
+    <Section title="Achievements">
+      {p.achievements.length === 0 ? (
+        <Text variant="meta" tone="muted">
+          Achievements appear here as your recorded work earns them: completing a goal, building a full plan, 30 days of
+          progress.
+        </Text>
+      ) : (
+        <View style={{ gap: space[2] }}>
+          {p.achievements.map((a: ProfileAchievementDTO) => (
+            <AchievementRow
+              key={a.id}
+              achievement={a}
+              owner={p.isOwnProfile}
+              onShare={() => void act(() => shareAchievement(a.id))}
+              onToggleHidden={() => void act(() => setAchievementVisibility(a.id, !a.hidden))}
+            />
+          ))}
+        </View>
+      )}
+    </Section>
   );
 }
 

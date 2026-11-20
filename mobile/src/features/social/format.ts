@@ -6,6 +6,7 @@ export const POST_TYPE_LABEL: Record<SocialPostType, string> = {
   progress_update: 'Progress update',
   general_achievement: 'Achievement',
   goal_started: 'Started a goal',
+  achievement: 'Earned an achievement',
 };
 
 /** "now", "5m", "3h", "2d", then "Oct 3" (and the year when it differs). */

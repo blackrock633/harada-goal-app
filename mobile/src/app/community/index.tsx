@@ -45,7 +45,7 @@ export default function CommunityFeed() {
                 ) : null}
               </View>
               {me.data ? (
-                <Pressable accessibilityRole="link" accessibilityLabel="Your profile" onPress={() => router.push(profileHref(me.data!.username))} style={{ padding: 6 }}>
+                <Pressable accessibilityRole="link" accessibilityLabel="Your profile" onPress={() => router.push(profileHref(me.data!.username, true))} style={{ padding: 6 }}>
                   <Avatar name={me.data.displayName} uri={me.data.avatarUrl} size={30} />
                 </Pressable>
               ) : null}

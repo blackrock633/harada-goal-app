@@ -9,7 +9,12 @@
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#F7F5F0",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": {
+        "light": "./assets/images/harada-icon-light.png",
+        "dark": "./assets/images/harada-icon-dark.png"
+      },
+      "bundleIdentifier": "com.blackrock633.harada",
+      "appleTeamId": "4C6YQPHYQF"
     },
     "android": {
       "adaptiveIcon": {

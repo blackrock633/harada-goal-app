@@ -3,7 +3,8 @@
 import * as React from 'react';
 import type { ActionDTO } from '@/application/dto';
 import { addActionSchema, updateActionSchema } from '@/application/schemas';
-import { LIMITS } from '@/domain/limits';
+import { LIMITS, MAX_SCHEDULE_DATES } from '@/domain/limits';
+import { ordinal, shortDate } from '@/application/schedule-text';
 import { newClientId } from '@/ui/errors';
 import type { MatrixMutations } from '@/ui/actions';
 import { Button, DateInput, DialogContent, DialogRoot, Field, Input, Select, Textarea } from '@/ui/primitives';
@@ -17,6 +18,10 @@ import {
   zodFieldErrors,
 } from './form-utils';
 import { FormError, toFailure, type FormFailure } from './FormError';
+
+
+/** Today in the browser (YYYY-MM-DD), for date defaults; the server keeps its own notion of today. */
+const localToday = () => new Date().toLocaleDateString('en-CA');
 
 export type ActionEditorMode =
   | { type: 'add'; outcomeId: string; /** Action slot 0..7 being filled. */ position: number; heading?: string }
@@ -179,11 +184,21 @@ function ActionForm({
           <Field label="Schedule" error={errors.schedule}>
             <Select
               value={sched.type}
-              onChange={(e) => setSched((s) => ({ ...s, type: e.target.value as ScheduleState['type'] }))}
+              onChange={(e) => {
+                const type = e.target.value as ScheduleState['type'];
+                // "Once a month" by default: start from today's day of the month.
+                setSched((s) => ({
+                  ...s,
+                  type,
+                  daysOfMonth: type === 'monthly' && s.daysOfMonth.length === 0 ? [Number(localToday().slice(8, 10))] : s.daysOfMonth,
+                }));
+              }}
             >
               <option value="daily">Every day</option>
               <option value="weekdays">Specific weekdays</option>
               <option value="weekly">N times per week</option>
+              <option value="monthly">Monthly</option>
+              <option value="dates">Specific dates</option>
             </Select>
           </Field>
           {sched.type === 'weekdays' && (
@@ -200,6 +215,73 @@ function ActionForm({
                   </label>
                 ))}
               </div>
+            </fieldset>
+          )}
+          {sched.type === 'monthly' && (
+            <fieldset className="min-w-0">
+              <legend className="mb-1 text-sm font-medium text-ink">Days of the month</legend>
+              <div className="grid grid-cols-7 gap-1">
+                {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                  <label
+                    key={d}
+                    className="flex min-h-[44px] cursor-pointer items-center justify-center rounded-[var(--radius-sm)] border border-rule-strong text-sm tabular-nums has-[:checked]:border-accent has-[:checked]:bg-accent has-[:checked]:font-semibold has-[:checked]:text-accent-ink has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent"
+                  >
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      aria-label={`The ${ordinal(d)}`}
+                      checked={sched.daysOfMonth.includes(d)}
+                      onChange={() =>
+                        setSched((s) => ({
+                          ...s,
+                          daysOfMonth: s.daysOfMonth.includes(d) ? s.daysOfMonth.filter((x) => x !== d) : [...s.daysOfMonth, d],
+                        }))
+                      }
+                    />
+                    {d}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-sm text-ink-muted">In shorter months, the 29th to 31st fall on the last day.</p>
+            </fieldset>
+          )}
+          {sched.type === 'dates' && (
+            <fieldset className="min-w-0 space-y-2">
+              <legend className="mb-1 text-sm font-medium text-ink">Dates</legend>
+              {sched.dates.length === 0 ? (
+                <p className="text-sm text-ink-muted">No dates yet. Add the days this routine happens.</p>
+              ) : (
+                <ul className="divide-y divide-rule border-y border-rule">
+                  {sched.dates.map((d) => (
+                    <li key={d} className="flex min-h-[44px] items-center justify-between gap-2">
+                      <span className="tabular-nums text-ink">{shortDate(d, new Date().getFullYear())}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Remove ${shortDate(d, new Date().getFullYear())}`}
+                        onClick={() => setSched((s) => ({ ...s, dates: s.dates.filter((x) => x !== d) }))}
+                      >
+                        Remove
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {sched.dates.length < MAX_SCHEDULE_DATES ? (
+                <Field label="Add a date">
+                  <DateInput
+                    value=""
+                    min={localToday()}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v) setSched((s) => ({ ...s, dates: s.dates.includes(v) ? s.dates : [...s.dates, v].sort() }));
+                    }}
+                  />
+                </Field>
+              ) : (
+                <p className="text-sm text-ink-muted">{`Up to ${MAX_SCHEDULE_DATES} dates.`}</p>
+              )}
             </fieldset>
           )}
           {sched.type === 'weekly' && (

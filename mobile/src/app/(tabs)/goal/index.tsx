@@ -1,5 +1,5 @@
 import { Redirect, Stack, router } from 'expo-router';
-import { Platform, View } from 'react-native';
+import { Platform } from 'react-native';
 
 import { useGoals, useMutations } from '@/data/hooks';
 import { usePlan } from '@/data/premium';
@@ -10,7 +10,7 @@ import { insightsHref, shareHref } from '@/features/premium/routes';
 import { ErrorScreen, LoadingScreen } from '@/screens/queryState';
 import { useGoalScreen } from '@/screens/useGoalScreen';
 
-import { AccountMenuButton } from '@/ui/AccountMenuButton';
+import { headerRightWithAccount } from '@/ui/stack-options';
 import { IconButton, Screen, useLayout } from '@/ui';
 
 export default function GoalScreen() {
@@ -51,18 +51,7 @@ export default function GoalScreen() {
     <Screen>
       {inlineEdit ? null : (
       <Stack.Screen
-        options={{
-          headerRight: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <IconButton
-                accessibilityLabel="Edit goal"
-                icon="edit"
-                onPress={edit}
-              />
-              <AccountMenuButton />
-            </View>
-          ),
-        }}
+        options={headerRightWithAccount(<IconButton accessibilityLabel="Edit goal" icon="edit" onPress={edit} />)}
       />
       )}
       <OverLimitNotice plan={plan.data} />
